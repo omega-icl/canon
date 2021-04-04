@@ -34,10 +34,6 @@ LIB_NLP    = -L$(PATH_SNOPT)/lib -lsnopt7_cpp
 INC_NLP    = -I$(PATH_SNOPT)/include
 FLAG_NLP   = -DMC__USE_SNOPT
 
-PATH_SUNDIALS = /opt/sundials-2.7.0
-LIB_SUNDIALS = -L$(PATH_SUNDIALS)/lib -lsundials_cvodes -lsundials_nvecserial -llapack -lblas
-INC_SUNDIALS = -I$(PATH_SUNDIALS)/include -I$(PATH_SUNDIALS)/include/sundials -I$(PATH_SUNDIALS)/include/cvodes -I$(PATH_SUNDIALS)/include/nvector
-
 PATH_CPLEX   = /opt/ibm/ILOG/CPLEX_Studio128/cplex
 PATH_CONCERT = /opt/ibm/ILOG/CPLEX_Studio128/concert
 #LIB_MIP      = -L$(PATH_CPLEX)/lib/x86-64_linux/static_pic -lilocplex -lcplex \
@@ -57,8 +53,8 @@ INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"
 
 FLAG_DEP = -fPIC $(FLAG_MC) $(FLAG_BOOST) $(FLAG_MIP) $(FLAG_NLP) $(FLAG_SOBOL) $(FLAG_GAMS)
-LIB_DEP  = $(LIB_MC) $(LIB_PROFIL) $(LIB_BOOST) $(LIB_MIP) $(LIB_NLP) $(LIB_SUNDIALS) $(LIB_SOBOL) $(LIB_GAMS)
-INC_DEP  = $(INC_MC) $(INC_PROFIL) $(INC_BOOST) $(INC_MIP) $(INC_NLP) $(INC_SUNDIALS) $(INC_SOBOL) $(INC_GAMS)
+LIB_DEP  = $(LIB_MC) $(LIB_PROFIL) $(LIB_BOOST) $(LIB_MIP) $(LIB_NLP) $(LIB_SOBOL) $(LIB_GAMS)
+INC_DEP  = $(INC_MC) $(INC_PROFIL) $(INC_BOOST) $(INC_MIP) $(INC_NLP) $(INC_SOBOL) $(INC_GAMS)
 
 # COMPILATION <<-- CHANGE AS APPROPRIATE -->>
 

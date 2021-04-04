@@ -24,7 +24,7 @@ std::string header_usage
 {
   std::ostringstream os;
   os << "Usage: " << exec << " [OPTION]... GAMSFILE" << std::endl
-     << "Run global optimizer CRONOS on model GAMSFILE." << std::endl
+     << "Run global optimizer CANON on model GAMSFILE." << std::endl
      << std::endl
      << "Mandatory arguments to long options are mandatory for short options too";
   return os.str();

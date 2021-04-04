@@ -1,10 +1,10 @@
-# This is the main makefile for CRONOS
+# This is the main makefile for CANON
 # - 'make install' creates the directories 'include', 'lib' and 'bin' (if not already
 #   existing), compiles a shared library, and creates symbolic links to header files
-#   and the compiled libraries
-# - `make cleaninstall' removes the libraries, object files, and links
+#   and the compiled binaries and libraries
+# - `make cleaninstall' removes the binaries, libraries, object files, and links
 
-export version = 2.0
+export version = 1.0
 
 export rootpath = $(shell cd .. ; pwd)
 export srcpath  = $(rootpath)/src
@@ -14,7 +14,7 @@ export libpath  = $(rootpath)/lib
 
 #####
 
-install: dirs cronos_inst
+install: dirs canon_inst
 
 dirs :
 	@if test ! -e $(incpath)/; then \
@@ -25,25 +25,25 @@ dirs :
 		echo creating directory for executables; \
 		mkdir $(binpath); \
 	fi
-	@if test ! -e $(libpath)/; then \
-		echo creating directory for compiled libraries; \
-		mkdir $(libpath); \
-	fi
+#	@if test ! -e $(libpath)/; then \
+#		echo creating directory for compiled libraries; \
+#		mkdir $(libpath); \
+#	fi
 
-cronos_inst:
-	-(cd $(srcpath); make -f cronos.mk install)
-
-#####
-
-clean: cronos_clean
-
-cronos_clean:
-	-(cd $(srcpath); make -f cronos.mk clean)
+canon_inst:
+	-(cd $(srcpath); make -f canon.mk install)
 
 #####
 
-cleaninstall: cronos_cleandist
+clean: canon_clean
 
-cronos_cleandist:
-	-(cd $(srcpath); make -f cronos.mk cleandist)
+canon_clean:
+	-(cd $(srcpath); make -f canon.mk clean)
+
+#####
+
+cleaninstall: canon_cleandist
+
+canon_cleandist:
+	-(cd $(srcpath); make -f canon.mk cleandist)
 

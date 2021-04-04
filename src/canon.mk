@@ -39,7 +39,7 @@ install: dispBuild canon canon_lib dispInstall
 canon: $(binobjs)
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@ $(LDFLAGS)
 
-#canon_lib: $(libobjs)
+canon_lib: $(libobjs)
 #	$(CPP) -shared -o $(libname) $(libobjs)
 
 %.o : %.cpp
@@ -77,7 +77,7 @@ cleandist: dispCleanInstall
 	rm -f $(libobjs) $(binname) $(libname)
 	-(cd $(incpath) ; rm -f $(incobjs))
 	-(cd $(binpath) ; rm -f $(binname))
-	-(cd $(libpath) ; rm -f $(libname))
+#	-(cd $(libpath) ; rm -f $(libname))
 	
 dispCleanInstall:
 	@echo
