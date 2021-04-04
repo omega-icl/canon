@@ -3,7 +3,7 @@
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_NLGO Nonlinear Global Optimization using MC++
+\page page_NLGO Nonlinear Global Optimization using Gurobi, SNOPT and MC++
 \author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and OMEGA Research Group (http://www3.imperial.ac.uk/environmentenergyoptimisation)
 \version 1.0
 \date 2015
@@ -193,7 +193,7 @@ Other options can be modified to tailor the search, including output level, maxi
 #define MC__NLGO_HPP
 
 #include <chrono>
-#include "gamscronos.hpp"
+#include "gamsio.hpp"
 #include "nlpslv_snopt.hpp"
 #include "nlpbnd.hpp"
 
@@ -203,13 +203,13 @@ namespace mc
 //! @brief C++ class for global optimization of MINLP using complete search
 ////////////////////////////////////////////////////////////////////////
 //! mc::NLGO is a C++ class for global optimization of NLP and
-//! MINLP using complete search. Relaxations for the nonlinea or
+//! MINLP using complete search. Relaxations for the nonlinear or
 //! nonconvex participating terms are generated using MC++. Further
 //! details can be found at: \ref page_NLGO
 ////////////////////////////////////////////////////////////////////////
 template < typename T >
 class NLGO:
-  protected virtual GamsCronos
+  protected virtual GAMSIO
 {
 public:
 
@@ -462,7 +462,7 @@ NLGO<T>::read
 {
   auto tstart = stats.start();
 
-  bool flag = this->GamsCronos::read( filename, options.DISPLEVEL>1? true: false );
+  bool flag = this->GAMSIO::read( filename, options.DISPLEVEL>1? true: false );
 
   stats.walltime_setup += stats.walltime( tstart );
   stats.walltime_all   += stats.walltime( tstart );
