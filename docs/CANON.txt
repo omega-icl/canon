@@ -1,0 +1,79 @@
+/*!
+
+@mainpage CANON (version 1.0): Complete search Algorithms for Nonlinear OptimizatioN
+
+@author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and Tanuj Karia  <tt>(tanuj.karia17@imperial.ac.uk)</tt>
+@date 2020
+
+
+<CENTER><TABLE BORDER=0>
+<TR>
+<TD>\image html CANON.png<TD>CANON provides a collection of C++ classes for global optimization of nonlinear models using complete search algorithms.</TD>
+</TR>
+</TABLE></CENTER>
+
+
+\section sec_CANON_install What do I need to run CANON?
+
+CANON is released as open source code under the <A href="http://www.eclipse.org/legal/epl-v10.html">Eclipse Public License (EPL)</A>.
+
+CANON depends on the following third-party libraries:
+- <A href="https://projects.coin-or.org/MCpp">MC++</A> (version 2.1) for construction, manipulation and bounding of factorable functions
+- <A href="https://web.stanford.edu/group/SOL/snopt.htm">SNOPT</A> or <A href="https://projects.coin-or.org/Ipopt">IPOPT</A> for local solution of NLP problems
+- <A href="http://www.gurobi.com/">GUROBI</A> for solution of LP/QP/MILP/MIQP/MIQCQP problems
+.
+
+On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <TT>INSTALL</TT>, <TT>LICENSE</TT> and <TT>README</TT>, as well as 3 subdirectories:
+- <tt>src</tt> contains the source code of CANON, which consists of header files only; that is, there is no need to build or link a library.
+- <tt>doc</tt> contains the Doxygen documentation for CANON, which can be accessed by opening the file <tt>doc/html/index.html</tt> with your favorite browser.
+- <tt>test</tt> contains simple examples that should help you understand how to use the types of CANON.
+.
+
+<CENTER><TABLE border="1">
+<TR>
+<TD><CENTER><TABLE BORDER=0>
+  <TR>
+  <TD>CANON has been developed and tested primarily under Ubuntu Linux with the compiler <a href="http://gcc.gnu.org/"><tt>gcc</tt></a> (version 7+)</TD>
+  </TR>
+  </TABLE></CENTER></TD>
+</TR>
+</TABLE></CENTER> 
+
+
+\section sec_CANON_doc Where can I learn more about CANON?
+
+A description of the main components of CANON can be found under <A HREF="pages.html">Related Pages</A>:
+- \ref page_NLPSLV_SNOPT Local (Continuous) Optimization using SNOPT
+- \ref page_NLPBND Bounding of Factorable Nonlinear Programs using MC++
+- \ref page_NLGO Nonlinear Global Optimization using Gurobi, SNOPT and MC++
+.
+
+\section sec_MC_examples How do I run the test examples of CANON?
+
+Change into the <tt>test</tt> directory, and select one of the subdirectories, e.g.
+
+<tt>
+$ cd test/NLGO
+</tt>
+
+At the command line, create the executables by typing:
+
+<tt>
+$ make
+</tt>
+
+<CENTER><TABLE border="1">
+<TR>
+<TD><CENTER><TABLE BORDER=0>
+  <TR>
+  <TD>We hope you will enjoy using CANON and find it useful!</TD>
+  </TR>
+  <TR>
+  <TD> For more information or to provide us feedback, please email <a href="mailto:b.chachuat@imperial.ac.uk">Benoit Chachuat</a></TD>
+  </TR>
+  </TABLE></CENTER></TD>
+</TR>
+</TABLE></CENTER> 
+
+*/
+
