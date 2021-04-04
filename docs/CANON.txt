@@ -2,7 +2,7 @@
 
 @mainpage CANON (version 1.0): Complete search Algorithms for Nonlinear OptimizatioN
 
-@author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and Tanuj Karia  <tt>(tanuj.karia17@imperial.ac.uk)</tt>
+@author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and Tanuj Karia <tt>(tanuj.karia17@imperial.ac.uk)</tt>
 @date 2020
 
 
@@ -33,7 +33,7 @@ On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <
 <TR>
 <TD><CENTER><TABLE BORDER=0>
   <TR>
-  <TD>CANON has been developed and tested primarily under Ubuntu Linux with the compiler <a href="http://gcc.gnu.org/"><tt>gcc</tt></a> (version 7+)</TD>
+  <TD>CANON has been developed and tested primarily under Ubuntu Linux with the compiler <a href="http://gcc.gnu.org/"><tt>gcc</tt></a> (version >7)</TD>
   </TR>
   </TABLE></CENTER></TD>
 </TR>
