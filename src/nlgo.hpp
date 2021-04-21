@@ -218,7 +218,7 @@ public:
   {
     //! @brief Constructor
     Options():
-      CSALGO(QUAD), PREPROC(true), CVATOL(1e-3), CVRTOL(1e-3), FEASTOL(1e-7),
+      CSALGO(QUAD), PREPROC(true), FEASTOL(1e-7), CVATOL(1e-3), CVRTOL(1e-3),
       MSLOC(10), TIMELIMIT(6e2), DISPLEVEL(1),
       NLPSLV(), NLPBND()
       { NLPBND.CMODPROP = 16;
@@ -230,9 +230,9 @@ public:
     Options& operator= ( Options&options ){
         CSALGO        = options.CSALGO;
         PREPROC       = options.PREPROC;
+        FEASTOL       = options.FEASTOL;
         CVATOL        = options.CVATOL;
         CVRTOL        = options.CVRTOL;
-        FEASTOL       = options.FEASTOL;
         MSLOC         = options.MSLOC;
         TIMELIMIT     = options.TIMELIMIT;
         DISPLEVEL     = options.DISPLEVEL;
@@ -250,12 +250,12 @@ public:
     unsigned CSALGO;
     //! @brief Whether or not to preprocess the root node (local optimization, domain reduction)
     bool PREPROC;
+    //! @brief Feasibility tolerance 
+    double FEASTOL;
     //! @brief Convergence absolute tolerance
     double CVATOL;
     //! @brief Convergence relative tolerance
     double CVRTOL;
-    //! @brief Feasibility tolerance 
-    double FEASTOL;
     //! @brief Maximum number of multistart local search
     unsigned MSLOC;
     //! @brief Maximum run time (seconds)
@@ -334,10 +334,6 @@ public:
       ( std::chrono::time_point<std::chrono::system_clock> const& start ) const
       { return std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::system_clock::now() - start ); }    
   } stats;
-
-  // Overloading stdout operator
-  template <typename U> friend std::ostream& operator<<
-    ( std::ostream&os, const NLGO<U>& );
 
 protected:
 
@@ -426,7 +422,7 @@ public:
   //! @brief Load optimization model from GAMS file
 #if defined (MC__WITH_GAMS)
   bool read
-    ( std::string const filename );
+    ( std::string const& filename );
 #endif
 
   //! @brief Setup DAG for cost and constraint evaluation
@@ -458,7 +454,7 @@ private:
 template <typename T>
 inline bool
 NLGO<T>::read
-( std::string const filename )
+( std::string const& filename )
 {
   auto tstart = stats.start();
 
@@ -507,7 +503,7 @@ NLGO<T>::setup
   _NLPBND.setup();
   _Xbnd.clear();
 
-  _issetup = false;
+  _issetup = true;
 
   stats.walltime_setup += stats.walltime( tstart );
   stats.walltime_all   += stats.walltime( tstart );
@@ -538,7 +534,7 @@ NLGO<T>::preprocess
   else
     _Xbnd.assign( _var.size(), T( -BASE_OPT::INF, BASE_OPT::INF ) );
 
-  // Check feasibility of user-supplied point
+  // Check feasibility of user-supplied point - INTEGRALITY CHECK?!?
   if( _NLPSLV.is_feasible( _varini.data(), options.FEASTOL ) ){
     _Xinc = _varini;
     _Finc = _NLPSLV.solution().f[0];// * ( 1 + _objscal * options.CVRTOL );
@@ -1047,15 +1043,15 @@ NLGO<T>::Options::display
 template <typename T>
 inline std::ostream&
 operator <<
-( std::ostream&out, const NLGO<T>&NLP )
+( std::ostream & out, NLGO<T> const& MINLP )
 {
   out << std::right << std::endl
       << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ')
-      << std::setw(55) << "NONLINEAR GLOBAL OPTIMIZATION IN CRONOS\n"
+      << std::setw(55) << "GLOBAL MIXED-INTEGER NONLINEAR OPTIMIZATION IN CANON\n"
       << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ');
 
   // Display NLGO Options
-  NLP.options.display( out );
+  MINLP.options.display( out );
 
   out << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ');
   return out;

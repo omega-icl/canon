@@ -365,6 +365,11 @@ public:
       _vartyp.clear();
     }
 
+  //! @brief Update decision variable types
+  void update_vartyp
+    ( const unsigned typ=0 )
+    { _vartyp.assign( _vartyp.size(), typ ); }
+
   //! @brief Get dependent variables
   const std::vector<FFVar>& dep() const
     { return _dep; }

@@ -269,7 +269,7 @@ void
 WORKER_IPOPT::update
 ( int const nX, double const* Xl, double const* Xu, int const nP, double const* Pval )
 {
-#ifdef MC__NLPSLV_SNOPT_TRACE
+#ifdef MC__NLPSLV_IPOPT_TRACE
     std::cout << "  WORKER_IPOPT::initialize  " << warm << std::endl;
 #endif
 
@@ -296,14 +296,14 @@ void
 WORKER_IPOPT::initialize
 ( int const nX, double const* Xini )
 {
-#ifdef MC__NLPSLV_SNOPT_TRACE
+#ifdef MC__NLPSLV_IPOPT_TRACE
     std::cout << "  WORKER_IPOPT::initialize  " << std::endl;
 #endif
 
   // initial starting point
   if( Xini ) Xval.assign( Xini, Xini+nX );
   else       Xval.assign( nX, 0. );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
+#ifdef MC__NLPSLV_IPOPT_DEBUG
   for( int i=0; i<nX; i++ )
     std::cout << "  Xval[" << i << "] = " << Xval[i] << std::endl;
 #endif
@@ -603,19 +603,19 @@ WORKER_IPOPT::feasible
   }
 
   try{
-    solution.f.resize( nF );
-    DAG.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
+    Fval.resize( nF );
+    DAG.eval( op_g, dwk, nF-1, Fvar.data()+1, Fval.data()+1, nX, Xvar.data(), solution.x.data() );
   }
   catch(...){
     return false;
   }
   for( int i=1; i<nF; i++ ){
 #ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << Fval[i] << " <= " << Fupp[i] << std::endl;
 #endif
-    maxinfeas = Flow[i] - solution.f[i];
+    maxinfeas = Flow[i] - Fval[i];
     if( maxinfeas > CTRTOL ) return false;
-    maxinfeas = solution.f[i] - Fupp[i];
+    maxinfeas = Fval[i] - Fupp[i];
     if( maxinfeas > CTRTOL ) return false;
   }
   return true;
@@ -814,7 +814,7 @@ public:
     LINEAR_SOLVER LINMETH;
     //! @brief Corresponds to "derivative-test" in Ipopt, which enables finite-difference checks on the derivatives computed by the user-provided routines, both first- and second-order derivatives.
     bool GRADCHECK;
-    //! @brief Corresponds to  "print_level" in Ipopt, whcih specifies the verbosity level of the solver between 0 (no output) and 12 (maximum verbosity)
+    //! @brief Corresponds to  "print_level" in Ipopt, which specifies the verbosity level of the solver between 0 (no output) and 12 (maximum verbosity)
     int DISPLEVEL;
     //! @brief Maximum run-time (in seconds) - this is checked both internally (option "max_cpu_time" in Ipopt) and externally based on the wall clock.
     double TIMELIMIT;
@@ -825,24 +825,24 @@ public:
   //! @brief Setup NLP model before solution
   bool setup();
 
-  //! @brief Solve NLP model -- return value is SNOPT status
+  //! @brief Solve NLP model -- return value is IPOPT status
   template <typename T>
   int solve
     ( double const* Xini, T const* Xbnd, double const* Pval=0 );
 
-  //! @brief Solve NLP model -- return value is SNOPT status
+  //! @brief Solve NLP model -- return value is IPOPT status
   int solve
     ( double const* Xini=0, double const* Xlow=0, double const* Xupp=0,
       double const* Pval=0 );
 
 #ifdef MC__USE_SOBOL
-  //! @brief Solve NLP model using multistart search -- return value is SNOPT status
+  //! @brief Solve NLP model using multistart search -- return value is IPOPT status
   template <typename T>
   int solve
     ( unsigned const NSAM, T const* Xbnd, double const* Pval=0,
       bool const* logscal=0, bool const disp=false );
 
-  //! @brief Solve NLP model using multistart search -- return value is SNOPT status
+  //! @brief Solve NLP model using multistart search -- return value is IPOPT status
   int solve
     ( unsigned const NSAM, double const* Xlow=0, double const* Xupp=0,
       double const* Pval=0, bool const* logscal=0, bool const disp=false );
@@ -1317,11 +1317,11 @@ NLPSLV_IPOPT::_mssolve
       else
         Xini[i] = std::exp( std::log(_worker[th]->Xlow[i]) + ( std::log(_worker[th]->Xupp[i]) - std::log(_worker[th]->Xlow[i]) ) * vSAM[i] );
         //Xini[i] = std::exp( Op<T>::l(Op<T>::log(Xbnd[i])) + Op<T>::diam(Op<T>::log(Xbnd[i])) * vSAM[i] );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
+#ifdef MC__NLPSLV_IPOPT_DEBUG
       std::cout << "  " << Xini[i];
 #endif
     }
-#ifdef MC__NLPSLV_SNOPT_DEBUG
+#ifdef MC__NLPSLV_IPOPT_DEBUG
     std::cout << std::endl;
 #endif
 

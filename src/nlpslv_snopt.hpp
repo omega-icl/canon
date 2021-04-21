@@ -170,6 +170,8 @@ struct WORKER_SNOPT
 
   //! @brief vector of function values
   std::vector<double> Fval;
+  //! @brief vector of function offsets
+  std::vector<double> Foff;
   //! @brief vector of function multipliers
   std::vector<double> Fmul;
   //! @brief vector of function states
@@ -340,6 +342,12 @@ WORKER_SNOPT::finalize
   solution.x          = Xval;
   solution.ux         = Xmul;
   solution.f          = Fval;
+  for( unsigned i=0; i<Foff.size(); i++ ){
+    //std::cout << "Fval[" << i << "] = " << Fval[i] << std::endl;
+    //std::cout << "Foff[" << i << "] = " << Foff[i] << std::endl;
+    solution.f[i] += Foff[i];
+    //std::cout << "solution.f[" << i << "] = " << solution.f[i] << std::endl;
+  }
   solution.uf         = Fmul;
   if( ObjRow >= 0 ) solution.uf[ObjRow] = ObjMul;
 }
@@ -407,10 +415,10 @@ WORKER_SNOPT::feasible
   }
 
   try{
-    solution.f.assign( nF, 0. );
-    DAG.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+    Fval.assign( nF, 0. );
+    DAG.eval( op_F, dwk, Gndx, Fvar.data(), Fval.data(), nX, Xvar.data(), solution.x.data() );
     for( int iA=0; iA<nA; iA++ )
-      solution.f[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
+      Fval[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
   }
   catch(...){
     return false;
@@ -418,11 +426,11 @@ WORKER_SNOPT::feasible
   for( int i=0; i<nF; i++ ){
     if( i == ObjRow ) continue;      
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << Fval[i] << " <= " << Fupp[i] << std::endl;
 #endif
-    maxinfeas = Flow[i] - solution.f[i];
+    maxinfeas = Flow[i] - Fval[i];
     if( maxinfeas > CTRTOL ) return false;
-    maxinfeas = solution.f[i] - Fupp[i];
+    maxinfeas = Fval[i] - Fupp[i];
     if( maxinfeas > CTRTOL ) return false;
   }
 
@@ -995,6 +1003,7 @@ NLPSLV_SNOPT::_set_worker
   th->Xupp  = _Xupp;
   th->Flow  = _Flow;
   th->Fupp  = _Fupp;
+  th->Foff  = _Foff;
   th->tMAX  = userclock() + options.TIMELIMIT;
 }
 

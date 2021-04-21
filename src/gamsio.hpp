@@ -92,6 +92,9 @@ private:
    //! @brief GAMS audit and license object
    //struct palRec*        _pal;
 
+  //! @brief DAG environment
+  FFGraph* _dag;
+
   //! @brief setup optimization model from GAMS modelling object
   bool _populate
     ( bool const disp );
@@ -102,9 +105,6 @@ private:
       double const* constants );
 
 protected:
-  //! @brief DAG environment
-  FFGraph*              _dag;
-  
   //! @brief number of variables
   int _nvar;
   

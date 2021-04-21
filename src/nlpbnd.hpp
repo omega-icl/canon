@@ -89,7 +89,6 @@ Other options can be modified to tailor the search, including output level, maxi
 
 #include <stdexcept>
 
-
 #include "rltred.hpp"
 #include "sparseexpr.hpp"
 #include "polimage.hpp"
@@ -504,6 +503,11 @@ public:
     const
     { return _MIPSLV; }
 
+  //! @brief Get non-const pointer to MIP solver
+  MIP * solver
+    ()
+    { return _MIPSLV; }
+
   //! @brief Get const pointer to variable bounds
   T const* varbnd
     ()
@@ -739,6 +743,9 @@ NLPBND<T,MIP>::setup
   for( auto const& [i,Fi] : _Xlift )
     _Fops.push_back( _dag->subgraph( 1, &Fi ) );
   _Fallops = _dag->subgraph( _nF, _Fvar.data() );
+#ifdef MC__NLPBND_DEBUG  
+  _dag->output( _Fallops ), " FOR ALL FUNCTIONS" );    
+#endif
 
   stats.reset();
   _issetup = true;
@@ -934,10 +941,10 @@ NLPBND<T,MIP>::_propagate_bounds
 #endif
   
   // Apply constraint propagation
-  stats.tCPROP -= cpuclock();
+  stats.tCPROP -= userclock();
   int flag = _dag->reval( _Fallops, _CPbnd, _nF, _Fvar.data(), _Fbnd.data(), _nX, _Xvar.data(),
                           _Xbnd.data(), _IINF, options.CPMAX, options.CPTHRES );
-  stats.tCPROP += cpuclock();
+  stats.tCPROP += userclock();
 
 #ifdef MC__NLPBND_DEBUG_CP
   std::cout << "\nReduced Box:\n";
@@ -962,12 +969,12 @@ NLPBND<T,MIP>::relax
 
   if( reset ){
     // Reset polyhedral image, LP variables and cuts on request
-    init_polrelax();
+    init_polrelax(); // <<== COULD PASS Xinc HERE TOO??
     update_polrelax( 2, false, false );
   } 
-//#ifdef MC__NLPBND_DEBUG
+#ifdef MC__NLPBND_DEBUG
   std::cout << _POLenv;
-//#endif
+#endif
 
   // Set-up variable initial guess
   for( unsigned i=0; Xinc && i<_nX0; i++ )
@@ -975,22 +982,22 @@ NLPBND<T,MIP>::relax
 
   for( unsigned iref=0; ; iref++ ){
     // Set-up relaxed objective, options, and solve polyhedral relaxation
-    stats.tMIPSOL -= cpuclock();
-    _MIPSLV->set_objective( &_POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
+    stats.tMIPSOL -= userclock();
+    _MIPSLV->set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
     _MIPSLV->options = options.MIPSLV;
     _MIPSLV->solve();
     stats.nMIPSOL++;
-    stats.tMIPSOL += cpuclock();
+    stats.tMIPSOL += userclock();
 
     // Break if relaxation unsuccessful or refinement iteration exceeded
     if( _MIPSLV->get_status() != MIP::OPTIMAL || iref >= nref ) break;
 
     // Refine relaxation via additional breakpoints
     refine_polrelax( Xinc );
-//#ifdef MC__NLPBND_DEBUG
+#ifdef MC__NLPBND_DEBUG
     std::cout << _POLenv;
     { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
-//#endif
+#endif
   }
 
   return _MIPSLV->get_status();
@@ -1006,12 +1013,12 @@ NLPBND<T,MIP>::_reduce
   std::cout << _POLenv;
 #endif
   // Set-up lower/upper bound objective, options, and solve polyhedral relaxation
-  stats.tMIPSOL -= cpuclock();
-  _MIPSLV->set_objective( &_POLXvar[ix], (uplo? BASE_OPT::MAX: BASE_OPT::MIN) );
+  stats.tMIPSOL -= userclock();
+  _MIPSLV->set_objective( _POLXvar[ix], (uplo? BASE_OPT::MAX: BASE_OPT::MIN) );
   _MIPSLV->options = options.MIPSLV;
   _MIPSLV->solve();
   stats.nMIPSOL++;
-  stats.tMIPSOL += cpuclock();
+  stats.tMIPSOL += userclock();
 
   return _MIPSLV->get_status();
 }
@@ -1192,9 +1199,9 @@ inline void
 NLPBND<T,MIP>::init_polrelax
 ()
 {
-  stats.tPOLIMG -= cpuclock();
+  stats.tPOLIMG -= userclock();
 
-  // Reset polynomial image
+  // Reset polyhedral image
   _POLenv.reset();
   _POLenv.options = options.POLIMG;
 
@@ -1260,7 +1267,7 @@ NLPBND<T,MIP>::init_polrelax
     }
   }
   
-  stats.tPOLIMG += cpuclock();
+  stats.tPOLIMG += userclock();
 }
 
 template <typename T, typename MIP>
@@ -1268,7 +1275,7 @@ inline void
 NLPBND<T,MIP>::update_polrelax
 ( unsigned const addcuts, bool const contcuts, bool const resetcuts )
 {
-  stats.tPOLIMG -= cpuclock();
+  stats.tPOLIMG -= userclock();
 
   // Reset polyhedral cuts
   if( resetcuts ) _POLenv.reset_cuts();
@@ -1334,14 +1341,14 @@ NLPBND<T,MIP>::update_polrelax
     _POLFvar[i].update( Fupdi );
   }
 
-  stats.tPOLIMG += cpuclock();
+  stats.tPOLIMG += userclock();
 
   // Input cuts in MIP solver
   auto CONTRELAX = _MIPSLV->options.CONTRELAX;
   _MIPSLV->options.CONTRELAX = contcuts;
-  stats.tMIPSOL -= cpuclock();
+  stats.tMIPSOL -= userclock();
   _MIPSLV->set_cuts( &_POLenv, true );
-  stats.tMIPSOL += cpuclock();
+  stats.tMIPSOL += userclock();
   _MIPSLV->options.CONTRELAX = CONTRELAX;
 }
 
@@ -1350,7 +1357,7 @@ inline void
 NLPBND<T,MIP>::refine_polrelax
 ( double const* Xinc )
 {
-  stats.tPOLIMG -= cpuclock();
+  stats.tPOLIMG -= userclock();
   
   // Update discretization with optimum point of relaxation
   for( auto itv=_POLenv.Vars().begin(); itv!=_POLenv.Vars().end(); ++itv ){
@@ -1373,7 +1380,7 @@ NLPBND<T,MIP>::refine_polrelax
   // Update discetization with incumbent
   if( Xinc ){
     itX = _POLXvar.begin();
-    for( unsigned i=0; itX!=_POLXvar.end(); ++itX, i++ ){
+    for( unsigned i=0; i<_nX0 && itX!=_POLXvar.end(); ++itX, i++ ){
       itX->add_breakpt( Xinc[i] );
       auto itv = _POLenv.Vars().find( &_var[i] );
       itv->second->add_breakpt( Xinc[i] );
@@ -1459,12 +1466,12 @@ NLPBND<T,MIP>::refine_polrelax
 //    }
 //  }
 
-  stats.tPOLIMG += cpuclock();
+  stats.tPOLIMG += userclock();
 
   // Input cuts in MIP solver
-  stats.tMIPSOL -= cpuclock();
+  stats.tMIPSOL -= userclock();
   _MIPSLV->set_cuts( &_POLenv, true );
-  stats.tMIPSOL += cpuclock();
+  stats.tMIPSOL += userclock();
 }
 
 template <typename T, typename MIP>

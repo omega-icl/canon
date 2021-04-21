@@ -35,7 +35,6 @@ class MIPSLV_GUROBI
   // Typedef's
   typedef std::map< const PolVar<T>*, GRBVar, lt_PolVar<T> > t_MIPVar;
   typedef GRBConstr t_MIPCtr;
-  //typedef std::multimap< const PolCut<T>*, GRBConstr, lt_PolCut<T> > t_MIPCut;
   
 protected:
 
@@ -47,9 +46,6 @@ protected:
 
   //! @brief map of variables in MIP model vs DAG
   t_MIPVar _MIPvar;
-
-  //! @brief map of cuts in MIP model vs DAG
-  //t_MIPCut _MIPcut;
 
   //! @brief whether GUROBI has sent an exception
   bool _GRBexcpt;
@@ -169,22 +165,45 @@ public:
   void set_cuts
     ( PolImg<T>* env, bool const reset_=true );
 
-  //! @brief Set objective in MIP
-  void set_objective
-    ( FFVar const* pObj, t_OBJ const& tObj );
+//  //! @brief Set objective in MIP
+//  void set_objective
+//    ( FFVar const& pObj, t_OBJ const& tObj );
 
   //! @brief Set objective in MIP
   void set_objective
-    ( PolVar<T> const* pObj, t_OBJ const& tObj );
+    ( PolVar<T> const& pObj, t_OBJ const& tObj, bool const appvar_=true );
 
   //! @brief Set objective in MIP
   void set_objective
-    ( const unsigned nObj, const PolVar<T>*pObj, const double*cObj,
-      t_OBJ const& tObj );
+    ( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
+      t_OBJ const& tObj, bool const appvar_=true );
+
+  //! @brief Update objective term in MIP
+  void update_objective
+    ( PolVar<T> const& pObj, double const& cObj, bool const appvar_=true );
+
+  //! @brief Update objective terms in MIP
+  void update_objective
+    ( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
+      bool const appvar_=true );
+
+//  //! @brief Add constraint in MIP
+//  t_MIPCtr add_constraint
+//    ( FFVar const& pCtr, t_CTR const& tCtr, const double rhs=0. );
 
   //! @brief Add constraint in MIP
   t_MIPCtr add_constraint
-    ( PolVar<T> const* pCtr, t_CTR const& tCtr, const double rhs=0. );
+    ( PolVar<T> const& pCtr, t_CTR const& tCtr, const double rhs=0.,
+      bool const appvar_=true );
+
+  //! @brief Add constraint in MIP
+  t_MIPCtr add_constraint
+    ( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr, 
+      t_CTR const& tCtr, double const rhs=0., bool const appvar_=true );
+
+  //! @brief Modify constraint RHS in MIP
+  t_MIPCtr & update_constraint
+    ( t_MIPCtr & ctr, double const rhs );
 
   //! @brief Dummy constraint in MIP
   t_MIPCtr dummy_constraint
@@ -198,22 +217,14 @@ public:
   void solve
     ();
 
-  //! @brief Initialize value of PolImg variable <a>X</a> before MIP call
+  //! @brief Set PolImg variable <a>X</a> and intialize value
   void set_variable
     ( PolVar<T> const& X, double val=GRB_UNDEFINED )
     {
       auto itv = _MIPvar.find( const_cast<PolVar<T>*>(&X) );
-      return itv->second.set( GRB_DoubleAttr_Start, val );
-    }
-
-  //! @brief Initialize value of DAG variable <a>X</a> before MIP call
-  void set_variable
-    ( FFVar const& X, double val=GRB_UNDEFINED )
-    const
-    {
-      auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&X) );
-      auto itv = _MIPvar.find( itp->second );
-      return itv->second.set( GRB_DoubleAttr_Start, val );
+      if( itv != _MIPvar.end() )
+        return itv->second.set( GRB_DoubleAttr_Start, val );
+      return _add_var( &X ).first.set( GRB_DoubleAttr_Start, val );
     }
 
   //! @brief Value of PolImg variable <a>X</a> after last MIP call
@@ -386,11 +397,14 @@ MIPSLV_GUROBI<T>::set_cuts
   _POLenv = env;
     
   // Add participating variables into Gurobi model
-  for( auto && pvar : _POLenv->Vars() )
+  for( auto && pvar : _POLenv->Vars() ){
+    if( !reset_ && _MIPvar.find( pvar.second ) != _MIPvar.end() ) continue;
     _add_var( pvar.second );
-    //if( itv->second->cuts() ) _set_MIPvar( itv->second );
-  for( auto && paux : _POLenv->Aux() )
+  }
+  for( auto && paux : _POLenv->Aux() ){
+    if( !reset_ && _MIPvar.find( paux ) != _MIPvar.end() ) continue;
     _add_var( paux );
+  }
 
   // Update Gurobi model before adding cuts
   _GRBmodel->update();
@@ -404,22 +418,26 @@ MIPSLV_GUROBI<T>::set_cuts
   }
 }
 
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::set_objective
-( FFVar const* pObj, t_OBJ const& tObj )
-{
-  auto itp = _POLenv->Vars().find( const_cast<FFVar*>(pObj) );
-  _set_objective( itp->second, tObj );
-}
+//template <typename T>
+//inline void
+//MIPSLV_GUROBI<T>::set_objective
+//( FFVar const& pObj, t_OBJ const& tObj )
+//{
+//  auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&pObj) );
+//  set_objective( *itp->second, tObj );
+//}
 
 template <typename T>
 inline void
 MIPSLV_GUROBI<T>::set_objective
-( PolVar<T> const* pObj, t_OBJ const& tObj )
+( PolVar<T> const& pObj, t_OBJ const& tObj, bool const appvar_ )
 {
   // Set objective
-  auto jtobj = _MIPvar.find( pObj );
+  auto jtobj = _MIPvar.find( &pObj );
+  if( jtobj == _MIPvar.end() && appvar_)
+    jtobj = _add_var( &pObj ).first;
+  else if( jtobj == _MIPvar.end() )
+    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
   _GRBmodel->setObjective( GRBLinExpr( jtobj->second ) );
   switch( tObj ){
     case MIN: _GRBmodel->set( GRB_IntAttr_ModelSense,  1 ); break;
@@ -430,24 +448,56 @@ MIPSLV_GUROBI<T>::set_objective
 template <typename T>
 inline void
 MIPSLV_GUROBI<T>::set_objective
-( const unsigned nObj, const PolVar<T>*pObj, const double*cObj,
-  t_OBJ const& tObj )
+( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
+  t_OBJ const& tObj, bool const appvar_ )
 {
   // Set objective
   GRBLinExpr linobj;
   _cutvar.resize( nObj );
   for( unsigned k=0; k<nObj; k++ ){
-    auto itvar = _MIPvar.find( pObj[k] );
-    if( itvar == _MIPvar.end() )
+    auto itvar = _MIPvar.find( &pObj[k] );
+    if( itvar == _MIPvar.end() && appvar_)
+      itvar = _add_var( &pObj[k] ).first;
+    else if( itvar == _MIPvar.end() )
       throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
     _cutvar[k] = itvar->second;
   }
   linobj.addTerms( cObj, _cutvar.data(), nObj );
-
   _GRBmodel->setObjective( linobj );
   switch( tObj ){
     case MIN: _GRBmodel->set( GRB_IntAttr_ModelSense,  1 ); break;
     case MAX: _GRBmodel->set( GRB_IntAttr_ModelSense, -1 ); break;
+  }
+}
+
+template <typename T>
+inline void
+MIPSLV_GUROBI<T>::update_objective
+( PolVar<T> const& pObj, double const& cObj, bool const appvar_ )
+{
+  // Update objective
+  auto jtobj = _MIPvar.find( &pObj );
+  if( jtobj == _MIPvar.end() && appvar_)
+    jtobj = _add_var( &pObj ).first;
+  else if( jtobj == _MIPvar.end() )
+    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
+  jtobj->second.set( GRB_DoubleAttr_Obj, cObj );
+}
+
+template <typename T>
+inline void
+MIPSLV_GUROBI<T>::update_objective
+( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
+  bool const appvar_ )
+{
+  // Set objective
+  for( unsigned k=0; k<nObj; k++ ){
+    auto jtobj = _MIPvar.find( &pObj[k] );
+    if( jtobj == _MIPvar.end() && appvar_)
+      jtobj = _add_var( &pObj[k] ).first;
+    else if( jtobj == _MIPvar.end() )
+      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
+    jtobj->second.set( GRB_DoubleAttr_Obj, cObj[k] );
   }
 }
 
@@ -460,13 +510,34 @@ MIPSLV_GUROBI<T>::remove_constraint
 }
 
 template <typename T>
+inline typename MIPSLV_GUROBI<T>::t_MIPCtr &
+MIPSLV_GUROBI<T>::update_constraint
+( typename MIPSLV_GUROBI<T>::t_MIPCtr & ctr, double const rhs )
+{
+  ctr.set( GRB_DoubleAttr_RHS, rhs );
+  return ctr;
+}
+
+//template <typename T>
+//inline typename MIPSLV_GUROBI<T>::t_MIPCtr
+//MIPSLV_GUROBI<T>::add_constraint
+//( FFVar const& pCtr, t_CTR const& tCtr, double const rhs )
+//{
+//  auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&pCtr) );
+//  return add_constraint( *itp->second, tCtr, rhs );
+//}
+
+template <typename T>
 inline typename MIPSLV_GUROBI<T>::t_MIPCtr
 MIPSLV_GUROBI<T>::add_constraint
-( PolVar<T> const* pCtr, t_CTR const& tCtr, const double rhs )
+( PolVar<T> const& pCtr, t_CTR const& tCtr, double const rhs,
+  bool const appvar_ )
 {
   // Set constraint
-  auto jtctr = _MIPvar.find( pCtr );
-  if( jtctr == _MIPvar.end() )
+  auto jtctr = _MIPvar.find( &pCtr );
+  if( jtctr == _MIPvar.end() && appvar_ )
+      jtctr = _add_var( &pCtr ).first;
+  else if( jtctr == _MIPvar.end() )
     throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
   GRBLinExpr lhs( jtctr->second );
   GRBConstr ctr;
@@ -475,7 +546,33 @@ MIPSLV_GUROBI<T>::add_constraint
     case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
     case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
   }
-  //_MIPcut.insert( std::make_pair( (PolCut<T> const*)0, ctr ) );
+  return ctr;
+}
+
+template <typename T>
+inline typename MIPSLV_GUROBI<T>::t_MIPCtr
+MIPSLV_GUROBI<T>::add_constraint
+( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr,
+  t_CTR const& tCtr, double const rhs, bool const appvar_ )
+{
+  // Set constraint
+  GRBLinExpr lhs;
+  _cutvar.resize( nCtr );
+  for( unsigned k=0; k<nCtr; k++ ){
+    auto jtctr = _MIPvar.find( &pCtr[k] );
+    if( jtctr == _MIPvar.end() && appvar_)
+        jtctr = _add_var( &pCtr[k] ).first;
+    else if( jtctr == _MIPvar.end() )
+      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
+    _cutvar[k] = jtctr->second;
+  }
+  lhs.addTerms( cCtr, _cutvar.data(), nCtr );
+  GRBConstr ctr;
+  switch( tCtr ){
+    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
+    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
+    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
+  }
   return ctr;
 }
 
