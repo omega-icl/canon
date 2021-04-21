@@ -4,7 +4,7 @@
 
 /*!
 \page page_GAMSIO GAMS File Reader for CANON
-\author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and OMEGA Research Group (http://www3.imperial.ac.uk/environmentenergyoptimisation)
+\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 1.0
 \date 2020
 \bug No known bugs.

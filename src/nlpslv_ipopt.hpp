@@ -3,8 +3,8 @@
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_NLPSLV_IPOPT Local (Continuous) Optimization using IPOPT
-\author Benoit C. Chachuat
+\page page_NLPSLV_IPOPT Local (Continuous) Nonlinear Optimization interfacing IPOPT with MC++
+\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 2.0
 \date 2020
 \bug No known bugs.

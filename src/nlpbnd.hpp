@@ -3,8 +3,8 @@
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_NLPBND Bounding of Factorable Nonlinear Programs using MC++
-\author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and OMEGA Research Group (http://www3.imperial.ac.uk/environmentenergyoptimisation)
+\page page_NLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
+\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 1.0
 \date 2020
 \bug No known bugs.

@@ -43,9 +43,11 @@ On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <
 \section sec_CANON_doc Where can I learn more about CANON?
 
 A description of the main components of CANON can be found under <A HREF="pages.html">Related Pages</A>:
-- \ref page_NLPSLV_SNOPT Local (Continuous) Optimization using SNOPT
-- \ref page_NLPBND Bounding of Factorable Nonlinear Programs using MC++
-- \ref page_NLGO Nonlinear Global Optimization using Gurobi, SNOPT and MC++
+- \ref page_NLPSLV_SNOPT Local (Continuous) Nonlinear Optimization interfacing SNOPT with MC++
+- \ref page_NLPSLV_IPOPT Local (Continuous) Nonlinear Optimization interfacing IPOPT with MC++
+- \ref page_MINLPSLV Local Mixed-Integer Nonlinear Optimization via Outer-Approximation using MC++
+- \ref page_NLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
+- \ref page_NLGO Global Mixed-Integer Nonlinear Optimization using Gurobi, SNOPT and MC++
 .
 
 \section sec_MC_examples How do I run the test examples of CANON?

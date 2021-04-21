@@ -3,8 +3,8 @@
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_MINLPSLV Local Mixed-Integer Optimization using Outer-Approximation
-\author Benoit C. Chachuat
+\page page_MINLPSLV Local Mixed-Integer Nonlinear Optimization via Outer-Approximation using MC++
+\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 1.0
 \date 2020
 \bug No known bugs.
@@ -16,7 +16,76 @@ Consider a mixed-integer nonlinear optimization problem (MINLP) in the form:
 & \qquad x_i^L\leq x_i\leq x_i^U,\ \ i=1,\ldots,n\\
 & \qquad x_i \in \mathbb{Z},\ \ i\in I
 \f}
-where \f$f, g_1, \ldots, g_m\f$ are factorable, potentially nonlinear, real-valued functions; and \f$x_i, i=1\ldots n\f$ are either continuous (\f$i\notin I\f$) or binary/integer (\f$i\in I\f$) decision variables. The class mc::MINLPSLV tackles such problems using an outer-approximation algorithm (<A href="http://doi.org/10.1007/BF02592064">Duran & Grossmann, 1986</A>; <A href="http://doi.org/10.1007/BF01581153"> Fletcher & Leyffer, 1994</A>; <A href="http://doi.org/10.1007/BF01581153"> Bonami et al., 2009</A>), which alternates between solving nonlinear programs (NLPs) and mixed-integer linear programs (MILPs). The implementation follows the baseline of DICOPT (<A href="https://doi.org/10.1080/10556788.2019.1641498"> Bernal et al., 2020/A>).
+where \f$f, g_1, \ldots, g_m\f$ are factorable, potentially nonlinear, real-valued functions; and \f$x_i, i=1\ldots n\f$ are either continuous (\f$i\notin I\f$) or binary/integer (\f$i\in I\f$) decision variables. The class mc::MINLPSLV tackles such problems using an outer-approximation algorithm (<A href="http://doi.org/10.1007/BF02592064">Duran & Grossmann, 1986</A>; <A href="http://doi.org/10.1007/BF01581153"> Fletcher & Leyffer, 1994</A>; <A href="http://doi.org/10.1007/BF01581153"> Bonami et al., 2009</A>), which alternates between solving nonlinear programs (NLPs) and mixed-integer linear programs (MILPs). The implementation follows the baseline of DICOPT (<A href="https://doi.org/10.1080/10556788.2019.1641498"> Bernal et al., 2020</A>).
+
+\section sec_MINLPSLV_solve How to Solve an MINLP Model using mc::MINLPSLV?
+
+Consider the following MINLP model:
+\f{align*}
+  \min_{x,y}\ & -6x-y \\
+  \text{s.t.} \ & 0.3(x-8)^2+0.04(y-6)^4+0.1\frac{{\rm e}^{2x}}{y^4} \leq 56 \\
+                & \frac{1}{x}+\frac{1}{y}-\sqrt{x}\sqrt{y}+4 \leq 0 \\
+                & 2x-5y+1 \leq 0 \\
+  & 1 \leq x \leq 20\\
+  & 1 \leq y \leq 20,\ y\in\mathbb{Z}
+\f}
+
+We start by instantiating an mc::MINLPSLV class object, which is defined in the header file <tt>minlpslv.hpp</tt>:
+
+\code
+  mc::MINLPSLV MINLP;
+\endcode
+
+Next, we set the variables and objective/constraint functions by creating a DAG of the problem: 
+
+\code
+  mc::FFGraph DAG;
+  const unsigned NP = 2; mc::FFVar P[NP];
+  for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
+
+  MINLP.set_dag( &DAG );
+  MINLP.add_var( P[0], 1, 20, 0 );
+  MINLP.add_var( P[1], 1, 20, 1 );
+  MINLP.set_obj( mc::BASE_NLP::MIN, -6*P[0]-P[1] );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
+\endcode
+
+The MINLP model is solved using:
+
+\code
+  MINLP.options.CVRTOL = MINLP.options.CVATOL = 1e-5;
+  MINLP.setup();
+  MINLP.optimize();
+\endcode
+
+The return value of mc::MINLPSLV is per the enumeration mc::MINLPSLV::STATUS. The following result is displayed (with the option mc::MINLPSLV::Options::DISPLEVEL defaulting to 1):
+
+\verbatim
+#  CONTINUOUS / INTEGER VARIABLES:   1 / 1
+#  LINEAR / NONLINEAR FUNCTIONS:     2 / 2
+
+#  ITERATION     INCUMBENT    BEST BOUND    TIME
+        0     1.000000e+20 -5.698551e+01      0s
+        1  i  1.000000e+20 -5.698551e+01      0s
+        2  i  1.000000e+20 -5.698551e+01      0s
+        3  i  1.000000e+20 -5.698551e+01      0s
+        4  i  1.000000e+20 -5.698551e+01      0s
+        5  i  1.000000e+20 -5.698551e+01      0s
+        6  i  1.000000e+20 -5.698551e+01      0s
+        7  i  1.000000e+20 -5.698551e+01      0s
+        8  i  1.000000e+20 -5.698551e+01      0s
+        9  * -5.266063e+01 -5.698551e+01      0s
+       10  * -5.698117e+01 -5.698551e+01      0s
+       11    -5.698117e+01 -5.698117e+01      0s
+
+#  TERMINATION AFTER 11 ITERATIONS: 0.150152 SEC
+#  INCUMBENT VALUE: -5.698117e+01
+#  INCUMBENT POINT:  7.663529e+00  1.100000e+01
+\endverbatim
+
+The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a> using the method <a>mc::MINLPSLV::incumbent</a>. A computational breakdown may be obtained from the internal class <a>mc::MINLPSLV::Stats</a>. And the options of the algorithm can be modified using the internal class mc::MINLPSLV::Options.
 */
 
 #ifndef MC__MINLPSLV_HPP
@@ -1012,23 +1081,23 @@ MINLPSLV<T,NLP,MIP>::Options::display
 {
   // Display MINLPSLV Options
   out << std::left;
-  out << std::setw(60) << "  LINEARIZATION METHOD";
+  out << std::setw(60) << "#  LINEARIZATION METHOD";
   switch( LINMETH ){
    case CVX:   out << "CVX"   << std::endl; break;
    case PENAL: out << "PENAL" << std::endl; break;
   }
-  out << std::setw(60) << "  CONVERGENCE ABSOLUTE TOLERANCE"
+  out << std::setw(60) << "#  CONVERGENCE ABSOLUTE TOLERANCE"
       << std::scientific << std::setprecision(1)
       << CVATOL << std::endl;
-  out << std::setw(60) << "  CONVERGENCE RELATIVE TOLERANCE"
+  out << std::setw(60) << "#  CONVERGENCE RELATIVE TOLERANCE"
       << std::scientific << std::setprecision(1)
       << CVRTOL << std::endl;
-  out << std::setw(60) << "  FEASIBILITY PUMP"
+  out << std::setw(60) << "#  FEASIBILITY PUMP"
       << ( FEASPUMP? "Y\n": "N\n" );
-  out << std::setw(60) << "  TIME LIMIT (SEC)"
+  out << std::setw(60) << "#  TIME LIMIT (SEC)"
       << std::scientific << std::setprecision(1)
       << TIMELIMIT << std::endl;
-  out << std::setw(60) << "  DISPLAY LEVEL"
+  out << std::setw(60) << "#  DISPLAY LEVEL"
       << DISPLEVEL << std::endl;
 }
 
@@ -1037,15 +1106,16 @@ inline std::ostream&
 operator <<
 ( std::ostream & out, MINLPSLV<T,NLP,MIP> const& MINLP )
 {
-  out << std::right << std::endl
-      << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ')
-      << std::setw(55) << "LOCAL MIXED-INTEGER NONLINEAR OPTIMIZATION IN CANON\n"
-      << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ');
+  out << std::left << std::endl
+      << std::setfill('_') << std::setw(72) << "#" << std::endl << "#" << std::endl << std::setfill(' ')
+      << "#  LOCAL MIXED-INTEGER NONLINEAR OPTIMIZATION IN CANON\n"
+      << std::setfill('_') << std::setw(72) << "#" << std::endl << "#" << std::endl << std::setfill(' ');
 
   // Display MINLPSLV Options
   MINLP.options.display( out );
 
-  out << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ');
+  out << std::left
+      << std::setfill('_') << std::setw(72) << "#" << std::endl << std::endl << std::setfill(' ');
   return out;
 }
 

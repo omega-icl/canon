@@ -52,57 +52,55 @@ int main()
   mc::FFGraph DAG;
   const unsigned NP = 2; mc::FFVar P[NP];
   for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
-  mc::FFVar RHS( &DAG );
 
   // Local optimization
-  mc::MINLPSLV<I,NLP,MIP> *MINLP = new mc::MINLPSLV<I,NLP,MIP>;
-  MINLP->options.DISPLEVEL               = 1;
-  MINLP->options.CVRTOL                  = 1e-5;
-  MINLP->options.CVATOL                  = 1e-5;
-  MINLP->options.TIMELIMIT               = 36e2;
-  MINLP->options.MAXITER                 = 20;
-  MINLP->options.MSLOC                   = 1;
+  mc::MINLPSLV<I,NLP,MIP> MINLP;
+  MINLP.options.DISPLEVEL               = 1;
+  MINLP.options.CVRTOL                  = 1e-5;
+  MINLP.options.CVATOL                  = 1e-5;
+  MINLP.options.TIMELIMIT               = 36e2;
+  MINLP.options.MAXITER                 = 20;
+  MINLP.options.MSLOC                   = 1;
 #ifdef MC__USE_SNOPT
-  MINLP->options.NLPSLV.DISPLEVEL        = 0;
-  MINLP->options.NLPSLV.MAXITER          = 100;
-  MINLP->options.NLPSLV.FEASTOL          = 1e-8;
-  MINLP->options.NLPSLV.OPTIMTOL         = 1e-8;
-  MINLP->options.NLPSLV.GRADMETH         = mc::NLPSLV_SNOPT::Options::FAD;
-  MINLP->options.NLPSLV.GRADCHECK        = false;
-  MINLP->options.NLPSLV.MAXTHREAD        = 8;
+  MINLP.options.NLPSLV.DISPLEVEL        = 0;
+  MINLP.options.NLPSLV.MAXITER          = 100;
+  MINLP.options.NLPSLV.FEASTOL          = 1e-8;
+  MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
+  MINLP.options.NLPSLV.GRADMETH         = mc::NLPSLV_SNOPT::Options::FAD;
+  MINLP.options.NLPSLV.GRADCHECK        = false;
+  MINLP.options.NLPSLV.MAXTHREAD        = 8;
 #elif  MC__USE_IPOPT
-  MINLP->options.NLPSLV.DISPLEVEL        = 0;
-  MINLP->options.NLPSLV.MAXITER          = 100;
-  MINLP->options.NLPSLV.FEASTOL          = 1e-8;
-  MINLP->options.NLPSLV.OPTIMTOL         = 1e-8;
-  MINLP->options.NLPSLV.GRADMETH         = mc::NLPSLV_IPOPT::Options::FAD;
-  MINLP->options.NLPSLV.GRADCHECK        = false;
-  MINLP->options.NLPSLV.MAXTHREAD        = 8;
+  MINLP.options.NLPSLV.DISPLEVEL        = 0;
+  MINLP.options.NLPSLV.MAXITER          = 100;
+  MINLP.options.NLPSLV.FEASTOL          = 1e-8;
+  MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
+  MINLP.options.NLPSLV.GRADMETH         = mc::NLPSLV_IPOPT::Options::FAD;
+  MINLP.options.NLPSLV.GRADCHECK        = false;
+  MINLP.options.NLPSLV.MAXTHREAD        = 8;
 #endif
 #ifdef MC__USE_GUROBI
-  MINLP->options.MIPSLV.DISPLEVEL        = 0;
-  MINLP->options.MIPSLV.THREADS          = 0;
-  MINLP->options.MIPSLV.MIPRELGAP        = 1e-5;
-  MINLP->options.MIPSLV.OUTPUTFILE       = "test1.lp";
+  MINLP.options.MIPSLV.DISPLEVEL        = 0;
+  MINLP.options.MIPSLV.THREADS          = 0;
+  MINLP.options.MIPSLV.MIPRELGAP        = 1e-5;
+  MINLP.options.MIPSLV.OUTPUTFILE       = "test1.lp";
 #elif  MC__USE_CPLEX
   throw std::runtime_error("Error: CPLEX solver not yet implemented");
 #endif
 
 #ifdef READ_GAMS
-  MINLP->read( "test1.gms" );
+  MINLP.read( "test1.gms" );
 #else
-  MINLP->set_dag( &DAG );
-  MINLP->add_var( P[0], 1, 20, 0 );
-  MINLP->add_var( P[1], 1, 20, 1 );
-  MINLP->set_obj( mc::BASE_NLP::MIN, -6*P[0]-P[1] );
-  MINLP->add_ctr( mc::BASE_NLP::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
-  MINLP->add_ctr( mc::BASE_NLP::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
-  MINLP->add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
+  MINLP.set_dag( &DAG );
+  MINLP.add_var( P[0], 1, 20, 0 );
+  MINLP.add_var( P[1], 1, 20, 1 );
+  MINLP.set_obj( mc::BASE_NLP::MIN, -6*P[0]-P[1] );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
 #endif
-  MINLP->setup();
-  MINLP->optimize();
-  MINLP->stats.display();
+  MINLP.setup();
+  MINLP.optimize();
+  MINLP.stats.display();
   
-  delete MINLP;
   return 0;
 }

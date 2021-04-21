@@ -1,10 +1,10 @@
-// Copyright (C) 2015-2016 Benoit Chachuat, Imperial College London.
+// Copyright (C) 2015- Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_NLGO Nonlinear Global Optimization using Gurobi, SNOPT and MC++
-\author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and OMEGA Research Group (http://www3.imperial.ac.uk/environmentenergyoptimisation)
+\page page_NLGO Global Mixed-Integer Nonlinear Optimization using Gurobi, SNOPT and MC++
+\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 1.0
 \date 2015
 \bug No known bugs.

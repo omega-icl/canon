@@ -3,8 +3,8 @@
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_NLPSLV_SNOPT Local (Continuous) Optimization using SNOPT
-\author Benoit C. Chachuat
+\page page_NLPSLV_SNOPT Local (Continuous) Nonlinear Optimization interfacing SNOPT with MC++
+\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 1.0
 \date 2020
 \bug No known bugs.
