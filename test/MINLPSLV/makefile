@@ -10,6 +10,9 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
+main : main.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
 test% : test%.o gmomcc.o gevmcc.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@ $(LDFLAGS)
 
