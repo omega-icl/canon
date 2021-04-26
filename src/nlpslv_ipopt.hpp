@@ -170,9 +170,11 @@ struct WORKER_IPOPT:
   //! @brief vector of decision variable upper bounds
   std::vector<double> Xupp;
 
-  //! @brief vector of constraint lower bounds
+  //! @brief vector of function values
+  std::vector<double> Fval;
+  //! @brief vector of function lower bounds
   std::vector<double> Flow;
-  //! @brief vector of constraint upper bounds
+  //! @brief vector of function upper bounds
   std::vector<double> Fupp;
 
   //! @brief vector of cost gradient values
@@ -725,7 +727,7 @@ private:
   FFVar _lagr;
 
   //! @brief objective gradient
-  const FFVar* _obj_grad;
+  FFVar* _obj_grad;
   //! @brief constraint gradient (sparse format)
   std::tuple< unsigned, const unsigned*, const unsigned*, const FFVar* > _ctr_grad;
   //! @brief Lagrangian Hessian (sparse format)
@@ -779,9 +781,10 @@ public:
    */
   //! @brief Constructor
   NLPSLV_IPOPT()
-    : _nP(0), _nX(0), _nF(0), _nG(0), _nL(0), _solution(FAILURE), 
+    : _nP(0), _nX(0), _nF(0), _nG(0), _nL(0),
       _obj_grad( nullptr ), _ctr_grad( 0, nullptr, nullptr, nullptr ),
-      _lagr_hess( 0, nullptr, nullptr, nullptr ), _obj_dir(0), _rec_model(false)
+      _lagr_hess( 0, nullptr, nullptr, nullptr ), _obj_dir(0),
+      _rec_model(false), _solution(FAILURE)
     {}
 
   //! @brief Destructor
@@ -953,17 +956,26 @@ public:
 protected:
 
   //! @brief Cleanup gradient/hessian storage
-  void _cleanup_grad()
-  {
-    delete[] _obj_grad;               _obj_grad = 0;
-    delete[] std::get<1>(_ctr_grad);  std::get<1>(_ctr_grad) = 0;
-    delete[] std::get<2>(_ctr_grad);  std::get<2>(_ctr_grad) = 0;
-    delete[] std::get<3>(_ctr_grad);  std::get<3>(_ctr_grad) = 0;
-    delete[] std::get<1>(_lagr_hess); std::get<1>(_lagr_hess) = 0;
-    delete[] std::get<2>(_lagr_hess); std::get<2>(_lagr_hess) = 0;
-    delete[] std::get<3>(_lagr_hess); std::get<3>(_lagr_hess) = 0;
-  }
-    
+  void _cleanup_grad
+    ( bool const objGrad=true, bool const ctrGrad=true )
+    {
+      if( objGrad ){
+        delete[] _obj_grad;               _obj_grad = 0;
+      }
+      if( ctrGrad ){
+        delete[] std::get<1>(_ctr_grad);  std::get<1>(_ctr_grad) = 0;
+        delete[] std::get<2>(_ctr_grad);  std::get<2>(_ctr_grad) = 0;
+        delete[] std::get<3>(_ctr_grad);  std::get<3>(_ctr_grad) = 0;
+      }
+      delete[] std::get<1>(_lagr_hess); std::get<1>(_lagr_hess) = 0;
+      delete[] std::get<2>(_lagr_hess); std::get<2>(_lagr_hess) = 0;
+      delete[] std::get<3>(_lagr_hess); std::get<3>(_lagr_hess) = 0;
+    }
+
+  //! @brief Make a local copy of the original NLP model
+  bool _record_model
+    ();
+
   //! @brief Set IPOPT options
   void _set_options
     ( Ipopt::SmartPtr<Ipopt::IpoptApplication> & IpoptApp );
@@ -1063,6 +1075,7 @@ NLPSLV_IPOPT::setup
 
   // full set of nonlinear functions (cost, constraints & equations)
   _Fvar.clear();
+  _Fmul.clear();
   _Flow.clear();
   _Fupp.clear();
 
@@ -1141,7 +1154,7 @@ NLPSLV_IPOPT::setup
     _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
 #ifdef MC__NLPSLV_IPOPT_DEBUG
      std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
-               << "] = " << std::get<3>(_larg_hess)[k] << std::endl;
+               << "] = " << std::get<3>(_lagr_hess)[k] << std::endl;
 #endif
   }
   _nL = _Lvar.size();
@@ -1168,10 +1181,10 @@ NLPSLV_IPOPT::_record_model
   _rec_jGvar   = _jGvar;
   _rec_Gvar    = _Gvar;
   _rec_nG      = _nG;
-  _rec_iLvar   = _iAfun;
-  _rec_jLvar   = _jAvar;
-  _rec_Lvar    = _Aval; 
-  _rec_nA      = _nA;
+  _rec_iLvar   = _iLvar;
+  _rec_jLvar   = _jLvar;
+  _rec_Lvar    = _Lvar; 
+  _rec_nL      = _nL;
 
   _rec_model   = true;
   return true;
@@ -1190,7 +1203,7 @@ NLPSLV_IPOPT::restore_model
   _Flow.swap( _rec_Flow );
   _Fupp.swap( _rec_Fupp );
   _nF = _rec_nF;
-  for( unsigned i=0; i<_nX; i++ )
+  for( int i=0; i<_nX; i++ )
     _obj_grad[i] = _rec_obj_grad[i];
   _iGfun.swap( _rec_iGfun );
   _jGvar.swap( _rec_jGvar );
@@ -1199,7 +1212,7 @@ NLPSLV_IPOPT::restore_model
   _iLvar.swap( _rec_iLvar );
   _jLvar.swap( _rec_jLvar );
   _Lvar.swap( _rec_Lvar ); 
-  _nA = _rec_nA;
+  _nL = _rec_nL;
 
   _rec_model = false;
   return true;
@@ -1211,8 +1224,8 @@ NLPSLV_IPOPT::set_obj_lazy
 ( t_OBJ const& type, FFVar const& obj )
 {
   // Keep track of original model 
-  if( _rec_model && _Fvar[_ObjRow] == obj
-   && (type == BASE_OPT::MIN? _ObjDir == -1: _ObjDir == 1) ) return false;
+  if( _rec_model && _Fvar[0] == obj
+   && (type == BASE_OPT::MIN? _obj_dir == -1: _obj_dir == 1) ) return false;
   _record_model();
   
   // Change to new objective
@@ -1220,7 +1233,7 @@ NLPSLV_IPOPT::set_obj_lazy
   _Fvar[0] = obj;
   
   // Update objective derivatives
-  _cleanup_grad();
+  _cleanup_grad( true, false );
   switch( options.GRADMETH ){
     default:
     case Options::FAD:  // Forward AD
@@ -1247,7 +1260,7 @@ NLPSLV_IPOPT::set_obj_lazy
     _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
 #ifdef MC__NLPSLV_IPOPT_DEBUG
      std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
-               << "] = " << std::get<3>(_larg_hess)[k] << std::endl;
+               << "] = " << std::get<3>(_lagr_hess)[k] << std::endl;
 #endif
   }
   _nL = _Lvar.size();
@@ -1262,21 +1275,24 @@ NLPSLV_IPOPT::add_ctr_lazy
 {
   // Keep track of original model 
   _record_model();
-  
+
   // Append new constraint
-  unsigned CtrPos = _Fvar.size();
-  double CtrCst = 0.;
+  unsigned CtrPos = _Fvar.size()-1;
   _Fvar.push_back( ctr );
   _Fmul.push_back( FFVar(_dag) );
-  switch( std::get<0>(_ctr)[i] ){
+  switch( type ){
     case EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );             break;
     case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );             break;
     case GE: _Flow.push_back( 0. );             _Fupp.push_back(  BASE_OPT::INF ); break;
   }
   _nF = _Fvar.size();
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  _dag->output( _dag->subgraph( _nX, _Xvar.data() ) );
+  _dag->output( _dag->subgraph( 1, &_Fvar.back() ) );
+#endif
   
   // Append new constraint derivatives
-  _cleanup_grad();
+  _cleanup_grad( false, true );
   switch( options.GRADMETH ){
     default:
     case Options::FAD:  // Forward AD
@@ -1286,16 +1302,23 @@ NLPSLV_IPOPT::add_ctr_lazy
       _ctr_grad = _dag->SBAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); 
       break;
   }
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  _dag->output( _dag->subgraph( _nX, std::get<3>(_ctr_grad) ) );
+#endif
   for( unsigned k=0; k<std::get<0>(_ctr_grad); ++k ){
     _iGfun.push_back( CtrPos );
     _jGvar.push_back( std::get<2>(_ctr_grad)[k] );
     _Gvar.push_back( std::get<3>(_ctr_grad)[k] );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-     std::cout << "  _Gvar[" << CtrPos << "," << std::get<2>(_ctr_grad)[k]
-               << "] = " << std::get<3>(_ctr_grad)[k] << std::endl;
-#endif
   }
   _nG = _Gvar.size();
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  std::cout << *_dag;
+  for( int k=0; k<_nX; k++ )
+     std::cout << "  _Cvar[" << k << "] = " << _obj_grad[k] << std::endl;
+  for( int k=0; k<_nG; k++ )
+     std::cout << "  _Gvar[" << _iGfun[k] << "," << _jGvar[k] << "] = " 
+               << _Gvar[k] << std::endl;
+#endif
 
   // Update Lagrangian Hessian
   FFVar lagr = 0;
@@ -1311,12 +1334,13 @@ NLPSLV_IPOPT::add_ctr_lazy
     _iLvar.push_back( std::get<1>(_lagr_hess)[k] );
     _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
     _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-     std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
-               << "] = " << std::get<3>(_larg_hess)[k] << std::endl;
-#endif
   }
   _nL = _Lvar.size();
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  for( int k=0; k<_nL; k++ )
+    std::cout << "  _Lvar[" << _iLvar[k] << "," << _jLvar[k] << "] = " 
+              << _Lvar[k] << std::endl;
+#endif
 
   return true;
 }
