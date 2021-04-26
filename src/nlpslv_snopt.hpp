@@ -511,6 +511,8 @@ private:
   std::vector<double> _Xlow;
   //! @brief vector of decision variable upper bounds
   std::vector<double> _Xupp;
+  //! @brief vector of zeros for constant term calculation in functions
+  std::vector<double> _X0;
 
   //! @brief number of functions (objective and constraints) in problem
   int                 _nF;
@@ -525,6 +527,8 @@ private:
 
   //! @brief specifies how a starting point is to be obtained
   START               _iStart;
+  //! @brief direction of objective function (-1:minmize; 0:feasibility; 1:maximize)
+  int                 _ObjDir;
   //! @brief row to act as the objective function (0 for feasibility problem)
   int                 _ObjRow;
   //! @brief constant to be added to the objective rowF (_ObjRow) for printing purposes
@@ -557,8 +561,50 @@ private:
   //!@brief pointer to user array passed to snOptA
   int*  _iusr;
 
+  //! @brief whether a record of the original model is available
+  bool                _recModel;
+  //! @brief direction of objective function (-1:minmize; 0:feasibility; 1:maximize)
+  int                 _recObjDir;
+  //! @brief row to act as the objective function (0 for feasibility problem)
+  int                 _recObjRow;
+  //! @brief constant to be added to the objective rowF (_ObjRow) for printing purposes
+  double              _recObjAdd;
+  //! @brief multiplier associated to the objective
+  double              _recObjMul;
+
+  //! @brief number of functions (objective and constraints) in problem
+  int                 _recnF;
+  //! @brief vector of functions in DAG
+  std::vector<FFVar>  _recFvar;
+  //! @brief vector of function offsets
+  std::vector<double> _recFoff;
+  //! @brief vector of function lower bounds
+  std::vector<double> _recFlow;
+  //! @brief vector of function upper bounds
+  std::vector<double> _recFupp;
+
+  //!@brief number of nonzero elements in the linear part of each function
+  int                 _recnA;
+  //!@brief row coordinates of nonzero elements in the linear part of each function
+  std::vector<int>    _reciAfun;
+  //!@brief column coordinates of nonzero elements in the linear part of each function
+  std::vector<int>    _recjAvar;
+  //!@brief values of nonzero elements in the linear part of each function
+  std::vector<double> _recAval;
+
+  //!@brief number of nonzero elements in the derivative of the nonlinear part of each function
+  int                 _recnG;
+  //!@brief row coordinates of nonzero elements in the derivative of the nonlinear part of each function
+  std::vector<int>    _reciGfun;
+  //!@brief column coordinates of nonzero elements in the derivative of the nonlinear part of each function
+  std::vector<int>    _recjGvar;
+  //! @brief vector of derivatives for the nonlinear part of each function
+  std::vector<FFVar>  _recGvar;
+  //!@brief set of indices of nonlinear constraints 
+  std::set<unsigned>  _recGndx;
+
   //! @brief Structure holding solution information
-  SOLUTION_OPT _solution;
+  SOLUTION_OPT        _solution;
 
 public:
   /** @defgroup NLPSLV_SNOPT Local (Continuous) Optimization using SNOPT and MC++
@@ -566,8 +612,9 @@ public:
    */
   //! @brief Constructor
   NLPSLV_SNOPT()
-    : _nP(0), _nX(0), _nF(0), _iStart(COLD), _ObjRow(-1), _ObjAdd(0.), _ObjMul(0.),
-      _nA(0), _nG(0), _solution(FAILURE)
+    : _nP(0), _nX(0), _nF(0), _iStart(COLD),
+      _ObjDir(0), _ObjRow(-1), _ObjAdd(0.), _ObjMul(0.),
+      _nA(0), _nG(0), _recModel(false), _solution(FAILURE)
     {
       _iusr = new int[1];
     }
@@ -587,7 +634,7 @@ public:
     Options():
       FEASTOL(1e-8), OPTIMTOL(1e-6), MAXITER(100), GRADMETH(FAD), GRADCHECK(false),
       QPFEASTOL(1e-8), QPMAXITER(500), QPMETH(CHOL), DISPLEVEL(0), LOGFILE(),
-      FEASPB(false), RELAXINT(false), TIMELIMIT(72e2), MAXTHREAD(0)
+      FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
       {}
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
@@ -603,7 +650,6 @@ public:
         LOGFILE      = options.LOGFILE;
         TIMELIMIT    = options.TIMELIMIT;
         FEASPB       = options.FEASPB;
-        RELAXINT     = options.RELAXINT;
         MAXTHREAD    = options.MAXTHREAD;
         return *this;
       }
@@ -641,8 +687,6 @@ public:
     std::string LOGFILE;
     //! @brief Corresponds to "Feasible point" in snOptA, which specifies to “Ignore the objective function” while finding afeasible point for the linear and nonlinear constraints.
     bool FEASPB;
-    //! @brief Treatment of the binary/integer variables in the problem as continuous variables (true) or discrete variables via extra nonconvex constraints (false).
-    bool RELAXINT;
     //! @brief Maximum run-time (in seconds) - this is checked externally to snOptA based on the wall clock.
     double TIMELIMIT;
     //! @brief Maximum number of threads for multistart solve.
@@ -650,7 +694,20 @@ public:
   } options;
 
   //! @brief Setup NLP model before solution
-  bool setup();
+  bool setup
+    ();
+
+  //! @brief Change objective function of NLP model
+  bool set_obj_lazy
+    ( t_OBJ const& type, FFVar const& obj );
+
+  //! @brief Append general constraint to NLP model
+  bool add_ctr_lazy
+    ( t_CTR const type, FFVar const& ctr );
+
+  //! @brief Restore original NLP model
+  bool restore_model
+    ();
 
   //! @brief Solve NLP model -- return value is SNOPT status
   template <typename T>
@@ -715,6 +772,10 @@ public:
   /** @} */
 
 protected:
+
+  //! @brief Make a local copy of the original NLP model
+  bool _record_model
+    ();
 
   //! @brief set the solver options
   int _set_options
@@ -801,7 +862,7 @@ NLPSLV_SNOPT::setup
   _Xvar = _var;
   _Xvar.insert( _Xvar.end(), _dep.begin(), _dep.end() );
   _nX = _Xvar.size();
-  std::vector<double> X0( _nX, 0. ); // used to calculate the constant term in linear expression below
+  _X0.resize( _nX, 0. );
 
   // full set of variable bounds (independent & dependent)
   _Xlow = _varlb;
@@ -817,18 +878,20 @@ NLPSLV_SNOPT::setup
   int ndxF = 0;
   if( std::get<0>(_obj).size() ){   // First, cost function
     _Fvar.push_back( std::get<1>(_obj)[0] );
+    _ObjDir = (std::get<0>(_obj)[0]==BASE_OPT::MIN? -1: 1 );
     _ObjRow = ndxF;
     _ObjAdd =  0.;
     _ObjMul = -1.; 
     if( _Fvar[ndxF].dep().worst() > FFDep::L )
       _Gndx.insert( ndxF );
     else
-      _dag->eval( 1, &_Fvar[ndxF], &_ObjAdd, _nX, _Xvar.data(), X0.data() ); 
+      _dag->eval( 1, &_Fvar[ndxF], &_ObjAdd, _nX, _Xvar.data(), _X0.data() ); 
     _Flow.push_back( -BASE_OPT::INF );
     _Fupp.push_back(  BASE_OPT::INF );
     _Foff.push_back( _ObjAdd );
   }
   else{
+    _ObjDir = 0;
     _ObjRow = ndxF = -1;
     _ObjAdd = 0.;
     _ObjMul = 0.;
@@ -842,7 +905,7 @@ NLPSLV_SNOPT::setup
     if( _Fvar[ndxF].dep().worst() > FFDep::L )
       _Gndx.insert( ndxF );
     else
-      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), X0.data() ); 
+      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
     switch( std::get<0>(_ctr)[i] ){
       case EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
       case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
@@ -851,44 +914,22 @@ NLPSLV_SNOPT::setup
     _Foff.push_back( CtrCst );
   }
 
-  for( auto its=_sys.begin(); its!=_sys.end(); ++its ){ // Next, dependent equations
+  for( auto its=_sys.begin(); its!=_sys.end(); ++its ){ // Last, dependent equations
     ndxF++;
     _Fvar.push_back( *its );
     double CtrCst = 0.;
     if( _Fvar[ndxF].dep().worst() > FFDep::L )
       _Gndx.insert( ndxF );
     else
-      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), X0.data() ); 
+      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
     _Flow.push_back( -CtrCst );
     _Fupp.push_back( -CtrCst );
     _Foff.push_back(  CtrCst );
   }
-  
-  auto itv    = _var.begin();
-  auto itvlb  = _varlb.begin();
-  auto itvub  = _varub.begin();
-  auto itvtyp = _vartyp.begin();
-  for( ; !options.RELAXINT && itv!=_var.end(); ++itv, ++itvlb, ++itvub, ++itvtyp ){ // Last, integrality restrictions
-    if( !*itvtyp) continue; // continuous variable
-    ndxF++;
-    FFVar polctr = 1;
-    for( double val=std::ceil(*itvlb); val<std::floor(*itvub)+0.1; val+=1 )
-      polctr *= *itv - val;
-    _Fvar.push_back( polctr );
-    double CtrCst = 0.;
-    if( _Fvar[ndxF].dep().worst() > FFDep::L ){
-      _Gndx.insert( ndxF );
-      _dag->output( _dag->subgraph( 1, &_Fvar[ndxF] ) );
-    }
-    else
-      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, 1, &*itv, X0.data() ); 
-    _Flow.push_back( -CtrCst );
-    _Fupp.push_back( std::floor(*itvub)-std::ceil(*itvlb)>1.1? -CtrCst: BASE_OPT::INF );
-    _Foff.push_back(  CtrCst );
-  }
-
   _nF = _Fvar.size();
+#ifdef MC__NLPSLV_SNOPT_DEBUG
   assert( _nF == (int)ndxF+1 );
+#endif
 
   // setup function derivatives
   _cleanup_grad();
@@ -919,6 +960,228 @@ NLPSLV_SNOPT::setup
       _Aval.push_back( std::get<3>(_fct_grad)[k].num().val() );    
 #ifdef MC__NLPSLV_SNOPT_DEBUG
      std::cout << "  _Aval[" << std::get<1>(_fct_grad)[k] << "," << std::get<2>(_fct_grad)[k]
+               << "] = " << std::get<3>(_fct_grad)[k].num().val() << std::endl;
+#endif
+    }
+  }
+  _nG = _Gvar.size();
+  _nA = _Aval.size();
+
+  _recModel = false;
+  return true;
+}
+
+inline
+bool
+NLPSLV_SNOPT::_record_model
+()
+{
+  if( _recModel ) return false;
+
+  _recObjDir = _ObjDir;
+  _recObjRow = _ObjRow;
+  _recObjAdd = _ObjAdd;
+  _recObjMul = _ObjMul;
+  _recFvar   = _Fvar;
+  _recFlow   = _Flow;
+  _recFupp   = _Fupp;
+  _recFoff   = _Foff;
+  _recnF     = _nF;
+  _recGndx   = _Gndx;
+  _reciGfun  = _iGfun;
+  _recjGvar  = _jGvar;
+  _recGvar   = _Gvar;
+  _recnG     = _nG;
+  _reciAfun  = _iAfun;
+  _recjAvar  = _jAvar;
+  _recAval   = _Aval; 
+  _recnA     = _nA;
+
+  _recModel = true;
+  return true;
+}
+
+inline
+bool
+NLPSLV_SNOPT::restore_model
+()
+{
+  if( !_recModel ) return false;
+
+  _ObjDir = _recObjDir;
+  _ObjRow = _recObjRow;
+  _ObjAdd = _recObjAdd;
+  _ObjMul = _recObjMul;
+  _Fvar.swap( _recFvar );
+  _Flow.swap( _recFlow );
+  _Fupp.swap( _recFupp );
+  _Foff.swap( _recFoff );
+  _nF = _recnF;
+  _Gndx.swap( _recGndx );
+  _iGfun.swap( _reciGfun );
+  _jGvar.swap( _recjGvar );
+  _Gvar.swap( _recGvar );
+  _nG = _recnG;
+  _iAfun.swap( _reciAfun );
+  _jAvar.swap( _recjAvar );
+  _Aval.swap( _recAval ); 
+  _nA = _recnA;
+
+  _recModel = false;
+  return true;
+}
+
+inline
+bool
+NLPSLV_SNOPT::set_obj_lazy
+( t_OBJ const& type, FFVar const& obj )
+{
+  // Keep track of original model 
+  if( _recModel && _Fvar[_ObjRow] == obj
+   && (type == BASE_OPT::MIN? _ObjDir == -1: _ObjDir == 1) ) return false;
+  _record_model();
+  
+  // Change to new objective
+  _ObjDir = (type==BASE_OPT::MIN? -1: 1 );
+  if( _ObjRow < 0 ){
+    _ObjRow = 0;
+    _Fvar.insert( _Fvar.begin(), obj );
+    _Flow.insert( _Flow.begin(), -BASE_OPT::INF );
+    _Fupp.insert( _Fupp.begin(),  BASE_OPT::INF );
+    _Foff.insert( _Foff.begin(), 0. );
+  }
+  else{
+    _Fvar[_ObjRow] = obj;
+    // Previous objective function was nonlinear
+    if( _Gndx.erase( _ObjRow ) ){
+      auto it_iGfun = _iGfun.begin();
+      auto it_jGvar = _jGvar.begin();
+      auto it_Gvar  = _Gvar.begin();
+      for( ; it_iGfun != _iGfun.end(); ){
+        if( *it_iGfun != _ObjRow ){
+          ++it_iGfun;
+          ++it_jGvar;
+          ++it_Gvar;
+          continue;
+        }
+        it_iGfun = _iGfun.erase( it_iGfun );
+        it_jGvar = _jGvar.erase( it_jGvar );
+        it_Gvar  = _Gvar.erase( it_Gvar );
+      }
+    }
+    // Previous objective function was linear
+    else{
+      auto it_iAfun = _iAfun.begin();
+      auto it_jAvar = _jAvar.begin();
+      auto it_Aval  = _Aval.begin();
+      for( ; it_iAfun != _iAfun.end(); ){
+        if( *it_iAfun != _ObjRow ){
+          ++it_iAfun;
+          ++it_jAvar;
+          ++it_Aval;
+          continue;
+        }
+        it_iAfun = _iAfun.erase( it_iAfun );
+        it_jAvar = _jAvar.erase( it_jAvar );
+        it_Aval  = _Aval.erase( it_Aval );
+      }    
+    }
+  }
+  _ObjAdd =  0.;
+  _ObjMul = -1.; 
+  if( _Fvar[_ObjRow].dep().worst() > FFDep::L )
+    _Gndx.insert( _ObjRow );
+  else
+    _dag->eval( 1, &_Fvar[_ObjRow], &_ObjAdd, _nX, _Xvar.data(), _X0.data() ); 
+  _Foff[_ObjRow] = _ObjAdd;
+  _nF = _Fvar.size();
+  
+  // Update objective derivatives
+  _cleanup_grad();
+  switch( options.GRADMETH ){
+    default:
+    case Options::FAD: _fct_grad = _dag->SFAD( 1, &_Fvar[_ObjRow], _nX, _Xvar.data() ); break;
+    case Options::BAD: _fct_grad = _dag->SBAD( 1, &_Fvar[_ObjRow], _nX, _Xvar.data() ); break;
+  }
+  for( unsigned k=0; k<std::get<0>(_fct_grad); ++k ){
+    // derivative term in nonlinear constraint
+    if( _Gndx.find( _ObjRow ) != _Gndx.end() ){
+      _iGfun.push_back( _ObjRow );
+      _jGvar.push_back( std::get<2>(_fct_grad)[k] );
+      _Gvar.push_back( std::get<3>(_fct_grad)[k] );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+     std::cout << "  _Gvar[" << _ObjRow << "," << std::get<2>(_fct_grad)[k]
+               << "] = " << std::get<3>(_fct_grad)[k] << std::endl;
+#endif
+    }
+    // derivative term in linear constraint
+    else{
+      _iAfun.push_back( _ObjRow );
+      _jAvar.push_back( std::get<2>(_fct_grad)[k] );
+      assert( std::get<3>(_fct_grad)[k].cst() );
+      _Aval.push_back( std::get<3>(_fct_grad)[k].num().val() );    
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+     std::cout << "  _Aval[" << _ObjRow << "," << std::get<2>(_fct_grad)[k]
+               << "] = " << std::get<3>(_fct_grad)[k].num().val() << std::endl;
+#endif
+    }
+  }
+  _nG = _Gvar.size();
+  _nA = _Aval.size();
+
+  return true;
+}
+
+inline
+bool
+NLPSLV_SNOPT::add_ctr_lazy
+( t_CTR const type, FFVar const& ctr )
+{
+  // Keep track of original model 
+  _record_model();
+  
+  // Append new constraint
+  unsigned CtrPos = _Fvar.size();
+  double CtrCst = 0.;
+  _Fvar.push_back( ctr );
+  if( _Fvar.back().dep().worst() > FFDep::L )
+    _Gndx.insert( CtrPos );
+  else
+    _dag->eval( 1, &_Fvar.back(), &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
+  switch( type ){
+    case EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
+    case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
+    case GE: _Flow.push_back( -CtrCst );        _Fupp.push_back(  BASE_OPT::INF ); break;
+  }
+  _Foff.push_back( CtrCst );
+  _nF = _Fvar.size();
+  
+  // Append new constraint derivatives
+  _cleanup_grad();
+  switch( options.GRADMETH ){
+    default:
+    case Options::FAD: _fct_grad = _dag->SFAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); break;
+    case Options::BAD: _fct_grad = _dag->SBAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); break;
+  }
+  for( unsigned k=0; k<std::get<0>(_fct_grad); ++k ){
+    // derivative term in nonlinear constraint
+    if( _Gndx.find( CtrPos ) != _Gndx.end() ){
+      _iGfun.push_back( CtrPos );
+      _jGvar.push_back( std::get<2>(_fct_grad)[k] );
+      _Gvar.push_back( std::get<3>(_fct_grad)[k] );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+     std::cout << "  _Gvar[" << CtrPos << "," << std::get<2>(_fct_grad)[k]
+               << "] = " << std::get<3>(_fct_grad)[k] << std::endl;
+#endif
+    }
+    // derivative term in linear constraint
+    else{
+      _iAfun.push_back( CtrPos );
+      _jAvar.push_back( std::get<2>(_fct_grad)[k] );
+      assert( std::get<3>(_fct_grad)[k].cst() );
+      _Aval.push_back( std::get<3>(_fct_grad)[k].num().val() );    
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+     std::cout << "  _Aval[" << CtrPos << "," << std::get<2>(_fct_grad)[k]
                << "] = " << std::get<3>(_fct_grad)[k].num().val() << std::endl;
 #endif
     }
@@ -962,10 +1225,10 @@ NLPSLV_SNOPT::_set_options
    case Options::BAD:  if( th->snOptA.setIntParameter( "Derivative option", 1 )   ) error++; break;
   }
  
-  if( options.FEASPB || std::get<0>(_obj).empty() ){
+  if( options.FEASPB || !_ObjDir ){
     if( th->snOptA.setParameter( "Feasible point" ) ) error++;
   }
-  else if( std::get<0>(_obj)[0] == MIN ){
+  else if( _ObjDir == -1 ){
     if( th->snOptA.setParameter( "Minimize" ) )       error++;
   }
   else{
@@ -1113,7 +1376,7 @@ NLPSLV_SNOPT::solve
   bool found = false;
   if( feasible[0] ){
     _solution = solution[0];
-    if( options.FEASPB || std::get<0>(_obj).empty() )
+    if( options.FEASPB || !_ObjDir )
       return _solution.stat;
     found = true;
   }
@@ -1127,16 +1390,14 @@ NLPSLV_SNOPT::solve
         found = true;
         continue;
       }
-      if( options.FEASPB || std::get<0>(_obj).empty() ){
+      if( options.FEASPB || !_ObjDir ){
         _solution = solution[th];
         return _solution.stat;
       }
-      else if( std::get<0>(_obj)[0] == MIN
-            && solution[th].f[_ObjRow] < _solution.f[_ObjRow] ){
+      else if( _ObjDir == -1 && solution[th].f[_ObjRow] < _solution.f[_ObjRow] ){
         _solution = solution[th];
       }
-      else if( std::get<0>(_obj)[0] == MAX
-            && solution[th].f[_ObjRow] > _solution.f[_ObjRow] ){
+      else if( _ObjDir == 1  && solution[th].f[_ObjRow] > _solution.f[_ObjRow] ){
         _solution = solution[th];
       }
     }
@@ -1175,14 +1436,7 @@ NLPSLV_SNOPT::_mssolve
     // Sample variable domain
     for( int i=0; i<_nX; i++ ){
       vSAM[i] = gen();
-      if( !options.RELAXINT && _vartyp[i] ){ // Round off if integral
-        double Xilow = std::ceil( _worker[th]->Xlow[i] );
-        double Xiupp = std::floor( _worker[th]->Xupp[i] );
-        Xini[i] = std::round( Xilow + ( Xiupp - Xilow ) * vSAM[i] );
-        //_worker[th]->Xlow[i] = _worker[th]->Xupp[i] = Xini[i];
-        std::cout << _Xvar[i] << ": " << Xini[i] << std::endl;
-      }
-      else if( !logscal || !logscal[i] || _worker[th]->Xlow[i] <= 0. )
+      if( !logscal || !logscal[i] || _worker[th]->Xlow[i] <= 0. )
         Xini[i] = _worker[th]->Xlow[i] + ( _worker[th]->Xupp[i] - _worker[th]->Xlow[i] ) * vSAM[i];
       else
         Xini[i] = std::exp( std::log(_worker[th]->Xlow[i]) + ( std::log(_worker[th]->Xupp[i]) - std::log(_worker[th]->Xlow[i]) ) * vSAM[i] );
@@ -1207,7 +1461,7 @@ NLPSLV_SNOPT::_mssolve
     // Solution point is feasible
     else{
       if( DISP ) std::cout << "*";
-      if( options.FEASPB || std::get<0>(_obj).empty() ){
+      if( options.FEASPB || !_ObjDir ){
         solution = _worker[th]->solution;
         break;
       }
@@ -1215,12 +1469,10 @@ NLPSLV_SNOPT::_mssolve
         solution = _worker[th]->solution;
         feasible = true;
       }
-      else if( std::get<0>(_obj)[0] == MIN
-            && _worker[th]->solution.f[_ObjRow] < solution.f[_ObjRow] ){
+      else if( _ObjDir == -1 && _worker[th]->solution.f[_ObjRow] < solution.f[_ObjRow] ){
         solution = _worker[th]->solution;
       }
-      else if( std::get<0>(_obj)[0] == MAX
-            && _worker[th]->solution.f[_ObjRow] > solution.f[_ObjRow] ){
+      else if( _ObjDir == 1  && _worker[th]->solution.f[_ObjRow] > solution.f[_ObjRow] ){
         solution = _worker[th]->solution;
       }
     }

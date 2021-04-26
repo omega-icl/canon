@@ -731,11 +731,47 @@ private:
   //! @brief Lagrangian Hessian (sparse format)
   std::tuple< unsigned, const unsigned*, const unsigned*, const FFVar* > _lagr_hess;
 
-  //! @brief Internal scaling factor for the objective function (+1: minimize; -1: maximize)
-  double _scaling;
+  //! @brief direction of objective function (-1:minmize; 0:feasibility; 1:maximize)
+  int                 _obj_dir;
+
+  //! @brief whether a record of the original model is available
+  bool                _rec_model;
+  //! @brief direction of objective function (-1:minmize; 0:feasibility; 1:maximize)
+  int                 _rec_obj_dir;
+  //! @brief objective gradient
+  std::vector<FFVar>  _rec_obj_grad;
+
+  //! @brief number of functions (objective and constraints) in problem
+  int                 _rec_nF;
+  //! @brief vector of functions in DAG
+  std::vector<FFVar>  _rec_Fvar;
+  //! @brief vector of function lower bounds
+  std::vector<double> _rec_Flow;
+  //! @brief vector of function upper bounds
+  std::vector<double> _rec_Fupp;
+  //! @brief vector of function multipliers in DAG
+  std::vector<FFVar>  _rec_Fmul;
+  
+  //!@brief number of nonzero elements in constraint gradients
+  int                 _rec_nG;
+  //!@brief row coordinates of nonzero elements in constraint gradients
+  std::vector<int>    _rec_iGfun;
+  //!@brief column coordinates of nonzero elements in constraint gradients
+  std::vector<int>    _rec_jGvar;
+  //! @brief vector of constraint gradients
+  std::vector<FFVar>  _rec_Gvar;
+
+  //!@brief number of nonzero elements in Lagrangian Hessian
+  int                 _rec_nL;
+  //!@brief row coordinates of nonzero elements in Lagrangian Hessian
+  std::vector<int>    _rec_iLvar;
+  //!@brief column coordinates of nonzero elements in Lagrangian Hessian
+  std::vector<int>    _rec_jLvar;
+  //! @brief vector of Lagrangian Hessian
+  std::vector<FFVar>  _rec_Lvar;
 
   //! @brief Structure holding solution information
-  SOLUTION_OPT _solution;
+  SOLUTION_OPT        _solution;
 
 public:
   /** @defgroup NLPSLV_IPOPT Local (Continuous) Optimization using IPOPT and MC++
@@ -745,7 +781,7 @@ public:
   NLPSLV_IPOPT()
     : _nP(0), _nX(0), _nF(0), _nG(0), _nL(0), _solution(FAILURE), 
       _obj_grad( nullptr ), _ctr_grad( 0, nullptr, nullptr, nullptr ),
-      _lagr_hess( 0, nullptr, nullptr, nullptr )
+      _lagr_hess( 0, nullptr, nullptr, nullptr ), _obj_dir(0), _rec_model(false)
     {}
 
   //! @brief Destructor
@@ -824,6 +860,18 @@ public:
 
   //! @brief Setup NLP model before solution
   bool setup();
+
+  //! @brief Change objective function of NLP model
+  bool set_obj_lazy
+    ( t_OBJ const& type, FFVar const& obj );
+
+  //! @brief Append general constraint to NLP model
+  bool add_ctr_lazy
+    ( t_CTR const type, FFVar const& ctr );
+
+  //! @brief Restore original NLP model
+  bool restore_model
+    ();
 
   //! @brief Solve NLP model -- return value is IPOPT status
   template <typename T>
@@ -915,17 +963,6 @@ protected:
     delete[] std::get<2>(_lagr_hess); std::get<2>(_lagr_hess) = 0;
     delete[] std::get<3>(_lagr_hess); std::get<3>(_lagr_hess) = 0;
   }
-
-  //! @brief Get IPOPT internal scaling value
-  double _get_scaling()
-    {
-      // set scaling factor. 1: minimize; -1: maximize
-      if( !std::get<0>(_obj).size() || std::get<0>(_obj)[0] == MIN )
-        _scaling =  1.;
-      else
-        _scaling = -1.; 
-      return _scaling;
-    }
     
   //! @brief Set IPOPT options
   void _set_options
@@ -965,7 +1002,7 @@ NLPSLV_IPOPT::_set_options
   IpoptApp->Options()->SetIntegerValue( "max_iter",             options.MAXITER );
   IpoptApp->Options()->SetNumericValue( "max_cpu_time",         options.TIMELIMIT);
   IpoptApp->Options()->SetNumericValue( "nlp_upper_bound_inf",  BASE_OPT::INF );
-  IpoptApp->Options()->SetNumericValue( "obj_scaling_factor",   _get_scaling() );
+  IpoptApp->Options()->SetNumericValue( "obj_scaling_factor",   _obj_dir > 0? -1.: 1. );
   switch( options.HESSMETH ){
    case Options::EXACT:
     IpoptApp->Options()->SetStringValue( "hessian_approximation", "exact" );
@@ -1033,10 +1070,12 @@ NLPSLV_IPOPT::setup
   if( std::get<0>(_obj).size() ){
     _Fvar.push_back( std::get<1>(_obj)[0] );
     _Fmul.push_back( std::get<2>(_obj)[0] );
+    _obj_dir = (std::get<0>(_obj)[0]==BASE_OPT::MIN? -1: 1 );
   }
   else{
     _Fvar.push_back( 0 );
-    _Fmul.push_back( 0 );
+    _Fmul.push_back( FFVar(_dag) );
+    _obj_dir = 0;
   }
   _Flow.push_back( -BASE_OPT::INF );
   _Fupp.push_back(  BASE_OPT::INF );
@@ -1087,6 +1126,178 @@ NLPSLV_IPOPT::setup
   _nG = _Gvar.size();
 
   // setup Lagrangian Hessian evaluation
+  FFVar lagr = 0;
+  for( int i=0; i<_nF; i++ )
+    lagr += _Fvar[i] * _Fmul[i];
+  // differentiate twice
+  const FFVar* lagr_grad = _dag->BAD( 1, &lagr, _nX, _Xvar.data() );
+  _lagr_hess = _dag->SFAD( _nX, lagr_grad, _nX, _Xvar.data(), true );
+  delete[] lagr_grad;
+
+  _iLvar.clear(); _jLvar.clear(); _Lvar.clear(); 
+  for( unsigned k=0; k<std::get<0>(_lagr_hess); ++k ){
+    _iLvar.push_back( std::get<1>(_lagr_hess)[k] );
+    _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
+    _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+     std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
+               << "] = " << std::get<3>(_larg_hess)[k] << std::endl;
+#endif
+  }
+  _nL = _Lvar.size();
+
+  _rec_model = false;
+  return true;
+}
+
+inline
+bool
+NLPSLV_IPOPT::_record_model
+()
+{
+  if( _rec_model ) return false;
+
+  _rec_obj_dir = _obj_dir;
+  _rec_Fvar    = _Fvar;
+  _rec_Fmul    = _Fmul;
+  _rec_Flow    = _Flow;
+  _rec_Fupp    = _Fupp;
+  _rec_nF      = _nF;
+  _rec_obj_grad.assign( _obj_grad, _obj_grad+_nX );
+  _rec_iGfun   = _iGfun;
+  _rec_jGvar   = _jGvar;
+  _rec_Gvar    = _Gvar;
+  _rec_nG      = _nG;
+  _rec_iLvar   = _iAfun;
+  _rec_jLvar   = _jAvar;
+  _rec_Lvar    = _Aval; 
+  _rec_nA      = _nA;
+
+  _rec_model   = true;
+  return true;
+}
+
+inline
+bool
+NLPSLV_IPOPT::restore_model
+()
+{
+  if( !_rec_model ) return false;
+
+  _obj_dir = _rec_obj_dir;
+  _Fvar.swap( _rec_Fvar );
+  _Fmul.swap( _rec_Fmul );
+  _Flow.swap( _rec_Flow );
+  _Fupp.swap( _rec_Fupp );
+  _nF = _rec_nF;
+  for( unsigned i=0; i<_nX; i++ )
+    _obj_grad[i] = _rec_obj_grad[i];
+  _iGfun.swap( _rec_iGfun );
+  _jGvar.swap( _rec_jGvar );
+  _Gvar.swap( _rec_Gvar );
+  _nG = _rec_nG;
+  _iLvar.swap( _rec_iLvar );
+  _jLvar.swap( _rec_jLvar );
+  _Lvar.swap( _rec_Lvar ); 
+  _nA = _rec_nA;
+
+  _rec_model = false;
+  return true;
+}
+
+inline
+bool
+NLPSLV_IPOPT::set_obj_lazy
+( t_OBJ const& type, FFVar const& obj )
+{
+  // Keep track of original model 
+  if( _rec_model && _Fvar[_ObjRow] == obj
+   && (type == BASE_OPT::MIN? _ObjDir == -1: _ObjDir == 1) ) return false;
+  _record_model();
+  
+  // Change to new objective
+  _obj_dir = (type==BASE_OPT::MIN? -1: 1 );
+  _Fvar[0] = obj;
+  
+  // Update objective derivatives
+  _cleanup_grad();
+  switch( options.GRADMETH ){
+    default:
+    case Options::FAD:  // Forward AD
+      _obj_grad = _dag->FAD( 1,      _Fvar.data(),   _nX, _Xvar.data() ); 
+      break;
+    case Options::BAD: // Backward AD
+      _obj_grad = _dag->BAD( 1,      _Fvar.data(),   _nX, _Xvar.data() ); 
+      break;
+  }
+
+  // Update Lagrangian Hessian
+  FFVar lagr = 0;
+  for( int i=0; i<_nF; i++ )
+    lagr += _Fvar[i] * _Fmul[i];
+  // differentiate twice
+  const FFVar* lagr_grad = _dag->BAD( 1, &lagr, _nX, _Xvar.data() );
+  _lagr_hess = _dag->SFAD( _nX, lagr_grad, _nX, _Xvar.data(), true );
+  delete[] lagr_grad;
+
+  _iLvar.clear(); _jLvar.clear(); _Lvar.clear(); 
+  for( unsigned k=0; k<std::get<0>(_lagr_hess); ++k ){
+    _iLvar.push_back( std::get<1>(_lagr_hess)[k] );
+    _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
+    _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+     std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
+               << "] = " << std::get<3>(_larg_hess)[k] << std::endl;
+#endif
+  }
+  _nL = _Lvar.size();
+
+  return true;
+}
+
+inline
+bool
+NLPSLV_IPOPT::add_ctr_lazy
+( t_CTR const type, FFVar const& ctr )
+{
+  // Keep track of original model 
+  _record_model();
+  
+  // Append new constraint
+  unsigned CtrPos = _Fvar.size();
+  double CtrCst = 0.;
+  _Fvar.push_back( ctr );
+  _Fmul.push_back( FFVar(_dag) );
+  switch( std::get<0>(_ctr)[i] ){
+    case EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );             break;
+    case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );             break;
+    case GE: _Flow.push_back( 0. );             _Fupp.push_back(  BASE_OPT::INF ); break;
+  }
+  _nF = _Fvar.size();
+  
+  // Append new constraint derivatives
+  _cleanup_grad();
+  switch( options.GRADMETH ){
+    default:
+    case Options::FAD:  // Forward AD
+      _ctr_grad = _dag->SFAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); 
+      break;
+    case Options::BAD: // Backward AD
+      _ctr_grad = _dag->SBAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); 
+      break;
+  }
+  for( unsigned k=0; k<std::get<0>(_ctr_grad); ++k ){
+    _iGfun.push_back( CtrPos );
+    _jGvar.push_back( std::get<2>(_ctr_grad)[k] );
+    _Gvar.push_back( std::get<3>(_ctr_grad)[k] );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+     std::cout << "  _Gvar[" << CtrPos << "," << std::get<2>(_ctr_grad)[k]
+               << "] = " << std::get<3>(_ctr_grad)[k] << std::endl;
+#endif
+  }
+  _nG = _Gvar.size();
+
+  // Update Lagrangian Hessian
   FFVar lagr = 0;
   for( int i=0; i<_nF; i++ )
     lagr += _Fvar[i] * _Fmul[i];
@@ -1244,7 +1455,7 @@ NLPSLV_IPOPT::solve
   bool found = false;
   if( feasible[0] ){
     _solution = solution[0];
-    if( std::get<0>(_obj).empty() )
+    if( !_obj_dir )
       return _solution.stat;
     found = true;
   }
@@ -1258,16 +1469,14 @@ NLPSLV_IPOPT::solve
         found = true;
         continue;
       }
-      if( std::get<0>(_obj).empty() ){
+      if( !_obj_dir ){
         _solution = solution[th];
         return _solution.stat;
       }
-      else if( std::get<0>(_obj)[0] == MIN
-            && solution[th].f[0] < _solution.f[0] ){
+      else if( _obj_dir == -1 && solution[th].f[0] < _solution.f[0] ){
         _solution = solution[th];
       }
-      else if( std::get<0>(_obj)[0] == MAX
-            && solution[th].f[0] > _solution.f[0] ){
+      else if( _obj_dir == 1  && solution[th].f[0] > _solution.f[0] ){
         _solution = solution[th];
       }
     }
@@ -1336,7 +1545,7 @@ NLPSLV_IPOPT::_mssolve
     // Solution point is feasible
     else{
       if( DISP ) std::cout << "*";
-      if( std::get<0>(_obj).empty() ){
+      if( !_obj_dir ){
         solution = _worker[th]->solution;
         return;
       }
@@ -1344,12 +1553,10 @@ NLPSLV_IPOPT::_mssolve
         solution = _worker[th]->solution;
         feasible = true;
       }
-      else if( std::get<0>(_obj)[0] == MIN
-            && _worker[th]->solution.f[0] < solution.f[0] ){
+      else if( _obj_dir == -1 && _worker[th]->solution.f[0] < solution.f[0] ){
         solution = _worker[th]->solution;
       }
-      else if( std::get<0>(_obj)[0] == MAX
-            && _worker[th]->solution.f[0] > solution.f[0] ){
+      else if( _obj_dir == 1  && _worker[th]->solution.f[0] > solution.f[0] ){
         solution = _worker[th]->solution;
       }
     }
