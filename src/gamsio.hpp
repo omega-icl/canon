@@ -303,7 +303,11 @@ GAMSIO::_populate
 
   gmoGetVarL( _gmo, _varini.data() );
   gmoGetVarLower( _gmo, _varlb.data() );
+  for( auto&& lb : _varlb )
+    if( lb < -BASE_OPT::INF ) lb = -BASE_OPT::INF;
   gmoGetVarUpper( _gmo, _varub.data() );
+  for( auto&& ub : _varub )
+    if( ub >  BASE_OPT::INF ) ub =  BASE_OPT::INF;
 
   // reset DAG environment
   if( _dag ) delete _dag;
