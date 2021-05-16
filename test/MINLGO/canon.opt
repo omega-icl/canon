@@ -1,0 +1,158 @@
+# Presolve level
+PRESOLVE    = 1
+# Convergence absolute tolerance
+CVATOL      = 1e-5
+# Convergence relative tolerance
+CVRTOL      = 1e-3
+# Feasibility tolerance
+FEASTOL     = 1e-5
+# Feasibility correction of incumbent
+CORRINC     = 1
+# Add breakpoint at incumbent
+BKPTINC     = 0
+# Maximal number of refinements/iterations
+MAXITER     = 10
+# Wall-time limit in seconds
+TIMELIMIT   = 72e2
+# General display level
+DISPLEVEL   = 1
+# Log file - -: standard output
+LOGFILE     = 
+
+[MINLPBND]
+
+# Polyhedral relaxation approach during presolve - 0: decomposition-linearization-relaxation; 1: quadratisation of sparse polynomial models
+PRERELAXMETH     = 0
+# Linearization of quadratic terms during presolve
+PRERELAXQUAD     = 1
+# Linearization of monomial terms during presolve - 0: no monomials linearized; 1: monomials of order >2 linearized and quadratic term linearization controlled by PRERELAXQUAD; 2: all monomials linearized
+PRERELAXMONOM    = 1
+# Linearization of nonlinear terms during presolve
+PRERELAXNLIN     = 1
+# Optimization-based bounds tightening approach during presolve - 0: linear only; 1: linear first; 2: joint linear & nonlinear
+PREOBBTLIN       = 1
+# Continuous relaxation for optimization-based bounds tightening during presolve
+PREOBBTCONT      = 0
+# Maximum rounds of optimization-based bounds tightening during presolve
+PREOBBTMAX       = 10
+# Threshold for optimization-based bounds tightening repeats during presolve - minimum relative reduction in any variable
+PREOBBTTHRES     = 5e-2
+# Backoff of tightened variable bounds to compensate for numerical errors during presolve
+PREOBBTBKOFF     = 1e-7
+# Minimum variable range for application of bounds tightening during presolve
+PREOBBTMIG       = 1e-6
+# Convergence relative tolerance of MIP solver during presolve
+PREMIPRELGAP     = 1e-3
+# Convergence absolute tolerance of MIP solver during presolve
+PREMIPABSGAP     = 1e-5
+# Display level of MIP solver during presolve - 0: no display; >0: display
+PREMIPDISPLEVEL  = 0
+# Output file for MIP model during presolve
+PREMIPOUTPUTFILE = 
+# Number of threads used by MIP solver during presolve - 0: automatic
+PREMIPMAXTHREAD  = 0
+
+# Polyhedral relaxation approach during main iteration - 0: decomposition-linearization-relaxation; 1: quadratisation of sparse polynomial models
+RELAXMETH        = 1
+# Linearization of quadratic terms during main iteration
+RELAXQUAD        = 0
+# Linearization of monomial terms during main iteration - 0: no monomials linearized; 1: monomials of order >2 linearized and quadratic term linearization controlled by PRERELAXQUAD; 2: all monomials linearized
+RELAXMONOM       = 1
+# Linearization of nonlinear terms during main iteration
+RELAXNLIN        = 1
+# Exclusion from decomposition-relaxation-linearization: 0: none; 1: non-polynomial functions; 2: polynomial functions
+SUBSETDRL        = 0
+# Exclusion from quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
+SUBSETSCQ        = 0
+# Optimization-based bounds tightening approach during main iteration - 0: linear only; 1: linear first; 2: joint linear & nonlinear
+OBBTLIN          = 2
+# Continuous relaxation for optimization-based bounds tightening during main iteration
+OBBTCONT         = 1
+# Maximum rounds of optimization-based bounds tightening during main iteration
+OBBTMAX          = 10
+# Threshold for optimization-based bounds tightening repeats during pmain iteration - minimum relative reduction in any variable
+OBBTTHRES        = 5e-2
+# Backoff of tightened variable bounds to compensate for numerical errors during main iteration
+OBBTBKOFF        = 1e-7
+# Minimum variable range for application of bounds tightening during main iteration
+OBBTMIG          = 1e-6
+# Convergence relative tolerance of MIP solver during main iteration
+MIPRELGAP        = 1e-3
+# Convergence absolute tolerance of MIP solver during main iteration
+MIPABSGAP        = 1e-5
+# Display level of MIP solver during main iteration - 0: no display; >0: display
+MIPDISPLEVEL     = 1
+# Output file for MIP model during main iteration
+MIPOUTPUTFILE    = 
+# Number of threads used by MIP solver during main iteration - 0: automatic
+MIPMAXTHREAD     = 0
+
+# Reformulate polynomial and/or nonpolynomial subexpressions
+NPOLLIFT         = 1
+# Maximum rounds of constraint propagation
+CPMAX            = 10
+# Threshold for constraint propagation repeats - minimum relative reduction in any variable
+CPTHRES          = 0e0
+# Maximum order of sparse polynomial model
+CMODPROP         = 10
+# Monomial minimal coefficient in sparse polynomial model
+MONMIG           = 1e-10
+# Monomial basis in sparse quadratic form - 0: monomial; 1: Chebyshev
+MONBASIS         = 1
+# Monomial scaling in sparse quadratic form
+MONSCALE         = 1
+# Add reduced RLT cuts
+RRLTCUTS         = 0
+# Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
+PSDQUADCUTS      = 1
+# Add DC cuts within quadratisation
+DCQUADCUTS       = 0
+# Add NCO cuts
+NCOCUTS          = 0
+# NCO generation method - 0: forward sensitivity; 1: adjoint sensitivity
+NCOADIFF         = 1
+# Separate linear constraints prior to relaxation
+LINCTRSEP        = 1
+# Keep linear and quadratic expressions aggregated
+AGGREGLQ         = 0
+# Relative tolerance during outer-approximation in convexification of univariate terms
+SANDWICHRTOL     = 1e-3
+# Maximal number of cuts during outer-approximation in convexification of univariate terms" )
+SANDWICHMAX      = 5
+
+[MINLPSLV]
+
+# Maximal number of outer-approximation iterations by local MINLP solver
+MAXITER          = 40
+# Maximum rounds of constraint propagation during presolve of local MINLP solver
+CPMAX            = 10
+# Threshold for constraint propagation repeats during presolve of local MINLP solver - minimum relative reduction in any variable
+CPTHRES          = 0e0
+# Number of multistart local search repeats by local MINLP solver
+MSLOC            = 16
+# Display level - 0: no display; >0: display summary of outer-approximation iterations
+DISPLEVEL        = 1
+
+# Feasibility tolerance of NLP solver during local MINLP search
+NLPFEASTOL       = 1e-7
+# Optimality tolerance of NLP solver during local MINLP search
+NLPOPTIMTOL      = 1e-5
+# Maximal number of iterations by NLP solver during local MINLP search
+NLPMAXITER       = 200
+# Display level of NLP solver during local MINLP search - 0: no display; >0: display
+NLPDISPLEVEL     = 0
+# Number of threads used by NLP solver during local MINLP search - 0: automatic
+NLPMAXTHREAD     = 0
+
+# Convergence relative tolerance of MIP solver during local MINLP search
+MIPRELGAP        = 1e-3
+# Convergence absolute tolerance of MIP solver during local MINLP search
+MIPABSGAP        = 1e-5
+# Display level of MIP solver during local MINLP search - 0: no display; >0: display
+MIPDISPLEVEL     = 0
+# Output file for MIP model during local MINLP search
+MIPOUTPUTFILE    = 
+# Number of threads used by MIP solver during local MINLP search - 0: automatic
+MIPMAXTHREAD     = 0
+
+

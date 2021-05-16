@@ -8,8 +8,6 @@ include $(PATH_CANON)/src/makeoptions.mk
 
 #####
 
-all: test1 test2 test3 test4 test5 test6
-
 test% : test%.o
 	$(CPP) $< $(LIB_CANON) $(LIB_DEP) -o $@
 
