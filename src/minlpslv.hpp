@@ -67,20 +67,14 @@ The return value of mc::MINLPSLV is per the enumeration mc::MINLPSLV::STATUS. Th
 #  LINEAR / NONLINEAR FUNCTIONS:     2 / 2
 
 #  ITERATION     INCUMBENT    BEST BOUND    TIME
-        0     1.000000e+20 -5.698551e+01      0s
-        1  i  1.000000e+20 -5.698551e+01      0s
-        2  i  1.000000e+20 -5.698551e+01      0s
-        3  i  1.000000e+20 -5.698551e+01      0s
-        4  i  1.000000e+20 -5.698551e+01      0s
-        5  i  1.000000e+20 -5.698551e+01      0s
-        6  i  1.000000e+20 -5.698551e+01      0s
-        7  i  1.000000e+20 -5.698551e+01      0s
-        8  i  1.000000e+20 -5.698551e+01      0s
-        9  * -5.266063e+01 -5.698551e+01      0s
-       10  * -5.698117e+01 -5.698551e+01      0s
-       11    -5.698117e+01 -5.698117e+01      0s
+        0  r  1.000000e+20 -5.698551e+01      0s
+        1  * -3.951361e+01 -5.698551e+01      0s
+        2  * -5.416791e+01 -5.698551e+01      0s
+        3  * -5.698117e+01 -5.698551e+01      0s
+        4    -5.698117e+01 -5.698551e+01      0s
+        5    -5.698117e+01 -5.698117e+01      0s
 
-#  TERMINATION AFTER 11 ITERATIONS: 0.150152 SEC
+#  TERMINATION AFTER 4 ITERATIONS: 0.063044 SEC
 #  INCUMBENT VALUE: -5.698117e+01
 #  INCUMBENT POINT:  7.663529e+00  1.100000e+01
 \endverbatim
@@ -97,7 +91,6 @@ The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a
 #include "gamsio.hpp"
 #include "nlpslv_snopt.hpp"
 #include "mipslv_gurobi.hpp"
-#include "nlpbnd.hpp"
 
 namespace mc
 {
@@ -109,12 +102,14 @@ namespace mc
 //! constraints are generated using MC++. Further details can be found
 //! at: \ref page_MINLPSLV
 ////////////////////////////////////////////////////////////////////////
-template < typename T=Interval, typename NLP=NLPSLV_SNOPT, typename MIP=MIPSLV_GUROBI<T> >
+template < typename T=Interval,
+           typename NLP=NLPSLV_SNOPT,
+           typename MIP=MIPSLV_GUROBI<T> >
 class MINLPSLV:
   public    virtual BASE_NLP,
   protected virtual GAMSIO
 {
-using BASE_NLP::_dag;
+using BASE_NLP::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
 
 public:
 
@@ -191,11 +186,11 @@ public:
     double TIMELIMIT;
     //! @brief Display level for solver
     int DISPLEVEL;
-    //! @brief Set options of NLPSLV_SNOPT (local solution of factorable NLP)
-    typename NLPSLV_SNOPT::Options NLPSLV;
-    //! @brief PolImg (polyhedral relaxation) options
+    //! @brief NLP (nonlinear optimization) local solver options
+    typename NLP::Options NLPSLV;
+    //! @brief Polyhedral relaxation (PolImg) options
     typename PolImg<T>::Options POLIMG;
-    //! @brief MIPSLV_GUROBI (mixed-integer optimization) options
+    //! @brief MIP (mixed-integer optimization) master solver options
     typename MIP::Options MIPSLV;
     //! @brief Display
     void display
@@ -268,7 +263,7 @@ protected:
   //! @brief Current incumbent value
   double                    _Zinc;
   
-  //! @brief Variable values at current incumbent
+  //! @brief Variable values at current relaxation
   std::vector<double>       _Xrel;
   
   //! @brief subset of integer participating variables
@@ -411,12 +406,12 @@ protected:
 
   //! @brief Test whether a variable vector is integer feasible
   bool _is_integer_feasible
-    ( std::vector<double> const& Xval )
+    ( double const* Xval, double const& feastol )
     const;
 
   //! @brief Test whether a variable vector is integer identical as a reference vector
   bool _is_integer_equal
-    ( std::vector<double> const& Xval, std::vector<double> const& Xref )
+    ( double const* Xval, double const* Xref )
     const;
 
   //! @brief Solve local NLP subproblem
@@ -484,10 +479,41 @@ public:
     ( double const* Xini=nullptr,  T const* Xbnd=nullptr, std::ostream& os=std::cout );
 
   //! @brief Get incumbent info
-  SOLUTION_OPT const& incumbent() const
-    {
-      return _incumbent;
-    }
+  SOLUTION_OPT const& get_incumbent
+    () 
+    const
+    { return _incumbent; }
+    
+  //! @brief Get reference to local NLP solver
+  NLP& NLPsolver
+    ()
+    { return _NLPSLV; }
+    
+  //! @brief Get reference to master MIP solver
+  MIP& MIPsolver
+    ()
+    { return _MIPSLV; }
+
+  //! @brief Test primal feasibility
+  bool is_feasible
+    ( double const* x, double const CTRTOL )
+    { return x && _is_integer_feasible( x, CTRTOL ) && _NLPSLV.is_feasible( x, CTRTOL ) ?
+             true : false; }
+
+  //! @brief Test primal feasibility
+  bool is_feasible
+    ( double const CTRTOL )
+    { return is_feasible( _incumbent.x.data(), CTRTOL ); }
+
+  //! @brief Compute cost correction
+  double cost_correction
+    ()
+    { return _NLPSLV.cost_correction( _incumbent.x.data(), _incumbent.ux.data(), _incumbent.uf.data() ); }
+
+  //! @brief Compute cost correction
+  double cost_correction
+    ( double const* x, double const* ux, double const* uf )
+    { return x && ux && uf ? _NLPSLV.cost_correction( x, ux, uf ) : 0.; }
 
 private:
 
@@ -743,12 +769,12 @@ MINLPSLV<T,NLP,MIP>::_cleanup_grad
 template <typename T, typename NLP, typename MIP>
 inline bool
 MINLPSLV<T,NLP,MIP>::_is_integer_feasible
-( std::vector<double> const& Xval )
+( double const* Xval, double const& feastol )
 const
 {
   for( unsigned i=0; i<_var.size(); i++ ){
     if( !_vartyp[i] ) continue;
-    if( std::fabs( Xval[i] - std::round(Xval[i]) ) > options.FEASTOL )
+    if( std::fabs( Xval[i] - std::round(Xval[i]) ) > feastol )
       return false;
   }
   return true;
@@ -757,7 +783,7 @@ const
 template <typename T, typename NLP, typename MIP>
 inline bool
 MINLPSLV<T,NLP,MIP>::_is_integer_equal
-( std::vector<double> const& Xval, std::vector<double> const& Xref )
+( double const* Xval, double const* Xref )
 const
 {
   for( unsigned i=0; i<_var.size(); i++ ){
@@ -775,11 +801,10 @@ MINLPSLV<T,NLP,MIP>::_interrupted
 const
 {
   if( stats.to_time( stats.walltime_all + stats.walltime( tstart ) ) > options.TIMELIMIT
-   || _iter >= options.MAXITER )
+   || ( options.MAXITER && _iter >= options.MAXITER ) )
     return true;
   return false;
 }
-
 
 template <typename T, typename NLP, typename MIP>
 inline bool
@@ -1144,27 +1169,35 @@ MINLPSLV<T,NLP,MIP>::optimize
   if( Xini ) _varini.assign( Xini, Xini+_var.size() );
   
   // Initialize and reduce variable bounds
+  bool locfeas = true;
   _Xbnd.resize( _nX );
   for( unsigned i=0; i<_nX; i++ ){
     _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
-    if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) )
-      return _finalize( tstart, STATUS::INFEASIBLE );
+    if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) ){
+      locfeas = false;
+      break;
+//      return _finalize( tstart, STATUS::INFEASIBLE );
+    }
   }
   int cpflag = 0;
-  if( options.CPMAX ){
+  if( locfeas && options.CPMAX ){
     cpflag = _propagate_bounds( _Xbnd.data() );
-    if( cpflag < 0 )
-      return _finalize( tstart, STATUS::INFEASIBLE );
+    if( cpflag < 0 ){
+      locfeas = false;
+      _Zrel = _objscal * BASE_OPT::INF;
+//      return _finalize( tstart, STATUS::INFEASIBLE );
+    }
   }
-  _isbnd = true;
-  for( unsigned i=0; _isbnd && i<_nX; i++ ){
-    if( Op<T>::diam(_Xbnd[i]) < BASE_OPT::INF/10 ) continue;
-    _isbnd = false;
-  }
-  _Xbndi = _Xbnd;
 
   // Solve relaxed MINLP model
-  bool locfeas = _solve_local( tstart, _varini.data(), _Xbnd.data(), false, false, os );
+  if( locfeas ){
+    _isbnd = true;
+    for( unsigned i=0; _isbnd && i<_nX; i++ ){
+      if( Op<T>::diam(_Xbnd[i]) < BASE_OPT::INF/10 ) continue;
+      _isbnd = false;
+    }
+    locfeas = _solve_local( tstart, _varini.data(), _Xbnd.data(), false, false, os );
+  }
 #ifdef MC__MINLPSLV_DEBUG
   std::cout << _solution;
 #endif
@@ -1173,29 +1206,35 @@ MINLPSLV<T,NLP,MIP>::optimize
   if( locfeas ){
     _Zrel = _NLPSLV.solution().f[0];
     _Xrel = _NLPSLV.solution().x;
-    if( _is_integer_feasible( _solution.x ) ){
+    if( _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
       _incumbent = _solution;
       _Zinc = _Zrel;
     }
+    _Xbndi = _Xbnd;
   }
   else{
     _Zrel = _objscal * BASE_OPT::INF;
-    return _finalize( tstart, STATUS::INFEASIBLE );
+//    return _finalize( tstart, STATUS::INFEASIBLE );
   }
   
   // Intermediate display
   _display_add( _iter );
   bool updinc = !_incumbent.x.empty();
-  if( updinc && cpflag>0 ) _display_add( "r*");
-  else if( updinc )        _display_add( "*" );
-  else if( cpflag )        _display_add( "r" );
-  else                     _display_add( " " );
+  if( !locfeas )                _display_add( "i");
+  else if( updinc && cpflag>0 ) _display_add( "r*");
+  else if( updinc )             _display_add( "*" );
+  else if( cpflag )             _display_add( "r" );
+  else                          _display_add( " " );
   _display_add( _Zinc );
   _display_add( _Zrel );
   _display_add( tstart );
   _display_flush( os );
 
   // Termination tests
+  if( !locfeas )
+    return _finalize( tstart, STATUS::INFEASIBLE );
+  if( !_ismip )
+    return _finalize( tstart, STATUS::SUCCESSFUL );
   if( _interrupted( tstart ) )
     return _finalize( tstart, STATUS::INTERRUPTED );
   
@@ -1252,7 +1291,7 @@ MINLPSLV<T,NLP,MIP>::optimize
 #endif
 
       // Interrupt feasibilitity pump and solve local NLP model
-      if( _is_integer_equal( _solution.x, _Xrel ) ){
+      if( _is_integer_equal( _solution.x.data(), _Xrel.data() ) ){
         pumpfeas = false;
         for( auto&& i: _Xint ) _Xbndi[i] = _Xrel[i];
         if( !_solve_local( tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) )
@@ -1374,7 +1413,8 @@ MINLPSLV<T,NLP,MIP>::_display_init
 ( std::ostream& os)
 {
   if( options.DISPLEVEL < 1 ) return;
-  _odisp << "#  " << std::right
+  _odisp << std::endl
+         << "#  " << std::right
   	 << std::setw(_IPREC) << "ITERATION"
   	 << std::setw(_DPREC+8) << "INCUMBENT"
   	 << std::setw(_DPREC+8) << "BEST BOUND"

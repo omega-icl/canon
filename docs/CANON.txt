@@ -20,7 +20,7 @@ CANON is released as open source code under the <A href="http://www.eclipse.org/
 CANON depends on the following third-party libraries:
 - <A href="https://projects.coin-or.org/MCpp">MC++</A> (version 2.1) for construction, manipulation and bounding of factorable functions
 - <A href="https://web.stanford.edu/group/SOL/snopt.htm">SNOPT</A> or <A href="https://projects.coin-or.org/Ipopt">IPOPT</A> for local solution of NLP problems
-- <A href="http://www.gurobi.com/">GUROBI</A> for solution of LP/QP/MILP/MIQP/MIQCQP problems
+- <A href="http://www.gurobi.com/">Gurobi</A> for solution of LP/QP/MILP/MIQP/MIQCQP problems
 .
 
 On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <TT>INSTALL</TT>, <TT>LICENSE</TT> and <TT>README</TT>, as well as 3 subdirectories:
@@ -46,8 +46,8 @@ A description of the main components of CANON can be found under <A HREF="pages.
 - \ref page_NLPSLV_SNOPT Local (Continuous) Nonlinear Optimization interfacing SNOPT with MC++
 - \ref page_NLPSLV_IPOPT Local (Continuous) Nonlinear Optimization interfacing IPOPT with MC++
 - \ref page_MINLPSLV Local Mixed-Integer Nonlinear Optimization via Outer-Approximation using MC++
-- \ref page_NLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
-- \ref page_NLGO Global Mixed-Integer Nonlinear Optimization using Gurobi, SNOPT and MC++
+- \ref page_MINLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
+- \ref page_MINLGO Global Mixed-Integer Nonlinear Optimization using MC++
 .
 
 \section sec_MC_examples How do I run the test examples of CANON?

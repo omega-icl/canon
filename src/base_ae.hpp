@@ -468,7 +468,7 @@ public:
     () const
     { return _noblk; }
 
-  //! @brief Size of block #ib
+  //! @brief Size of block ib
   unsigned int nblk
     ( const unsigned ib ) const
     { return ib<_noblk? _nblk[ib]: 0; }
@@ -478,22 +478,22 @@ public:
     () const
     { return _iblk; }
 
-  //! @brief Linearity of block #ib
+  //! @brief Linearity of block ib
   bool linblk
     ( const unsigned ib ) const
     { return ib<_noblk? _linblk[ib]: false; }
 
-  //! @brief Equations in block #ib
+  //! @brief Equations in block ib
   FFVar const* eqblk
     ( const unsigned ib ) const
     { return ib<_noblk? _sys.data()+_pblk[ib]: 0; }
 
-  //! @brief Variables in block #ib
+  //! @brief Variables in block ib
   FFVar const* depblk
     ( const unsigned ib ) const
     { return ib<_noblk? _dep.data()+_pblk[ib]: 0; }
 
-  //! @brief Linearity of block #ib
+  //! @brief Linearity of block ib
   bool lindepblk
     ( const unsigned ib, const unsigned j ) const
     { return ib<_noblk && j<_nblk[ib]? _lindep[_pblk[ib]+j]: false; }

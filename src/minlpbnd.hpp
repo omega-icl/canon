@@ -3,7 +3,7 @@
 // This code is published under the Eclipse Public License.
 
 /*!
-\page page_NLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
+\page page_MINLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
 \author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
 \version 1.0
 \date 2020
@@ -15,9 +15,9 @@ Consider a nonlinear optimization problem in the form:
 & {\rm s.t.}\ \ g_j(x_1,\ldots,x_n)\ \leq,=,\geq\ 0,\ \ j=1,\ldots,m\\
 & \qquad x_i^L\leq x_i\leq x_i^U,\ \ i=1,\ldots,n\,,
 \f}
-where \f$f, g_1, \ldots, g_m\f$ are factorable, possibly nonlinear, real-valued functions; and \f$x_1, \ldots, x_n\f$ can be either continuous or integer decision variables. The class mc::NLPBND computes rigorous bounds on the global solution of such (MI)NLP problems using various set arithmetics, as available in <A href="https://projects.coin-or.org/MCpp">MC++</A>.
+where \f$f, g_1, \ldots, g_m\f$ are factorable, possibly nonlinear, real-valued functions; and \f$x_1, \ldots, x_n\f$ can be either continuous or integer decision variables. The class mc::MINLPBND computes rigorous bounds on the global solution of such (MI)NLP problems using various set arithmetics, as available in <A href="https://projects.coin-or.org/MCpp">MC++</A>.
 
-\section sec_NLPBND_setup How do I setup my optimization model?
+\section sec_MINLPBND_setup How do I setup my optimization model?
 
 Consider the following NLP:
 \f{align*}
@@ -27,12 +27,12 @@ Consider the following NLP:
   & 1 \leq p_1,p_2,p_3,p_4 \leq 5\,.
 \f}
 
-We start by defining an mc::NLPBND class instance:
+We start by defining an mc::MINLPBND class instance:
 
 \code
-  #include "NLPBND.hpp"
+  #include "minlpbnd.hpp"
   ...
-  mc::NLPBND NLP;
+  mc::MINLPBND NLP;
 \endcode
 
 Next, we set the variables and objective/constraint functions by creating a direct acyclic graph (DAG) of the problem: 
@@ -50,10 +50,10 @@ Next, we set the variables and objective/constraint functions by creating a dire
   NLP.setup();
 \endcode
 
-The variable bounds and types are passed to mc::NLPBND in invoking the various methods, as described below.
+The variable bounds and types are passed to mc::MINLPBND in invoking the various methods, as described below.
 
 
-\section sec_NLPBND_bound How do I compute a rigorous bound on the global solution of my optimization model?
+\section sec_MINLPBND_bound How do I compute a rigorous bound on the global solution of my optimization model?
 
 
 Given initial bounds \f$P\f$ and initial guesses \f$p_0\f$ on the decision variables, the NLP model is solved using branch-and-bound search (default) as follows:
@@ -73,7 +73,7 @@ The following result is produced:
 \verbatim
 \endverbatim
 
-Other options can be modified to tailor the search, including output level, maximum number of iterations, tolerances, maximum CPU time, etc. These options can be modified through the public member mc::NLPBND::options. 
+Other options can be modified to tailor the search, including output level, maximum number of iterations, tolerances, maximum CPU time, etc. These options can be modified through the public member mc::MINLPBND::options. 
 */
 
 //TODO: 
@@ -82,10 +82,10 @@ Other options can be modified to tailor the search, including output level, maxi
 //- [TO DO] Exploit the degree of separability to introduce auxiliary variables
 //- [TO DO] Enable constraint propagation before generating the cuts in PolImg
 
-// SEPARATE VARIOUS RELAXATION CLASSES AND INHERIT IN NLPBND?
+// SEPARATE VARIOUS RELAXATION CLASSES AND INHERIT IN MINLPBND?
 
-#ifndef MC__NLPBND_HPP
-#define MC__NLPBND_HPP
+#ifndef MC__MINLPBND_HPP
+#define MC__MINLPBND_HPP
 
 #include <stdexcept>
 
@@ -93,24 +93,26 @@ Other options can be modified to tailor the search, including output level, maxi
 #include "sparseexpr.hpp"
 #include "polimage.hpp"
 #include "squad.hpp"
+#include "scmodel.hpp"
 #include "ismodel.hpp"
 
 #include "mctime.hpp"
 #include "base_nlp.hpp"
 #include "mipslv_gurobi.hpp"
 
-//#undef MC__NLPBND_DEBUG
+//#undef MC__MINLPBND_DEBUG
 
 namespace mc
 {
 
-//! @brief C++ base class for global bounding of factorable NLP using MC++
+//! @brief C++ base class for global bounding of factorable MINLP using MC++
 ////////////////////////////////////////////////////////////////////////
-//! mc::NLPBND is a C++ class for global bounding of factorable NLP
+//! mc::MINLPBND is a C++ class for global bounding of factorable MINLP
 //! using MC++
 ////////////////////////////////////////////////////////////////////////
-template <typename T, typename MIP=MIPSLV_GUROBI<T>>
-class NLPBND:
+template < typename T,
+           typename MIP=MIPSLV_GUROBI<T> >
+class MINLPBND:
   public virtual BASE_NLP
 {
   // Typedef's
@@ -243,8 +245,11 @@ protected:
   //! @brief Storage vector for function evaluation in Interval superposition arithmetic
   std::vector< ISVar<T> >   _ISMwk;
 
+
   //! @brief Flag for setup function
   bool                      _issetup;
+  //! @brief Flag for MIP problem
+  bool                      _ismip;
   //! @brief Direction of optimization (-1: MIN, 0: FEAS; 1: MAX)
   int                       _objsense;
   //! @brief MIP solver
@@ -253,13 +258,13 @@ protected:
 public:
 
   //! @brief Constructor
-  NLPBND
+  MINLPBND
     ()
     : _dag(0), _nX(0), _nX0(0), _nX1(0), _nF(0), _CMenv(0), _ISMenv(0), _issetup(false)
     { _MIPSLV = new MIP; _SPenv = new SparseEnv; }
 
   //! @brief Destructor
-  virtual ~NLPBND
+  virtual ~MINLPBND
     ()
     {
       delete _MIPSLV;
@@ -269,15 +274,16 @@ public:
       delete _dag;
     }
 
-  //! @brief NLPBND options
+  //! @brief MINLPBND options
   struct Options
   {
     //! @brief Constructor
     Options():
-      OBBTMIG(1e-7), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(1), OBBTCONT(false),
-      CPMAX(10), CPTHRES(0.), CPBKOFF(1e-7), RELMETH({DRL}), ISMDIV(10), ISMMIPREL(true),
+      RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), 
+      OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(false),
+      CPMAX(10), CPTHRES(0.), ISMDIV(10), ISMMIPREL(true),
       CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF), MONSCALE(false),
-      RRLTCUTS(false), PSDQUADCUTS(true), DCQUADCUTS(false), NCOCUTS(false), NCOMETH(ASA),
+      RRLTCUTS(false), PSDQUADCUTS(1), DCQUADCUTS(false), NCOCUTS(false), NCOADIFF(ASA),
       NPOLLIFT(false), LINCTRSEP(false), TIMELIMIT(6e2), DISPLEVEL(2),
       POLIMG(), MIPSLV(), SPARSEEXPR(), SQUAD(), RLTRED()
       { CMODEL.MIXED_IA        = true;
@@ -294,6 +300,9 @@ public:
         RLTRED.TIMELIMIT       = TIMELIMIT; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
+        RELAXMETH     = options.RELAXMETH;
+        SUBSETDRL     = options.SUBSETDRL;
+        SUBSETSCQ     = options.SUBSETSCQ;
         OBBTMIG       = options.OBBTMIG;
         OBBTMAX       = options.OBBTMAX;
         OBBTTHRES     = options.OBBTTHRES;
@@ -302,8 +311,6 @@ public:
         OBBTCONT      = options.OBBTCONT;
         CPMAX         = options.CPMAX;
         CPTHRES       = options.CPTHRES;
-        CPBKOFF       = options.CPBKOFF;
-        RELMETH       = options.RELMETH;
         ISMDIV        = options.ISMDIV;
         ISMMIPREL     = options.ISMMIPREL;
         CMODEL        = options.CMODEL;
@@ -315,7 +322,7 @@ public:
         PSDQUADCUTS   = options.PSDQUADCUTS;
         DCQUADCUTS    = options.DCQUADCUTS;
         NCOCUTS       = options.NCOCUTS;
-        NCOMETH       = options.NCOMETH;
+        NCOADIFF      = options.NCOADIFF;
         NPOLLIFT      = options.NPOLLIFT;
         LINCTRSEP     = options.LINCTRSEP;
         TIMELIMIT     = options.TIMELIMIT;
@@ -344,6 +351,12 @@ public:
       FSA=0,      //!< Forward sensitivity analysis
       ASA         //!< Adjoint sensitivity analysis
     };
+    //! @brief Relaxation methods
+    std::set<RELAX> RELAXMETH;
+    //! @brief Exclusion from decomposition-relaxation-linearization: 0: none; 1: non-polynomial functions; 2: polynomial functions
+    unsigned SUBSETDRL;
+    //! @brief Exclusion from quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
+    unsigned SUBSETSCQ;
     //! @brief Minimum variable range for application of bounds tighteneting
     double OBBTMIG;
     //! @brief Maximum rounds of optimization-based bounds tighteneting
@@ -360,10 +373,6 @@ public:
     unsigned CPMAX;
     //! @brief Threshold for repeating constraint propagation (minimum relative reduction in any variable)
     double CPTHRES;
-    //! @brief Backoff of tightened variable bounds after constraint propagation
-    double CPBKOFF;
-    //! @brief Relaxation methods
-    std::set<RELAX> RELMETH;
     //! @brief Number of partition subdivisions in interval superposition model
     unsigned ISMDIV;
     //! @brief Whether to generate a MIP relaxation of ISM (true) or LP relaxation (false)
@@ -380,14 +389,14 @@ public:
     bool MONSCALE;
     //! @brief Whether to add reduced RLT cuts
     bool RRLTCUTS;
-    //! @brief Whether to add PSD cuts within quadratisation
-    bool PSDQUADCUTS;
+    //! @brief Whether to add PSD cuts within quadratisation (0: none; 1: 2-by-2; >1: 3-by-3)
+    unsigned PSDQUADCUTS;
     //! @brief Whether to add DC cuts within quadratisation
     bool DCQUADCUTS;
     //! @brief Whether to add NCO cuts
     bool NCOCUTS;
     //! @brief NCO method
-    unsigned NCOMETH;
+    unsigned NCOADIFF;
     //! @brief Whether to reformulate nonpolynomial functions as polynomial and transcendental expressions using mc::SparseExpr
     bool NPOLLIFT;
     //! @brief Whether to separate linear constraints prior to relaxation
@@ -411,28 +420,69 @@ public:
       ( std::ostream&out=std::cout ) const;
   } options;
 
-  //! @brief NLPBND stats
+  //! @brief MINLPBND computational statistics
   struct Stats{
+    //! @brief Reset statistics
     void reset()
-      { tCPROP = tPOLIMG = tMIPSOL = tMIPSET = 0.;
-        nCPROP = nMIPSOL = 0; }
+      { walltime_cprop = walltime_polimg = walltime_setmip = walltime_slvmip =
+        std::chrono::microseconds(0); total_slvmip = 0; }
+    //! @brief Display statistics
     void display
       ( std::ostream&os=std::cout )
-      { os << std::fixed << std::setprecision(2);
-        if( nCPROP  ) os << "#  CPROP:  " << tCPROP << " CPU SEC  (" << nCPROP << ")" << std::endl;
-        os << "#  POLIMG: " << tPOLIMG << " CPU SEC" << std::endl
-           << "#  MIPSET: " << tMIPSET << " CPU SEC" << std::endl;
-        if( nMIPSOL ) os << "#  MIPSOL: " << tMIPSOL << " CPU SEC  (" << nMIPSOL << ")" << std::endl; 
-        os << std::endl; }
-    double tCPROP;
-    unsigned nCPROP;
-    double tPOLIMG;
-    double tMIPSOL;
-    unsigned nMIPSOL;
-    double tMIPSET;
+      { os << std::fixed << std::setprecision(2) << std::right
+           << std::endl
+           << "#  WALL-CLOCK TIMES" << std::endl
+           << "#  CTR PROPAG: " << std::setw(10) << to_time( walltime_cprop )  << " SEC" << std::endl
+           << "#  POL IMAGE:  " << std::setw(10) << to_time( walltime_polimg ) << " SEC" << std::endl
+           << "#  MIP SETUP:  " << std::setw(10) << to_time( walltime_setmip ) << " SEC" << std::endl
+           << "#  MIP SOLVE:  " << std::setw(10) << to_time( walltime_slvmip ) << " SEC, "
+                                << total_slvmip << " PROBLEMS" << std::endl   << std::endl; }
+    //! @brief Cumulated wall-clock time for constraint propagation (in microseconds)
+    std::chrono::microseconds walltime_cprop;
+    //! @brief Cumulated wall-clock time for polyhedral relaxation construction (in microseconds)
+    std::chrono::microseconds walltime_polimg;
+    //! @brief Cumulated wall-clock time for setting-up MIP model (in microseconds)
+    std::chrono::microseconds walltime_setmip;
+    //! @brief Cumulated wall-clock time for solving MIP model (in microseconds)
+    std::chrono::microseconds walltime_slvmip;
+    //! @brief Total number of MIP model solves
+    unsigned total_slvmip;
+    //! @brief Get current time point
+    std::chrono::time_point<std::chrono::system_clock> start
+      () const
+      { return std::chrono::system_clock::now(); }
+    //! @brief Get current time lapse with respect to start time point
+    std::chrono::microseconds walltime
+      ( std::chrono::time_point<std::chrono::system_clock> const& start ) const
+      { return std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::system_clock::now() - start ); }    
+    //! @brief Convert microsecond ticks to time
+    double to_time
+      ( std::chrono::microseconds t ) const
+      { return t.count() * 1e-6; }
   } stats;
 
-  //! @brief NLPBND exceptions
+//  //! @brief MINLPBND computational statistics
+//  struct Stats{
+//    void reset()
+//      { tCPROP = tPOLIMG = tMIPSOL = tMIPSET = 0.;
+//        nCPROP = nMIPSOL = 0; }
+//    void display
+//      ( std::ostream&os=std::cout )
+//      { os << std::fixed << std::setprecision(2);
+//        if( nCPROP  ) os << "#  CPROP:  " << tCPROP << " CPU SEC  (" << nCPROP << ")" << std::endl;
+//        os << "#  POLIMG: " << tPOLIMG << " CPU SEC" << std::endl
+//           << "#  MIPSET: " << tMIPSET << " CPU SEC" << std::endl;
+//        if( nMIPSOL ) os << "#  MIPSOL: " << tMIPSOL << " CPU SEC  (" << nMIPSOL << ")" << std::endl; 
+//        os << std::endl; }
+//    double tCPROP;
+//    unsigned nCPROP;
+//    double tPOLIMG;
+//    double tMIPSOL;
+//    unsigned nMIPSOL;
+//    double tMIPSET;
+//  } stats;
+
+  //! @brief MINLPBND exceptions
   class Exceptions
   {
   public:
@@ -450,11 +500,11 @@ public:
     std::string what(){
       switch( _ierr ){
       case MULTOBJ:
-        return "NLPBND::Exceptions  Model with multiple objectives not allowed";
+        return "MINLPBND::Exceptions  Model with multiple objectives not allowed";
       case SETUP:
-        return "NLPBND::Exceptions  Incomplete setup before a solve";
+        return "MINLPBND::Exceptions  Incomplete setup before a solve";
       case INTERN: default:
-        return "NLPBND::Exceptions  Internal error";
+        return "MINLPBND::Exceptions  Internal error";
       }
     }
   private:
@@ -486,16 +536,17 @@ public:
 
   //! @brief Refine polyhedral relaxation by adding breakpoints
   void refine_polrelax
-    ( double const* Xinc=nullptr );
+    ( double const* Xinc=nullptr, bool const resetcuts=true );
 
 //  //! @brief Setup and solve polyhedral relaxation of optimization model in the variable subdomain <a>X</a>, for the incumbent value <a>Finc</a> at point <a>Xinc</a>, and applying <a>nref</a> breakpoint refinements
   int relax
     ( T const* X=nullptr, double const* Finc=nullptr, double const* Xinc=nullptr,
-      unsigned const nref=0, bool const resetcut=true );
+      unsigned const nref=0, bool const resetbnd=true, bool const reinit=true );
 
-  //! @brief Setup and solve bound reduction problems using polyhedral relaxations of optimization model, starting with variable subdomain <a>X</a>, for the incumbent value <a>Finc</a>, and using the options specified in <a>NLPBND::Options::OBBTMAX</a> and <a>NLPBND::Options::OBBTTHRES</a> -- returns updated variable bounds <a>X</a>, and number of iterative refinements <a>nred</a>
+  //! @brief Setup and solve bound reduction problems using polyhedral relaxations of optimization model, starting with variable subdomain <a>X</a>, for the incumbent value <a>Finc</a>, and using the options specified in <a>MINLPBND::Options::OBBTMAX</a> and <a>MINLPBND::Options::OBBTTHRES</a> -- returns updated variable bounds <a>X</a>, and number of iterative refinements <a>nred</a>
   int reduce
-    ( unsigned& nred, T* X=nullptr, double const* Finc=nullptr );
+    ( unsigned& nred, T* X=nullptr, double const* Finc=nullptr,
+      bool const resetbnd=true, bool const reinit=true );
 
   //! @brief Get const pointer to MIP solver
   MIP const* solver
@@ -514,7 +565,10 @@ public:
     const
     { return _Xbnd.data(); }
 
-protected:
+private:
+
+  //! @brief Time point to enable TIMELIMIT option
+  std::chrono::time_point<std::chrono::system_clock> _tstart;
 
   //! @brief Set linear/nonlinear participating variables in functions
   void _set_variable_class
@@ -563,6 +617,15 @@ protected:
   void _set_cuts_ISM
     ();
 
+  //! @brief Compute bound of (unscaled) monomial <a>mon</a>
+  T _bnd_mon
+    ( SPolyMon const& mon )
+    const;
+
+  //! @brief Get monomial <a>mon</a> from DAG monomial map <a>_Xmon</a> or add it to the map if absent
+  FFVar const& _get_mon
+    ( SPolyMon const& mon );
+
   //! @brief Get range for quadratic terms from <a>mat</a>
   T _get_range
     ( SQuad::t_SQuad const& mat );
@@ -595,20 +658,25 @@ protected:
     ( const unsigned n, const U*Xred, const U*X, const U*X0 );
 
   //! @brief Private methods to block default compiler methods
-  NLPBND
-    ( const NLPBND& );
-  NLPBND& operator=
-    ( const NLPBND& );
+  MINLPBND
+    ( const MINLPBND& );
+  MINLPBND& operator=
+    ( const MINLPBND& );
 };
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::setup
+MINLPBND<T,MIP>::setup
 ( std::ostream& os )
-//( unsigned const* Xtyp, std::ostream& os )
 {
   _issetup = false;
   _IINF = BASE_OPT::INF * T(-1,1);
+  _ismip = false;
+  for( auto const& typ : _vartyp ){
+    if( !typ ) continue;
+    _ismip = true;
+    break;
+  }
 
   // full set of parameters
   std::vector<FFVar> Pvar = _par;
@@ -656,7 +724,7 @@ NLPBND<T,MIP>::setup
   
   // set Fritz-John cuts and corresponding multipliers
   if( options.NCOCUTS
-   && set_nco( _Xtyp.data(), options.NCOMETH==Options::ASA? true: false ) ){
+   && set_nco( _Xtyp.data(), options.NCOADIFF==Options::ASA? true: false ) ){
 
     // cost multiplier
     Xvar.push_back( std::get<2>(_obj)[0] );
@@ -665,16 +733,25 @@ NLPBND<T,MIP>::setup
     _Xtyp.push_back( 0  );
 
     // regular constraint multipliers
-    Xvar.insert( Xvar.end(), std::get<2>(_ctr).begin(), std::get<2>(_ctr).end() );
-    _Xlow.insert( _Xlow.end(), std::get<2>(_ctr).size(), 0. );
-    _Xupp.insert( _Xupp.end(), std::get<2>(_ctr).size(), 1. );
-    _Xtyp.insert( _Xtyp.end(), std::get<2>(_ctr).size(), 0  );
+    for( unsigned i=0; i<std::get<0>(_ctr).size(); ++i ){
+      Xvar.push_back( std::get<1>(_ctr)[i] );
+      _Xtyp.push_back( 0 ); // all constraint multipliers are continuous variables
+      switch( std::get<0>(_ctr)[i] ){
+        case LE:
+        case GE: _Flow.push_back(  0. ); _Fupp.push_back( 1. ); break;
+        case EQ: _Flow.push_back( -1. ); _Fupp.push_back( 1. ); break;
+      }
+    }
+    //Xvar.insert( Xvar.end(), std::get<2>(_ctr).begin(), std::get<2>(_ctr).end() );
+    //_Xlow.insert( _Xlow.end(), std::get<2>(_ctr).size(), 0. );
+    //_Xupp.insert( _Xupp.end(), std::get<2>(_ctr).size(), 1. );
+    //_Xtyp.insert( _Xtyp.end(), std::get<2>(_ctr).size(), 0  );
 
     // dependent equation multipliers
     Xvar.insert( Xvar.end(), _sysm.begin(), _sysm.end() );
-    _Xlow.insert( _Xlow.end(), _sysm.size(), 0. );
-    _Xupp.insert( _Xupp.end(), _sysm.size(), 1. );
-    _Xtyp.insert( _Xtyp.end(), _sysm.size(), 0  );
+    _Xlow.insert( _Xlow.end(), _sysm.size(), -1. ); // all dependent equations are equality constraints
+    _Xupp.insert( _Xupp.end(), _sysm.size(),  1. );
+    _Xtyp.insert( _Xtyp.end(), _sysm.size(),  0  ); // all constraint multipliers are continuous variables
 
     // variable bound multipliers
     for( unsigned i=0; i<_nX0; i++ ){
@@ -689,7 +766,7 @@ NLPBND<T,MIP>::setup
     // finally, Fritz-John cuts
     for( unsigned i=0; i<std::get<0>(_nco).size(); ++i ){
       Fvar.push_back( std::get<1>(_nco)[i] );
-#ifdef MC__NLPBND_DEBUG_NCOCUTS
+#ifdef MC__MINLPBND_DEBUG_NCOCUTS
       BASE_NLP::_dag->output( BASE_NLP::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
 #endif      
       switch( std::get<0>(_nco)[i] ){
@@ -743,7 +820,7 @@ NLPBND<T,MIP>::setup
   for( auto const& [i,Fi] : _Xlift )
     _Fops.push_back( _dag->subgraph( 1, &Fi ) );
   _Fallops = _dag->subgraph( _nF, _Fvar.data() );
-#ifdef MC__NLPBND_DEBUG  
+#ifdef MC__MINLPBND_DEBUG  
   _dag->output( _Fallops ), " FOR ALL FUNCTIONS" );    
 #endif
 
@@ -754,7 +831,7 @@ NLPBND<T,MIP>::setup
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_search_reduction_constraints
+MINLPBND<T,MIP>::_search_reduction_constraints
 ()
 {
   if( _Fctreq.empty() ) return;
@@ -766,10 +843,10 @@ NLPBND<T,MIP>::_search_reduction_constraints
 
   // append any reduced RLT cuts
   for( auto const& pFred : RRLT.constraints() ){
-//#ifdef MC__NLPBND_DEBUG_RRLTCUTS
+#ifdef MC__MINLPBND_DEBUG_RRLTCUTS
     std::ostringstream ostr; ostr << " OF REDUCTION CONSTRAINT " << *pFred;
     _dag->output( _dag->subgraph( 1, pFred ), ostr.str() );
-//#endif
+#endif
     _Fvar.push_back( *pFred );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
@@ -784,7 +861,7 @@ NLPBND<T,MIP>::_search_reduction_constraints
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_lift_nonpolynomial
+MINLPBND<T,MIP>::_lift_nonpolynomial
 ()
 {
   if( _Fnpol.empty() ) return;
@@ -843,13 +920,13 @@ NLPBND<T,MIP>::_lift_nonpolynomial
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_variable_class
+MINLPBND<T,MIP>::_set_variable_class
 ()
 {
   FFDep Fdep( 0. );
   for( auto && Fj : _Fvar )
     Fdep += Fj.dep();
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
   std::cout << "DEPS <- " << Fdep << std::endl;
   //int dum; std::cin >> dum;
 #endif
@@ -863,7 +940,7 @@ NLPBND<T,MIP>::_set_variable_class
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_function_class
+MINLPBND<T,MIP>::_set_function_class
 ()
 {
   _Flin.clear();
@@ -887,7 +964,7 @@ NLPBND<T,MIP>::_set_function_class
 
 template <typename T, typename MIP>
 inline bool
-NLPBND<T,MIP>::update_bounds
+MINLPBND<T,MIP>::update_bounds
 ( T const* X, double const* Finc, bool const resetbnd )
 {
   // Variable bounds
@@ -903,11 +980,11 @@ NLPBND<T,MIP>::update_bounds
   for( auto const& [i,Fi] : _Xlift ){
     try{
       T Xi;
-#ifdef MC__NLPBND_DEBUG_BOUNDS
+#ifdef MC__MINLPBND_DEBUG_BOUNDS
       _dag->output( _dag->subgraph( 1, &Fi ), " FOR LIFTED VARIABLE" );    
 #endif
       _dag->eval( _Fops.at(_nF+j), _Iwk, 1, &Fi, &Xi, _nX1, _Xvar.data(), _Xbnd.data() );
-#ifdef MC__NLPBND_DEBUG_BOUNDS
+#ifdef MC__MINLPBND_DEBUG_BOUNDS
       std::cout << "Xbnd[ " << i << "] = " << _Xbnd[i] << std::endl;
       std::cout << "Xprop[ " << i << "] = " << Xi << std::endl;
 #endif
@@ -933,20 +1010,20 @@ NLPBND<T,MIP>::update_bounds
 
 template <typename T, typename MIP>
 inline int
-NLPBND<T,MIP>::_propagate_bounds
+MINLPBND<T,MIP>::_propagate_bounds
 ()
 {
-#ifdef MC__NLPBND_DEBUG_CP
+#ifdef MC__MINLPBND_DEBUG_CP
   _dag->output( _Fallops );
 #endif
   
   // Apply constraint propagation
-  stats.tCPROP -= userclock();
+  auto tstart = stats.start();
   int flag = _dag->reval( _Fallops, _CPbnd, _nF, _Fvar.data(), _Fbnd.data(), _nX, _Xvar.data(),
                           _Xbnd.data(), _IINF, options.CPMAX, options.CPTHRES );
-  stats.tCPROP += userclock();
-
-#ifdef MC__NLPBND_DEBUG_CP
+  stats.walltime_cprop += stats.walltime( tstart );
+  
+#ifdef MC__MINLPBND_DEBUG_CP
   std::cout << "\nReduced Box:\n";
   int i=0;
   for( auto && bnd : _CPbnd )
@@ -957,22 +1034,22 @@ NLPBND<T,MIP>::_propagate_bounds
 
 template <typename T, typename MIP>
 inline int
-NLPBND<T,MIP>::relax
+MINLPBND<T,MIP>::relax
 ( T const* X, double const* Finc, double const* Xinc, const unsigned nref,
-  const bool reset )
+  const bool resetbnd, bool const reinit )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _tstart = stats.start();
 
   // Update variable bounds
-  if( !update_bounds( X, Finc ) || _propagate_bounds() < 0 )
-    return MIP::INFEASIBLE;
+  if( !update_bounds( X, Finc, resetbnd ) ) return MIP::INFEASIBLE;
+  int cpred = _propagate_bounds();
+  if( cpred < 0 ) return MIP::INFEASIBLE;
 
-  if( reset ){
-    // Reset polyhedral image, LP variables and cuts on request
-    init_polrelax(); // <<== COULD PASS Xinc HERE TOO??
-    update_polrelax( 2, false, false );
-  } 
-#ifdef MC__NLPBND_DEBUG
+  // Reset polyhedral image, LP variables and cuts
+  if( reinit ) init_polrelax(); // <<== COULD PASS Xinc HERE TOO??
+  update_polrelax( 2, false, reinit? false: true );
+#ifdef MC__MINLPBND_DEBUG
   std::cout << _POLenv;
 #endif
 
@@ -982,19 +1059,23 @@ NLPBND<T,MIP>::relax
 
   for( unsigned iref=0; ; iref++ ){
     // Set-up relaxed objective, options, and solve polyhedral relaxation
-    stats.tMIPSOL -= userclock();
+    auto tMIP = stats.start();
     _MIPSLV->set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
     _MIPSLV->options = options.MIPSLV;
+    _MIPSLV->options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
     _MIPSLV->solve();
-    stats.nMIPSOL++;
-    stats.tMIPSOL += userclock();
+    stats.walltime_slvmip += stats.walltime( tMIP );
+    stats.total_slvmip ++;
 
     // Break if relaxation unsuccessful or refinement iteration exceeded
-    if( _MIPSLV->get_status() != MIP::OPTIMAL || iref >= nref ) break;
+    // Accept both optimal and suboptimal MIP solutions - could be dangerous?
+    if( iref >= nref 
+     || ( _MIPSLV->get_status() != MIP::OPTIMAL
+       && _MIPSLV->get_status() != MIP::SUBOPTIMAL ) ) break;
 
     // Refine relaxation via additional breakpoints
     refine_polrelax( Xinc );
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
     std::cout << _POLenv;
     { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
@@ -1005,27 +1086,28 @@ NLPBND<T,MIP>::relax
 
 template <typename T, typename MIP>
 inline int
-NLPBND<T,MIP>::_reduce
+MINLPBND<T,MIP>::_reduce
 ( unsigned const ix, bool const uplo )
 {
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
   std::cout << "\nTIGHTENING OF VARIABLE " << ix << (uplo?"U":"L") << ":\n";
   std::cout << _POLenv;
 #endif
   // Set-up lower/upper bound objective, options, and solve polyhedral relaxation
-  stats.tMIPSOL -= userclock();
+  auto tMIP = stats.start();
   _MIPSLV->set_objective( _POLXvar[ix], (uplo? BASE_OPT::MAX: BASE_OPT::MIN) );
   _MIPSLV->options = options.MIPSLV;
+  _MIPSLV->options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
   _MIPSLV->solve();
-  stats.nMIPSOL++;
-  stats.tMIPSOL += userclock();
+  stats.walltime_slvmip += stats.walltime( tMIP );
+  stats.total_slvmip ++;
 
   return _MIPSLV->get_status();
 }
 
 template <typename T, typename MIP>
 inline bool
-NLPBND<T,MIP>::_tight
+MINLPBND<T,MIP>::_tight
 ()
 {
   // test if current bounds are tight
@@ -1036,7 +1118,7 @@ NLPBND<T,MIP>::_tight
 
 template <typename T, typename MIP>
 inline int
-NLPBND<T,MIP>::_reduce
+MINLPBND<T,MIP>::_reduce
 ()
 {
   // solve reduction subproblems from closest to farthest from bounds
@@ -1065,29 +1147,28 @@ NLPBND<T,MIP>::_reduce
     bool const uplo  = (*itv).second.second;
     double xL = Op<T>::l( _Xbnd[ix] ), xU = Op<T>::u( _Xbnd[ix] );
     _reduce( ix, uplo );
-//    if( _MIPSLV->get_status() != MIP::OPTIMAL ){
-//#ifdef MC__NLPBND_PAUSE_INFEASIBLE
-//      int dum; std::cout << "Infeasible problem - PAUSED"; std::cin >> dum;
-//#endif
-//      break;
-//    }
-    if( _MIPSLV->get_status() == MIP::OPTIMAL ){
+
+    // Accept both optimal and suboptimal MIP solutions - could be dangerous?
+    if( _MIPSLV->get_status() == MIP::OPTIMAL
+     || _MIPSLV->get_status() == MIP::SUBOPTIMAL ){
       switch( (int)uplo ){
        case false: // lower bound
-        xL = _MIPSLV->get_objective();
-        if( options.OBBTBKOFF > 0. ) xL -= options.OBBTBKOFF;
-        if( _Xtyp[ix] > 0 )          xL  = std::ceil( xL );
+        xL = _MIPSLV->get_objective_bound();
+        if( options.OBBTBKOFF > 0. )
+          xL -= options.OBBTBKOFF + std::fabs(xL)*options.OBBTBKOFF;
+        if( _Xtyp[ix] > 0 ) xL = std::ceil( xL );
         if( !Op<T>::inter(  _Xbnd[ix], _Xbnd[ix], T(xL,xU+1.) ) ) _Xbnd[ix] = xU;
         break;
        case true: // upper bound
-        xU = _MIPSLV->get_objective();
-        if( options.OBBTBKOFF > 0. ) xU += options.OBBTBKOFF;
-        if( _Xtyp[ix] > 0 )          xU  = std::floor( xU );
+        xU = _MIPSLV->get_objective_bound();
+        if( options.OBBTBKOFF > 0. )
+          xU += options.OBBTBKOFF + std::fabs(xU)*options.OBBTBKOFF;;
+        if( _Xtyp[ix] > 0 ) xU = std::floor( xU );
         if( !Op<T>::inter(  _Xbnd[ix], _Xbnd[ix], T(xL-1.,xU) ) ) _Xbnd[ix] = xL;
         break;
       }
         
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
       std::cout << "  UPDATED RANGE OF VARIABLE #" << ix << ": " << _Xbnd[ix] << std::endl;
 #endif
       // update map of candidate reduction subproblems
@@ -1106,17 +1187,18 @@ NLPBND<T,MIP>::_reduce
       continue;
     }
 
+    // Some variables may be unbounded
     else if( _MIPSLV->get_status() != MIP::UNBOUNDED
           && _MIPSLV->get_status() != MIP::INFORUNBND ){
-#ifdef MC__NLPBND_PAUSE_INFEASIBLE
-      int dum; std::cout << "Infeasible problem - PAUSED"; std::cin >> dum;
+#ifdef MC__MINLPBND_PAUSE_INFEASIBLE
+      int dum; std::cout << "Infeasible or interrupted problem - PAUSED"; std::cin >> dum;
 #endif
       break;
     }
     
     vardomred.erase( itv );
   }
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
   std::cout << "SOLVED " << nred << " RANGE REDUCTION LPs OUT OF " << 2*_nX << std::endl;
 #endif
 
@@ -1125,22 +1207,30 @@ NLPBND<T,MIP>::_reduce
 
 template <typename T, typename MIP>
 inline int
-NLPBND<T,MIP>::reduce
-( unsigned& nred, T* X, double const* Finc )
+MINLPBND<T,MIP>::reduce
+( unsigned& nred, T* X, double const* Finc, const bool resetbnd,
+  bool const reinit )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
-  
+  _tstart = stats.start();
+    
   // Update variable bounds
-  if( !update_bounds( X, Finc ) || _propagate_bounds() < 0 ) return MIP::INFEASIBLE;
+  if( !update_bounds( X, Finc, resetbnd ) ) return MIP::INFEASIBLE;
+  int cpred = _propagate_bounds();
+  if( cpred < 0 ) return MIP::INFEASIBLE;
   if( _tight() ){
     for( unsigned i=0; X && i<_nX; i++ ) X[i] = _Xbnd[i];
     return MIP::OPTIMAL;
   }
 
-  // Reset polyhedral image, LP variables and cuts on request
-  init_polrelax();
+  // Reset polyhedral image, LP variables and cuts
+  if( reinit ) init_polrelax();
+#ifdef MC__MINLPBND_DEBUG
+  std::cout << _POLenv;
+#endif
 
   // Main loop for relaxation and domain reduction
+  double vred = 0.;
   int flag = MIP::OPTIMAL;
   std::vector<T> Xbnd0 = _Xbnd, Xbnd1( _nX );
   for( nred = 0; nred < options.OBBTMAX; nred++ ){
@@ -1149,18 +1239,23 @@ NLPBND<T,MIP>::reduce
     // Optimization-based domain reduction considering linear functions only
     if( !_Flin.empty() && options.OBBTLIN < 2 ){
       update_polrelax( 0, options.OBBTCONT, true );
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
       std::cout << _POLenv;
 #endif
       flag = _reduce();
-      if( flag != MIP::OPTIMAL && flag != MIP::UNBOUNDED && flag != MIP::INFORUNBND ) break;
-    }
-    
-    // Constraint propagation-based domain reduction considering all functions
-    if( _propagate_bounds() < 0 ) return MIP::INFEASIBLE;
-    if( _tight() ){
-      for( unsigned i=0; X && i<_nX; i++ ) X[i] = _Xbnd[i];
-      return MIP::OPTIMAL;
+      if( flag != MIP::OPTIMAL   && flag != MIP::SUBOPTIMAL
+       && flag != MIP::UNBOUNDED && flag != MIP::INFORUNBND ) break;
+
+      // Constraint propagation-based domain reduction considering all functions
+      cpred = _propagate_bounds();
+      if( cpred < 0 ){
+        flag = MIP::INFEASIBLE;
+        //break;
+      }
+      if( _tight() ){
+        flag = MIP::OPTIMAL;
+        break;
+      }
     }
     
     // Optimization-based domain reduction considering nonlinear functions as well
@@ -1169,16 +1264,32 @@ NLPBND<T,MIP>::reduce
         update_polrelax( 1, options.OBBTCONT, false );
       else
         update_polrelax( 2, options.OBBTCONT, true );
-#ifdef MC__NLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
       std::cout << _POLenv;
 #endif
       flag = _reduce();
-      if( flag != MIP::OPTIMAL && flag != MIP::UNBOUNDED && flag != MIP::INFORUNBND ) break;
+      if( flag != MIP::OPTIMAL   && flag != MIP::SUBOPTIMAL
+       && flag != MIP::UNBOUNDED && flag != MIP::INFORUNBND ) break;
+
+      // Constraint propagation-based domain reduction considering all functions
+      cpred = _propagate_bounds();
+      if( cpred < 0 ){
+#ifdef MC__MINLPBND_SHOW_REDUC
+        std::cout << "Infeasibility during constraint propagation (" << cpred << ")\n";
+#endif
+        flag = MIP::INFEASIBLE;
+        //break;
+      }
+      if( _tight() ){
+        flag = MIP::OPTIMAL;
+        break;
+      }
     }
     
     // Check reduction ratio
-    double vred = _reducrel( _nX, _Xbnd.data(), Xbnd1.data(), Xbnd0.data() );
-#ifdef MC__NLPBND_SHOW_REDUC
+    vred = _reducrel( _nX, _Xbnd.data(), Xbnd1.data(), Xbnd0.data() );
+    if( vred < options.OBBTTHRES ) break;
+#ifdef MC__MINLPBND_SHOW_REDUC
     std::cout << "Reduction #" << nred+1 << ": "
               << std::fixed << std::setprecision(1) << vred*1e2 << "%\n";
     std::cout << "\nReduced Box:\n";
@@ -1186,20 +1297,29 @@ NLPBND<T,MIP>::reduce
       std::cout << _Xvar[i] << " = " << _Xbnd[i] << std::endl;
     { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
-    if( vred < options.OBBTTHRES ) break;
   }
   
   // Update user bounds <a>X</a>
   for( unsigned i=0; X && i<_nX0; i++ ) X[i] = _Xbnd[i];
+
+#ifdef MC__MINLPBND_SHOW_REDUC
+  std::cout << "Reduction #" << nred+1 << ": (" << flag << ") "
+            << std::fixed << std::setprecision(1) << vred*1e2 << "%\n";
+  std::cout << "\nReduced Box:\n";
+  for( unsigned i=0; i<_nX; i++ )
+    std::cout << _Xvar[i] << " = " << _Xbnd[i] << std::endl;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
   return flag;
 }
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::init_polrelax
+MINLPBND<T,MIP>::init_polrelax
 ()
 {
-  stats.tPOLIMG -= userclock();
+  auto tstart = stats.start();
 
   // Reset polyhedral image
   _POLenv.reset();
@@ -1218,7 +1338,7 @@ NLPBND<T,MIP>::init_polrelax
     _POLXvar.push_back( PolVar<T>( &_POLenv, *itX, _Xbnd[i], (_Xtyp[i]? false: true) ) );
 
   // Set nonlinear cuts
-  for( auto const& meth : options.RELMETH ){
+  for( auto const& meth : options.RELAXMETH ){
     switch( meth ){
     
       // Add McCormick-derived polyhedral cuts
@@ -1267,15 +1387,15 @@ NLPBND<T,MIP>::init_polrelax
     }
   }
   
-  stats.tPOLIMG += userclock();
+  stats.walltime_polimg += stats.walltime( tstart );
 }
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::update_polrelax
+MINLPBND<T,MIP>::update_polrelax
 ( unsigned const addcuts, bool const contcuts, bool const resetcuts )
 {
-  stats.tPOLIMG -= userclock();
+  auto tstart = stats.start();
 
   // Reset polyhedral cuts
   if( resetcuts ) _POLenv.reset_cuts();
@@ -1289,7 +1409,7 @@ NLPBND<T,MIP>::update_polrelax
   if( addcuts != 1 ) _set_cuts_LIN();
 
   // Add nonlinear cuts
-  if( addcuts > 0 ) for( auto && meth : options.RELMETH ){
+  if( addcuts > 0 ) for( auto && meth : options.RELAXMETH ){
     switch( meth ){
 
       // Add McCormick-derived polyhedral cuts
@@ -1301,8 +1421,8 @@ NLPBND<T,MIP>::update_polrelax
       // Add Chebyshev-derived polyhedral cuts
       case Options::SCDRL:
         // Update Chebyshev variables
-        for( unsigned i=0; i<_nX; i++ )
-          _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
+        //for( unsigned i=0; i<_nX; i++ )
+        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
 
         // Add polyhedral cuts
         _set_cuts_SCDRL();
@@ -1311,8 +1431,8 @@ NLPBND<T,MIP>::update_polrelax
       // Add Chebyshev-derived polyhedral cuts
       case Options::SCQ:
         // Update Chebyshev variables
-        for( unsigned i=0; i<_nX; i++ )
-          _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
+        //for( unsigned i=0; i<_nX; i++ )
+        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
 
         // Reset Chebyshev basis map in polyhedral image
         _POLXmon.clear();
@@ -1341,30 +1461,31 @@ NLPBND<T,MIP>::update_polrelax
     _POLFvar[i].update( Fupdi );
   }
 
-  stats.tPOLIMG += userclock();
+  stats.walltime_polimg += stats.walltime( tstart );
 
   // Input cuts in MIP solver
   auto CONTRELAX = _MIPSLV->options.CONTRELAX;
   _MIPSLV->options.CONTRELAX = contcuts;
-  stats.tMIPSOL -= userclock();
+  tstart = stats.start();
   _MIPSLV->set_cuts( &_POLenv, true );
-  stats.tMIPSOL += userclock();
+  stats.walltime_setmip += stats.walltime( tstart );
   _MIPSLV->options.CONTRELAX = CONTRELAX;
 }
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::refine_polrelax
-( double const* Xinc )
+MINLPBND<T,MIP>::refine_polrelax
+( double const* Xinc, bool const resetcuts )
 {
-  stats.tPOLIMG -= userclock();
+  auto tstart = stats.start();
   
   // Update discretization with optimum point of relaxation
   for( auto itv=_POLenv.Vars().begin(); itv!=_POLenv.Vars().end(); ++itv ){
     double Xval = _MIPSLV->get_variable( *itv->second );
     itv->second->add_breakpt( Xval );
-#ifdef MC__NLPBND_SHOW_BREAKPTS
-    std::cout << itv->second->name();
+#ifdef MC__MINLPBND_SHOW_BREAKPTS
+    std::cout << itv->second->name() << " " << Xval << " " << itv->second->range()
+              << std::scientific << std::setprecision(4);
     for( auto it = itv->second->breakpts().begin(); it!=itv->second->breakpts().end(); ++it )
       std::cout << "  " << *it;
     std::cout << std::endl;
@@ -1388,95 +1509,95 @@ NLPBND<T,MIP>::refine_polrelax
   }
 
   // Reset polyhedral cuts
-  _POLenv.reset_cuts();
+  if( resetcuts ) _POLenv.reset_cuts();
 
-  // Add linear cuts
-  _set_cuts_LIN();
-
-  // Add nonlinear cuts
-  for( auto && meth : options.RELMETH ){
-    switch( meth ){
-
-      // Add McCormick-derived polyhedral cuts
-      default:
-      case Options::DRL:
-        _set_cuts_DRL();
-        break;
-
-      // Add Chebyshev-derived polyhedral cuts
-      case Options::SCDRL:
-        // Update Chebyshev variables
-        for( unsigned i=0; i<_nX; i++ )
-          _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-
-        // Add polyhedral cuts
-        _set_cuts_SCDRL();
-        break;
-
-      // Add Chebyshev-derived polyhedral cuts
-      case Options::SCQ:
-        // Update Chebyshev variables
-        for( unsigned i=0; i<_nX; i++ )
-          _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-
-        // Reset Chebyshev basis map in polyhedral image
-        _POLXmon.clear();
-        _POLXprodmon.clear();
-
-        // Add quadratic cuts
-        _set_cuts_SCQ();
-        break;
-
-      // Add Interval superposition-derived polyhedral cuts
-      case Options::ISM:
-        // Update ISM variables
-        for( unsigned i=0; i<_nX; i++ )
-          _ISMXvar[i].set( _ISMenv, i, _Xbnd[i] );
-
-        // Add polyhedral cuts
-        _set_cuts_ISM();
-        break;
-    }
-  }
-
-  // Update polyhedral dependent bounds
-  for( unsigned i=0; i<_nF; i++ ){
-   T Fupdi = _Fbnd[i];
-    Op<T>::inter( Fupdi, _Fbnd[i], _POLFvar[i].range() );
-    _POLFvar[i].update( Fupdi );
-  }
-
-//  // Update polyhedral cuts
+//  // Add linear cuts
 //  _set_cuts_LIN();
-//  for( auto && meth : options.RELMETH ){
+
+//  // Add nonlinear cuts
+//  for( auto && meth : options.RELAXMETH ){
 //    switch( meth ){
+
+//      // Add McCormick-derived polyhedral cuts
 //      default:
 //      case Options::DRL:
 //        _set_cuts_DRL();
 //        break;
+
+//      // Add Chebyshev-derived polyhedral cuts
 //      case Options::SCDRL:
+//        // Update Chebyshev variables
+//        //for( unsigned i=0; i<_nX; i++ )
+//        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
+
+//        // Add polyhedral cuts
 //        _set_cuts_SCDRL();
 //        break;
+
+//      // Add Chebyshev-derived polyhedral cuts
 //      case Options::SCQ:
+//        // Update Chebyshev variables
+//        //for( unsigned i=0; i<_nX; i++ )
+//        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
+
+//        // Reset Chebyshev basis map in polyhedral image
+//        _POLXmon.clear();
+//        _POLXprodmon.clear();
+
+//        // Add quadratic cuts
 //        _set_cuts_SCQ();
 //        break;
+
+//      // Add Interval superposition-derived polyhedral cuts
 //      case Options::ISM:
+//        // Update ISM variables
+//        for( unsigned i=0; i<_nX; i++ )
+//          _ISMXvar[i].set( _ISMenv, i, _Xbnd[i] );
+
+//        // Add polyhedral cuts
 //        _set_cuts_ISM();
 //        break;
 //    }
 //  }
 
-  stats.tPOLIMG += userclock();
+//  // Update polyhedral dependent bounds
+//  for( unsigned i=0; i<_nF; i++ ){
+//   T Fupdi = _Fbnd[i];
+//    Op<T>::inter( Fupdi, _Fbnd[i], _POLFvar[i].range() );
+//    _POLFvar[i].update( Fupdi );
+//  }
 
-  // Input cuts in MIP solver
-  stats.tMIPSOL -= userclock();
-  _MIPSLV->set_cuts( &_POLenv, true );
-  stats.tMIPSOL += userclock();
+////  // Update polyhedral cuts
+////  _set_cuts_LIN();
+////  for( auto && meth : options.RELAXMETH ){
+////    switch( meth ){
+////      default:
+////      case Options::DRL:
+////        _set_cuts_DRL();
+////        break;
+////      case Options::SCDRL:
+////        _set_cuts_SCDRL();
+////        break;
+////      case Options::SCQ:
+////        _set_cuts_SCQ();
+////        break;
+////      case Options::ISM:
+////        _set_cuts_ISM();
+////        break;
+////    }
+////  }
+
+  stats.walltime_polimg += stats.walltime( tstart );
+
+//  // Input cuts in MIP solver
+//  tstart = stats.start();
+//  _MIPSLV->set_cuts( &_POLenv, true );
+//  stats.walltime_setmip += stats.walltime( tstart );
 }
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_cuts_LIN
+MINLPBND<T,MIP>::_set_cuts_LIN
 ()
 {
  // Add polyhedral cuts for each linear function
@@ -1498,7 +1619,7 @@ NLPBND<T,MIP>::_set_cuts_LIN
      continue;
    }
  }
-#ifdef MC__NLPBND_DEBUG_LIN
+#ifdef MC__MINLPBND_DEBUG_LIN
  std::cout << _POLenv;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
@@ -1506,13 +1627,16 @@ NLPBND<T,MIP>::_set_cuts_LIN
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_cuts_DRL
+MINLPBND<T,MIP>::_set_cuts_DRL
 ()
 {
- // Add polyhedral cuts for each nonlinear function
- //_POLFvar.resize( _nF );
- for( unsigned j=0; j<_nF; j++ ){
-   if( options.LINCTRSEP && _Flin.find( j ) != _Flin.end() ) continue; // (!j && !_objsense) ||
+  // Add polyhedral cuts for each nonlinear function
+  //_POLFvar.resize( _nF );
+  for( unsigned j=0; j<_nF; j++ ){
+   if( ( options.LINCTRSEP      && _Flin.find( j )  != _Flin.end()  )   // exclude cut of linear function
+    || ( options.SUBSETDRL == 1 && _Fnpol.find( j ) != _Fnpol.end() )   // exclude cut of non-polynomial function
+    || ( options.SUBSETDRL == 2 && _Fnpol.find( j ) == _Fnpol.end() ) ) // exclude cut of polynomial function
+     continue;
    try{
      _dag->eval( _Fops[j], _POLwk, 1, &_Fvar[j], &_POLFvar[j], _nX, _Xvar.data(), _POLXvar.data() );
      // Update bounds of intermediate factors from constraint propagation results
@@ -1527,35 +1651,45 @@ NLPBND<T,MIP>::_set_cuts_DRL
      // No cut added for function #j in case DAG evaluation failed
      continue;
    }
- }
-#ifdef MC__NLPBND_DEBUG_DRL
- std::cout << _POLenv;
- { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+  }
+#ifdef MC__MINLPBND_DEBUG_DRL
+  std::cout << _POLenv;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 }
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_cuts_SCQ
+MINLPBND<T,MIP>::_set_cuts_SCQ
 ()
 {
+  // Subset of functions to be relaxed
+  std::set<unsigned> ndxF;
+  for( unsigned j=0; j<_nF; j++ ){
+    if( ( options.LINCTRSEP      && _Flin.find( j )  != _Flin.end()  )   // exclude cut of linear function
+     || ( options.SUBSETSCQ == 1 && _Fnpol.find( j ) != _Fnpol.end() )   // exclude cut of non-polynomial function
+     || ( options.SUBSETSCQ == 2 && _Fnpol.find( j ) == _Fnpol.end() ) ) // exclude cut of polynomial function
+      continue;
+    ndxF.insert( j );
+  }
+  if( ndxF.empty() ) return;
+
   // Update sparse Chebyshev variable bounds
   for( unsigned i=0; i<_nX; i++ ){
-    if( _CMenv->scalvar()[i] > options.CMODEL.MIN_FACTOR )
-      _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-    else
+    _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
+    if( _CMenv->scalvar()[i] <= options.CMODEL.MIN_FACTOR )
       _CMXvar[i] = _Xbnd[i];
   }
 
   // Compute sparse Chebyshev model for each nonlinear function
   const unsigned MAXORD = (!options.CMODCUTS || options.CMODCUTS>options.CMODPROP)?
                           options.CMODPROP: options.CMODCUTS;
+
   _CMFvar.assign( _nF, 0. );
-  for( unsigned j=0; j<_nF; j++ ){
-    if( options.LINCTRSEP && _Flin.find( j ) != _Flin.end() ) continue; // (!j && !_objsense) ||
+  for( unsigned j : ndxF ){
     try{
       _dag->eval( _Fops[j], _CMwk, 1, &_Fvar[j], &_CMFvar[j], _nX, _Xvar.data(), _CMXvar.data() );
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
       std::cout << "Chebyshev model for function F[" << j << "]: " << _CMFvar[j];
 #endif
       // Test for too large Chebyshev bounds or NaN
@@ -1565,7 +1699,7 @@ NLPBND<T,MIP>::_set_cuts_SCQ
       _CMFvar[j].simplify( options.CMODEL.MIN_FACTOR, MAXORD );
     }
     catch( int ecode ){
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
       std::cout << "Chebyshev model bound too weak!\n";
 #endif
       T IFvarj;
@@ -1573,7 +1707,7 @@ NLPBND<T,MIP>::_set_cuts_SCQ
       _CMFvar[j] = IFvarj;
     }
     catch(...){
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
       std::cout << "Chebyshev model for function F[" << j << "]: failed" << std::endl;
 #endif
       // No cut added for constraint #j in case evaluation failed
@@ -1587,9 +1721,9 @@ NLPBND<T,MIP>::_set_cuts_SCQ
   QForm.options = options.SQUAD;
   SQuad::t_SPolyMonCoef coefmon;
   
-  for( unsigned j=0; j<_nF; j++ ){
-    if( ( options.LINCTRSEP && _Flin.find( j ) != _Flin.end() )            // only nonlinear constraints
-     || !(Op<SCVar<T>>::diam(_CMFvar[j]) < Op<T>::diam(_IINF)) ) continue; // only bounded constraints
+  for( unsigned j : ndxF ){
+    if( !(Op<SCVar<T>>::diam(_CMFvar[j]) < Op<T>::diam(_IINF)) )         // exclude unbounded constraints
+      continue;
     switch( options.SQUAD.BASIS ){
      case SQuad::Options::MONOM:
      {
@@ -1602,7 +1736,7 @@ NLPBND<T,MIP>::_set_cuts_SCQ
       coefmon = _CMFvar[j].coefmon(); // already simplified earlier
       break;
     }
-#ifndef MC__NLPBND_DEBUG_SCQ
+#ifndef MC__MINLPBND_DEBUG_SCQ
     QForm.process( coefmon );
 #else
     std::cout << _CMFvar[j].display( coefmon, options.SQUAD.BASIS );
@@ -1611,63 +1745,73 @@ NLPBND<T,MIP>::_set_cuts_SCQ
     if( viol > 1e-15 ){ int dum; std::cout << "PAUSED --"; std::cin >> dum; }
 #endif
   }
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
   std::cout << QForm;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 
   // Add monomial vector of quadratic from to polyhedral image
   for( auto const& mon : QForm.SetMon() ){
+  
     // Insert monomial as auxiliary variable in polyhedral image
-    if( mon.tord >= 1 ){//&& _POLXmon.find( mon ) == _POLXmon.end() ){
-#ifdef MC__NLPBND_DEBUG_SCQ
+    if( mon.tord >= 1 ){
+#ifdef MC__MINLPBND_DEBUG_SCQ
       std::cout << "Current monomial: " << mon.display(options.SQUAD.BASIS) << std::endl;
-      //std::cout << _POLenv;
 #endif
       assert( _POLXmon.find( mon ) == _POLXmon.end() );
       switch( options.SQUAD.BASIS ){
+      
+       // Case of power monomials
        case SQuad::Options::MONOM:
         if( !options.MONSCALE ){
           if( mon.tord == 1 ){
+            // non-scaled first-order monomials correspond to existing variables
             auto const& ivar = mon.expr.begin()->first;
+            _Xmon[mon] = _Xvar[ivar];
             _POLXmon[mon] = _POLXvar[ivar];
-#ifdef MC__NLPBND_DEBUG_SCQ
-            std::cout << " " << _POLXvar[ivar]  << "(" << _Xvar[ivar] << "): " << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
+#ifdef MC__MINLPBND_DEBUG_SCQ
+            std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
+                      << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
 #endif
           }
           else{
-            // compute monomial bound
-            T bndmon( 1e0 );
-            FFVar Xmon( 1e0 );
-            for( auto const& [ivar,iord] : mon.expr ){
-#ifdef MC__NLPBND_DEBUG_SCQ
-              std::cout << " " << _POLXvar[ivar] << "^" << iord;
-#endif
-              bndmon *= Op<T>::pow( _POLXvar[ivar].range(), (int)iord );
-              Xmon *= pow( _Xvar[ivar], (int)iord );
-            }
-            auto itXmon = _dag->Vars().find( &Xmon );
-            PolVar<T> POLXmon( &_POLenv, **itXmon, bndmon, true );
-            //_POLXmon[mon] = PolVar<T>( &_POLenv, Xmon, bndmon, true );
-#ifdef MC__NLPBND_DEBUG_SCQ
+            // add unscaled power monomial to polyhedral image
+            _POLXmon[mon].set( &_POLenv, _get_mon(mon), _bnd_mon(mon), true );
+#ifdef MC__MINLPBND_DEBUG_SCQ
             std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                      << POLXmon << "(" << Xmon << "): " << bndmon << std::endl;
+                      << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                      << _POLXmon[mon].range() << std::endl;
 #endif
-            _POLXmon[mon] = POLXmon;
           }
           continue; // Loop to next monomial in QForm.SetMon()
         }
-        _POLXmon[mon] = PolVar<T>( &_POLenv, (mon.gcexp()%2? T(-1e0,1e0): T(0e0,1e0)), true );
+
+        // add scaled power monomial to polyhedral image
+        _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), (mon.gcexp()%2? T(-1e0,1e0): T(0e0,1e0)), true );
+#ifdef MC__MINLPBND_DEBUG_SCQ
+        std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+                  << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                  << _POLXmon[mon].range() << std::endl;
+#endif
         break;
+
+       // Case of Chebyshev monomials
        case SQuad::Options::CHEB:
-        _POLXmon[mon] = PolVar<T>( &_POLenv, T(-1e0,1e0), true );
+        // add Chebyshev monomial to polyhedral image
+        _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), T(-1e0,1e0), true );
+#ifdef MC__MINLPBND_DEBUG_SCQ
+        std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+                  << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                  << _POLXmon[mon].range() << std::endl;
+#endif
         break;
       }
     }
+
     // Add linear cut between degree 1 monomial and actual (unscaled) decision variable
     if( mon.tord == 1 ){
       auto const& ivar = mon.expr.begin()->first;
-#ifndef MC__NLPBND_DEBUG_SCQ
+#ifndef MC__MINLPBND_DEBUG_SCQ
       _POLenv.add_cut( PolCut<T>::EQ, _CMenv->refvar()[ivar], _POLXvar[ivar],  1.,
                                       _POLXmon[mon], -_CMenv->scalvar()[ivar] );
 #else
@@ -1678,77 +1822,101 @@ NLPBND<T,MIP>::_set_cuts_SCQ
     }
   }
 
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
   std::cout << "Monomial map:" << std::endl;
   for( auto const& [mon,polvar] : _POLXmon )
-    std::cout << " " << mon.display(options.SQUAD.BASIS) << " == " << polvar << "(" << polvar.var() << ")" << std::endl;
+    std::cout << " " << mon.display(options.SQUAD.BASIS) << " == " << polvar
+              << " (DAG: " << polvar.var() << ")" << std::endl;
   std::cout << _POLenv;
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 
   // Add cuts for entries in MatFct
-  unsigned ifct = 0;
+  auto itF = ndxF.begin();
   for( auto const& mat : QForm.MatFct() ){
-    // Advance function counter to next nonlinear function
-    for( ; options.LINCTRSEP && _Flin.find( ifct ) != _Flin.end(); ++ifct ){
-      assert( ifct < _nF );
-    }
+    assert( itF != ndxF.end() );
     PolCut<T> *cutF1 = nullptr, *cutF2 = nullptr;
-    if( Op<T>::diam(_CMFvar[ifct].R()) == 0. ){
-      cutF1 = *_POLenv.add_cut( PolCut<T>::EQ, 0., _POLFvar[ifct], -1. );
+    if( Op<T>::diam(_CMFvar[*itF].R()) == 0. ){
+      cutF1 = *_POLenv.add_cut( PolCut<T>::EQ, 0., _POLFvar[*itF], -1. );
     }
     else{
-      cutF1 = *_POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(_CMFvar[ifct].R()), _POLFvar[ifct], -1. );
-      cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(_CMFvar[ifct].R()), _POLFvar[ifct], -1. );
+      cutF1 = *_POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(_CMFvar[*itF].R()), _POLFvar[*itF], -1. );
+      cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(_CMFvar[*itF].R()), _POLFvar[*itF], -1. );
     }
     // Separate quadratic term
-    //_add_to_cuts( mat, cutF1, cutF2 );
     _add_to_cuts( QForm, mat, cutF1, cutF2 );
-#ifdef MC__NLPBND_DEBUG_SCQ
-    std::cout << "Main cuts for function F[" << ifct << "]: " << *cutF1 << std::endl;
+#ifdef MC__MINLPBND_DEBUG_SCQ
+    std::cout << "Main cuts for function F[" << *itF << "]: " << *cutF1 << std::endl;
     if( cutF2 )  std::cout << "                             " << *cutF2 << std::endl;
 #endif
-    ++ifct;
+    ++itF;
   }
 
   // Check entries in MatRed
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
   unsigned ired = 0;
 #endif
   for( auto const& mat : QForm.MatRed() ){
     PolCut<T> *cutR = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
     //_add_to_cuts( mat, cutR );
     _add_to_cuts( QForm, mat, cutR );
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
     std::cout << "Reduction cuts #" << ++ired << ": " << *cutR << std::endl;
 #endif
   }
 
   // Check entries in MatPSD
   if( options.PSDQUADCUTS ){
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
     unsigned ipsd = 0;
 #endif
-    QForm.tighten();
+    QForm.tighten( options.PSDQUADCUTS>1? true: false );
     for( auto const& mat : QForm.MatPSD() ){
       PolCut<T> *cutP = *_POLenv.add_cut( PolCut<T>::GE, 0. );
       _add_to_cuts( mat, cutP );
       //_add_to_cuts( QForm, mat, cutR );
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
       std::cout << "PSD cuts #" << ++ipsd << ": " << *cutP << std::endl;
 #endif
     }
   }
 
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
  std::cout << _POLenv;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 }
 
 template <typename T, typename MIP>
+inline T
+MINLPBND<T,MIP>::_bnd_mon
+( SPolyMon const& mon )
+const
+{
+  // compute unscaled power monomial bound
+  T bndmon( 1e0 );
+  for( auto const& [ivar,iord] : mon.expr )
+    bndmon *= Op<T>::pow( _POLXvar[ivar].range(), (int)iord );
+  return bndmon;
+}
+
+template <typename T, typename MIP>
+inline FFVar const&
+MINLPBND<T,MIP>::_get_mon
+( SPolyMon const& mon )
+{
+  auto itXmapmon = _Xmon.find( mon );
+  if( itXmapmon != _Xmon.end() ) return itXmapmon->second;
+
+  FFVar Xmon( _dag );
+  auto itXmon = _dag->Vars().find( &Xmon );
+  _Xmon[mon] = **itXmon;
+  return **itXmon;
+}
+
+template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_add_to_cuts
+MINLPBND<T,MIP>::_add_to_cuts
 ( SQuad const& QForm, SQuad::t_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   // DC decomposition not required
@@ -1782,7 +1950,7 @@ NLPBND<T,MIP>::_add_to_cuts
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_add_to_cuts
+MINLPBND<T,MIP>::_add_to_cuts
 ( SQuad::t_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   for( auto const& [ijmon,coef] : mat ){
@@ -1815,7 +1983,7 @@ NLPBND<T,MIP>::_add_to_cuts
 
 template <typename T, typename MIP>
 inline T
-NLPBND<T,MIP>::_get_range
+MINLPBND<T,MIP>::_get_range
 ( SQuad::t_SQuad const& mat )
 {
   T range = 0.;
@@ -1837,7 +2005,7 @@ NLPBND<T,MIP>::_get_range
 
 template <typename T, typename MIP>
 inline PolVar<T>
-NLPBND<T,MIP>::_append_cuts_dcdec
+MINLPBND<T,MIP>::_append_cuts_dcdec
 ( SQuad::t_SPolyMonCoef const& eigterm )
 {
   // New auxiliary variable and cut for linear combition of monomials
@@ -1864,7 +2032,7 @@ NLPBND<T,MIP>::_append_cuts_dcdec
 
 template <typename T, typename MIP>
 inline PolVar<T>
-NLPBND<T,MIP>::_append_cuts_monprod
+MINLPBND<T,MIP>::_append_cuts_monprod
 ( SQuad::key_SQuad const& ijmon )
 {
   // Seach for pair ijmon in _POLXprodmon
@@ -1877,7 +2045,7 @@ NLPBND<T,MIP>::_append_cuts_monprod
       PolVar<T> POLprod( &_POLenv, Op<T>::sqr( Xmon1.range() ), true );
       _POLenv.append_cuts_SQR( POLprod, Xmon1 );
       itijmon = ( _POLXprodmon.insert( std::make_pair( ijmon, POLprod ) ) ).first;
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
       //std::cout << POLprod << std::endl;
       std::cout << "Auxiliary variable " << itijmon->second << ": " << Xmon1 << "^2" << std::endl;
 #endif
@@ -1888,7 +2056,7 @@ NLPBND<T,MIP>::_append_cuts_monprod
       PolVar<T> POLprod( &_POLenv, Xmon1.range() * Xmon2.range(), true );
       _POLenv.append_cuts_TIMES( POLprod, Xmon1, Xmon2 );
       itijmon = ( _POLXprodmon.insert( std::make_pair( ijmon, POLprod ) ) ).first;
-#ifdef MC__NLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCQ
       //std::cout << POLprod << std::endl;
       std::cout << "Auxiliary variable " << itijmon->second << ": " << Xmon1 << "·" << Xmon2 << std::endl;
 #endif
@@ -1900,7 +2068,7 @@ NLPBND<T,MIP>::_append_cuts_monprod
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_cuts_SCDRL
+MINLPBND<T,MIP>::_set_cuts_SCDRL
 ()
 {
 //  // reset bases maps
@@ -2144,7 +2312,7 @@ NLPBND<T,MIP>::_set_cuts_SCDRL
 //    }
 //  }
 
-#ifdef MC__NLPBND_CHEBCUTS_DEBUG
+#ifdef MC__MINLPBND_CHEBCUTS_DEBUG
   std::cout << _POLenv;
   { int dum; std::cin >> dum; }
 #endif
@@ -2152,7 +2320,7 @@ NLPBND<T,MIP>::_set_cuts_SCDRL
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::_set_cuts_ISM
+MINLPBND<T,MIP>::_set_cuts_ISM
 ()
 {
 //  // Auxiliary variables in polyhedral image are defined locally 
@@ -2287,7 +2455,7 @@ NLPBND<T,MIP>::_set_cuts_ISM
 template <typename T, typename MIP>
 template <typename U>
 inline double
-NLPBND<T,MIP>::_dH
+MINLPBND<T,MIP>::_dH
 ( const U&X, const U&Y )
 {
   return std::max( std::fabs(Op<U>::l(X)-Op<U>::l(Y)),
@@ -2297,7 +2465,7 @@ NLPBND<T,MIP>::_dH
 template <typename T, typename MIP>
 template <typename U>
 inline double
-NLPBND<T,MIP>::_reducrel
+MINLPBND<T,MIP>::_reducrel
 ( const unsigned n, const U*Xred, const U*X )
 {
   double drel = 0.;
@@ -2309,7 +2477,7 @@ NLPBND<T,MIP>::_reducrel
 template <typename T, typename MIP>
 template <typename U>
 inline double
-NLPBND<T,MIP>::_reducrel
+MINLPBND<T,MIP>::_reducrel
 ( const unsigned n, const U*Xred, const U*X, const U*X0 )
 {
   double drel = 0.;
@@ -2320,13 +2488,13 @@ NLPBND<T,MIP>::_reducrel
 
 template <typename T, typename MIP>
 inline void
-NLPBND<T,MIP>::Options::display
+MINLPBND<T,MIP>::Options::display
 ( std::ostream&out ) const
 {
-  // Display NLPBND Options
+  // Display MINLPBND Options
   out << std::left;
   out << std::setw(60) << "  POLYHEDRAL RELAXATION APPROACH" << "[";
-  for( auto && meth : RELMETH ){
+  for( auto && meth : RELAXMETH ){
    switch( meth ){
     case DRL:    out << " DRL";    break;
     case SCDRL:  out << " SCDRL";  break;
@@ -2355,7 +2523,7 @@ NLPBND<T,MIP>::Options::display
       << (NCOCUTS?"Y\n":"N\n");
   if( CMODCUTS ){
     out << std::setw(60) << "  METHOD FOR NCO CUTS";
-    switch( NCOMETH ){
+    switch( NCOADIFF ){
      case FSA: out << "FSA\n";
      case ASA: out << "ASA\n";
     }
@@ -2373,9 +2541,6 @@ NLPBND<T,MIP>::Options::display
   out << std::setw(60) << "  THRESHOLD FOR CONSTRAINT PROPAGATION LOOP"
       << std::fixed << std::setprecision(0)
       << CPTHRES*1e2 << "%\n";
-  out << std::setw(60) << "  BACKOFF FOR CONSTRAINT PROPAGATION"
-      << std::scientific << std::setprecision(1)
-      << CPBKOFF << std::endl;
   out << std::setw(60) << "  MAXIMUM CPU TIME (SEC)"
       << std::scientific << std::setprecision(1)
       << TIMELIMIT << std::endl;

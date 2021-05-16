@@ -256,6 +256,10 @@ struct WORKER_SNOPT
   //! @brief Function testing NLP solution stationarity
   bool stationary
     ( double const GRADTOL, int const nX, int const nA, int const nG );
+
+  //! @brief Function computing NLP cost correction to compensate for infeasibility
+  double correction
+    ( int const nF, int const nX, int const ObjRow, int const nA );
 };
 
 inline
@@ -342,6 +346,7 @@ WORKER_SNOPT::finalize
   solution.x          = Xval;
   solution.ux         = Xmul;
   solution.f          = Fval;
+  assert( Fval.size() == Foff.size() );
   for( unsigned i=0; i<Foff.size(); i++ ){
     //std::cout << "Fval[" << i << "] = " << Fval[i] << std::endl;
     //std::cout << "Foff[" << i << "] = " << Foff[i] << std::endl;
@@ -415,10 +420,10 @@ WORKER_SNOPT::feasible
   }
 
   try{
-    Fval.assign( nF, 0. );
-    DAG.eval( op_F, dwk, Gndx, Fvar.data(), Fval.data(), nX, Xvar.data(), solution.x.data() );
+    solution.f.assign( nF, 0. );
+    DAG.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
     for( int iA=0; iA<nA; iA++ )
-      Fval[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
+      solution.f[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
   }
   catch(...){
     return false;
@@ -426,11 +431,11 @@ WORKER_SNOPT::feasible
   for( int i=0; i<nF; i++ ){
     if( i == ObjRow ) continue;      
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << Fval[i] << " <= " << Fupp[i] << std::endl;
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
 #endif
-    maxinfeas = Flow[i] - Fval[i];
+    maxinfeas = Flow[i] - solution.f[i];
     if( maxinfeas > CTRTOL ) return false;
-    maxinfeas = Fval[i] - Fupp[i];
+    maxinfeas = solution.f[i] - Fupp[i];
     if( maxinfeas > CTRTOL ) return false;
   }
 
@@ -461,6 +466,41 @@ WORKER_SNOPT::stationary
     if( std::fabs( gradL[i] ) > GRADTOL ) return false;
   }
   return true;
+}
+
+inline
+double
+WORKER_SNOPT::correction
+( int const nF, int const nX, int const ObjRow, int const nA )
+{
+  double costcorr = 0.;
+  for( int i=0; i<nX; i++ ){
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+    std::cout << "X[" << i << "]: " << Xlow[i] << " <= " << solution.x[i] << " <= " << Xupp[i] << std::endl;
+#endif
+    costcorr += std::max( Xlow[i] - solution.x[i], 0. ) * solution.ux[i];
+    costcorr -= std::max( solution.x[i] - Xupp[i], 0. ) * solution.ux[i];
+  }
+
+  try{
+    solution.f.assign( nF, 0. );
+    DAG.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+    for( int iA=0; iA<nA; iA++ )
+      solution.f[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
+  }
+  catch(...){
+    return false;
+  }
+  for( int i=0; i<nF; i++ ){
+    if( i == ObjRow ) continue;      
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
+#endif
+    costcorr += std::max( Flow[i] - solution.f[i], 0. ) * solution.uf[i];
+    costcorr -= std::max( solution.f[i] - Fupp[i], 0. ) * solution.uf[i];
+  }
+
+  return costcorr;
 }
 
 //! @brief C++ class for NLP solution using SNOPT and MC++
@@ -632,8 +672,8 @@ public:
   {
     //! @brief Constructor
     Options():
-      FEASTOL(1e-8), OPTIMTOL(1e-6), MAXITER(100), GRADMETH(FAD), GRADCHECK(false),
-      QPFEASTOL(1e-8), QPMAXITER(500), QPMETH(CHOL), DISPLEVEL(0), LOGFILE(),
+      FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FAD), GRADCHECK(false),
+      QPFEASTOL(1e-7), QPMAXITER(500), QPMETH(CHOL), DISPLEVEL(0), LOGFILE(),
       FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
       {}
     //! @brief Assignment operator
@@ -748,6 +788,14 @@ public:
   //! @brief Test dual feasibility of current solution point
   bool is_stationary
     ( double const GRADTOL );//, const double NUMTOL=1e-8 );
+
+  //! @brief Compute cost correction to compensate for infeasibility of current solution
+  double cost_correction
+    ();
+
+  //! @brief Compute cost correction to compensate for infeasibility
+  double cost_correction
+    ( double const* x, double const* ux, double const* uf );
 
   //! @brief Get solution info
   SOLUTION_OPT const& solution() const
@@ -874,7 +922,8 @@ NLPSLV_SNOPT::setup
   _Fvar.clear();
   _Flow.clear();
   _Fupp.clear();
-
+  _Foff.clear();
+  
   int ndxF = 0;
   if( std::get<0>(_obj).size() ){   // First, cost function
     _Fvar.push_back( std::get<1>(_obj)[0] );
@@ -1543,6 +1592,33 @@ NLPSLV_SNOPT::is_stationary
   _resize_workers( noth );
   _worker[th]->solution = _solution;
   return _worker[th]->stationary( GRADTOL, _nX, _nA, _nG );
+}
+
+inline
+double
+NLPSLV_SNOPT::cost_correction
+( const double*x, const double*ux, const double*uf )
+{
+  // Initialize main thread
+  const int th = 0, noth = 1;
+  _resize_workers( noth );
+  _set_worker( _worker[th] );
+  _worker[th]->solution.x.assign( x, x+_nX );
+  _worker[th]->solution.ux.assign( ux, ux+_nX );
+  _worker[th]->solution.uf.assign( uf, uf+_nF );
+  return _worker[th]->correction( _nF, _nX, _ObjRow, _nA );
+}
+
+inline
+double
+NLPSLV_SNOPT::cost_correction
+()
+{
+  // Initialize main thread
+  const int th = 0, noth = 1;
+  _resize_workers( noth );
+  _worker[th]->solution = _solution;
+  return _worker[th]->correction( _nF, _nX, _ObjRow, _nA );
 }
 
 } // end namescape mc

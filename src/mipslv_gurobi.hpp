@@ -72,12 +72,13 @@ public:
 
   //! @brief MIP solution status
   enum STATUS{
-     OPTIMAL=0,		//!< Optimal solution found within tolerances
-     INFEASIBLE,	//!< Infeasible, but not unbounded
-     INFORUNBND,	//!< Infeasible or unbounded
-     UNBOUNDED,     //!< Unbounded
-     TIMELIMIT,	    //!< Time limit reached
-     UNDEFINED  	//!< Undefined
+     OPTIMAL=0,   //!< Optimal solution found within tolerances
+     SUBOPTIMAL,  //!< Unable to satisfy optimality tolerances, but sub-optimal solution available
+     INFEASIBLE,  //!< Infeasible, but not unbounded
+     INFORUNBND,  //!< Infeasible or unbounded
+     UNBOUNDED,   //!< Unbounded
+     TIMELIMIT,   //!< Time limit reached
+     OTHER        //!< Undefined
   };
   
   //! @brief MIP options
@@ -88,7 +89,8 @@ public:
       ALGO( -1 ), PRESOLVE( -1 ), CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
       FEASTOL( 1e-7 ), OPTIMTOL( 1e-7 ), MIPRELGAP( 1e-5 ), MIPABSGAP( 1e-5 ),
       HEURISTICS( 0.05 ), PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
-      PWLRELGAP( 1e-3 ), TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ), OUTPUTFILE()
+      PWLRELGAP( 1e-3 ), TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
+      LOGFILE(), OUTPUTFILE()
       {}
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
@@ -108,6 +110,7 @@ public:
         TIMELIMIT   = options.TIMELIMIT;
         THREADS     = options.THREADS;
         DISPLEVEL   = options.DISPLEVEL;
+        LOGFILE     = options.LOGFILE;
         OUTPUTFILE  = options.OUTPUTFILE;
         return *this ;
       }
@@ -143,6 +146,8 @@ public:
     unsigned THREADS;
     //! @brief Enables or disables solver output. The default value of 1 shows the solver iterations and results.
     int DISPLEVEL;
+    //! @brief The name of the Gurobi log file. Modifying this parameter closes the current log file and opens the specified file. Use an empty string for no log file.
+    std::string LOGFILE;
     //! @brief The name of the file to be written before solving the model. Valid suffixes are .mps, .rew, .lp, or .rlp for writing the model.
     std::string OUTPUTFILE;
     //! @brief Display
@@ -224,7 +229,7 @@ public:
       auto itv = _MIPvar.find( const_cast<PolVar<T>*>(&X) );
       if( itv != _MIPvar.end() )
         return itv->second.set( GRB_DoubleAttr_Start, val );
-      return _add_var( &X ).first.set( GRB_DoubleAttr_Start, val );
+      return _add_var( &X ).first->second.set( GRB_DoubleAttr_Start, val );
     }
 
   //! @brief Value of PolImg variable <a>X</a> after last MIP call
@@ -254,12 +259,14 @@ public:
       return _GRBmodel->get( GRB_DoubleAttr_ObjVal );
     }
 
-  //! @brief Optimal cost value after last MIP call
+  //! @brief Optimal cost bound after last MIP call
   double get_objective_bound
     ()
     const
     {
-      return _GRBmodel->get( GRB_DoubleAttr_ObjBound );
+      return _GRBmodel->get( GRB_IntAttr_IsMIP )?
+             _GRBmodel->get( GRB_DoubleAttr_ObjBound ):
+             _GRBmodel->get( GRB_DoubleAttr_ObjVal );
     }
 
   //! @brief Status after last MIP call
@@ -267,14 +274,15 @@ public:
     ()
     const
     {
-      if( _GRBexcpt ) return UNDEFINED;
+      if( _GRBexcpt )         return OTHER;
       switch( _GRBmodel->get( GRB_IntAttr_Status ) ){
        case GRB_OPTIMAL:      return OPTIMAL;
+       case GRB_SUBOPTIMAL:   return SUBOPTIMAL;
        case GRB_INFEASIBLE:   return INFEASIBLE;
        case GRB_INF_OR_UNBD:  return INFORUNBND;
        case GRB_UNBOUNDED:    return UNBOUNDED;
        case GRB_TIME_LIMIT:   return TIMELIMIT;
-       default:               return UNDEFINED;
+       default:               return OTHER;
       }
     }
 
@@ -361,6 +369,8 @@ MIPSLV_GUROBI<T>::_set_options
 ()
 {
   // Gurobi options
+  _GRBmodel->getEnv().set( GRB_IntParam_LogToConsole,      options.LOGFILE!=""? 0:1 );
+  _GRBmodel->getEnv().set( GRB_StringParam_LogFile,        options.LOGFILE );
   _GRBmodel->getEnv().set( GRB_IntParam_OutputFlag,        options.DISPLEVEL>0?1:0 );
   _GRBmodel->getEnv().set( GRB_DoubleParam_TimeLimit,      options.TIMELIMIT );
   _GRBmodel->getEnv().set( GRB_IntParam_Method,            options.ALGO );
