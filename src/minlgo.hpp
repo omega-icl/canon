@@ -1057,7 +1057,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.POLIMG.SANDWICH_RTOL   = MINLPBND.POLIMG.SANDWICH_RTOL   = 1e-3;
   MINLPPRE.POLIMG.SANDWICH_MAXCUT = MINLPBND.POLIMG.SANDWICH_MAXCUT = 5;
   MINLPPRE.OBBTLIN                = MINLPBND.OBBTLIN                = 2;
-  MINLPPRE.OBBTCONT                                                 = 0;
+  MINLPPRE.OBBTCONT                                                 = 1;
   MINLPPRE.OBBTMAX                                                  = 10;
   MINLPBND.OBBTCONT                                                 = 1;
   MINLPBND.OBBTMAX                                                  = 10;
@@ -1066,10 +1066,10 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.OBBTMIG                = MINLPBND.OBBTMIG                = 1e-6;
   MINLPPRE.CPMAX                  = MINLPBND.CPMAX                  = 10;
   MINLPPRE.CPTHRES                = MINLPBND.CPTHRES                = 0.;
-  MINLPPRE.CMODPROP               = MINLPBND.CMODPROP               = 10;
+  MINLPPRE.CMODPROP               = MINLPBND.CMODPROP               = 15;
   MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR      = 1e-13;
-  MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::CHEB;
-  MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 1;
+  MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::MONOM;
+  MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
   MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS               = 0;
   MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS            = 1;
   MINLPPRE.DCQUADCUTS             = MINLPBND.DCQUADCUTS             = 0;

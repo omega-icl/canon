@@ -8,10 +8,12 @@ CVRTOL      = 1e-3
 FEASTOL     = 1e-5
 # Feasibility correction of incumbent
 CORRINC     = 1
+# Add cut at incumbent value
+CUTINC      = 0
 # Add breakpoint at incumbent
-BKPTINC     = 0
+BKPTINC     = 1
 # Maximal number of refinements/iterations
-MAXITER     = 10
+MAXITER     = 1
 # Wall-time limit in seconds
 TIMELIMIT   = 72e2
 # General display level
@@ -32,9 +34,9 @@ PRERELAXNLIN     = 1
 # Optimization-based bounds tightening approach during presolve - 0: linear only; 1: linear first; 2: joint linear & nonlinear
 PREOBBTLIN       = 1
 # Continuous relaxation for optimization-based bounds tightening during presolve
-PREOBBTCONT      = 0
+PREOBBTCONT      = 1
 # Maximum rounds of optimization-based bounds tightening during presolve
-PREOBBTMAX       = 10
+PREOBBTMAX       = 5
 # Threshold for optimization-based bounds tightening repeats during presolve - minimum relative reduction in any variable
 PREOBBTTHRES     = 5e-2
 # Backoff of tightened variable bounds to compensate for numerical errors during presolve
@@ -69,7 +71,7 @@ OBBTLIN          = 2
 # Continuous relaxation for optimization-based bounds tightening during main iteration
 OBBTCONT         = 1
 # Maximum rounds of optimization-based bounds tightening during main iteration
-OBBTMAX          = 10
+OBBTMAX          = 0
 # Threshold for optimization-based bounds tightening repeats during pmain iteration - minimum relative reduction in any variable
 OBBTTHRES        = 5e-2
 # Backoff of tightened variable bounds to compensate for numerical errors during main iteration
@@ -83,7 +85,7 @@ MIPABSGAP        = 1e-5
 # Display level of MIP solver during main iteration - 0: no display; >0: display
 MIPDISPLEVEL     = 1
 # Output file for MIP model during main iteration
-MIPOUTPUTFILE    = 
+MIPOUTPUTFILE    = canon.lp
 # Number of threads used by MIP solver during main iteration - 0: automatic
 MIPMAXTHREAD     = 0
 
@@ -94,7 +96,7 @@ CPMAX            = 10
 # Threshold for constraint propagation repeats - minimum relative reduction in any variable
 CPTHRES          = 0e0
 # Maximum order of sparse polynomial model
-CMODPROP         = 10
+CMODPROP         = 15
 # Monomial minimal coefficient in sparse polynomial model
 MONMIG           = 1e-10
 # Monomial basis in sparse quadratic form - 0: monomial; 1: Chebyshev
