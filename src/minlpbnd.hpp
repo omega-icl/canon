@@ -1739,10 +1739,12 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
 #ifndef MC__MINLPBND_DEBUG_SCQ
     QForm.process( coefmon );
 #else
-    std::cout << _CMFvar[j].display( coefmon, options.SQUAD.BASIS );
     double viol = QForm.process( coefmon, true );
-    std::cout << "violation: " << viol << std::endl;
-    if( viol > 1e-15 ){ int dum; std::cout << "PAUSED --"; std::cin >> dum; }
+    if( viol > 1e-15 ){
+      std::cout << _CMFvar[j].display( coefmon, options.SQUAD.BASIS );
+      std::cout << "violation: " << viol << std::endl;
+      int dum; std::cout << "PAUSED --"; std::cin >> dum;
+    }
 #endif
   }
 #ifdef MC__MINLPBND_DEBUG_SCQ

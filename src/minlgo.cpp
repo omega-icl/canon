@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <csignal>
 
 #ifdef MC__USE_PROFIL
  #include "mcprofil.hpp"
@@ -49,6 +50,17 @@
 #endif
 
 #include "minlgo.hpp"
+mc::MINLGO<I,NLP,MIP> MINLP;
+
+static
+void
+signalHandler
+( int signum )
+{
+  std::cout << "Interrupt signal (" << signum << ") received.\n";
+  MINLP.interrupt();
+  exit( signum );  
+}
 
 static
 std::string header_usage
@@ -65,7 +77,7 @@ std::string header_usage
 int main
 ( int argc, char* argv[] )
 {
-  mc::MINLGO<I,NLP,MIP> MINLP;
+  signal( SIGINT, signalHandler );
 
   ////////////////////////////////////////////////////////////
   // PARSE COMMAND LINE

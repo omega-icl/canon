@@ -10,7 +10,7 @@ incobjs = base_ae.hpp base_opt.hpp base_nlp.hpp \
           nlpslv_ipopt.hpp nlpslv_snopt.hpp mipslv_gurobi.hpp \
           minlpslv.hpp minlpbnd.hpp minlgo.hpp
 
-binobjs = minlgo.o gmomcc.o gevmcc.o optcc.o palmcc.o
+binobjs = minlgo.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 
 libobjs = 
 

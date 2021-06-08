@@ -151,6 +151,8 @@ public:
     int         PRESOLVE;
     //! @brief Correct the incumbent for feasibility using multipliers
     bool        CORRINC;
+    //! @brief Add a cut at incumbent value
+    bool        CUTINC;
     //! @brief Add a break-point at incumbent
     bool        BKPTINC;
     //! @brief Feasibility tolerance 
@@ -441,6 +443,12 @@ public:
     const
     { return _incumbent; }
 
+  //! @brief Interrupt solve process
+  void interrupt
+    ()
+    { _MINLPSLV.MIPsolver().terminate();
+      _MINLPBND.solver()->terminate(); }
+
 private:
   //! @brief Private methods to block default compiler methods
   MINLGO
@@ -628,46 +636,46 @@ MINLGO<T,NLP,MIP>::presolve
 #endif
 
   // Compute relaxation -- COULD EXIT HERE, BENEFIT OF EXTRA FEASIBILITY PUMP?!?
-  _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-  _MINLPBND.relax( nullptr, nullptr, nullptr, 0, false, false ); // reset cuts but not variables or bounds 
-  switch( _MINLPBND.solver()->get_status() ){
-    case MIP::STATUS::OPTIMAL:
-    case MIP::STATUS::SUBOPTIMAL:
-      _Zrel = _MINLPBND.solver()->get_objective_bound();
-      for( unsigned i=0; i<_var.size(); i++ )
-        _Xrel[i] = _MINLPBND.solver()->get_variable( _var[i] );
-      break;
-    case MIP::STATUS::INFEASIBLE:
-    case MIP::STATUS::INFORUNBND:
-      stats.walltime_preproc += stats.walltime( _tstart );
-      stats.walltime_all     += stats.walltime( _tstart );
-      return STATUS::INFEASIBLE;
-    case MIP::STATUS::UNBOUNDED:
-      stats.walltime_preproc += stats.walltime( _tstart );
-      stats.walltime_all     += stats.walltime( _tstart );
-      return STATUS::UNBOUNDED;
-    case MIP::STATUS::TIMELIMIT:
-      stats.walltime_preproc += stats.walltime( _tstart );
-      stats.walltime_all     += stats.walltime( _tstart );
-      return STATUS::INTERRUPTED;
-    case MIP::STATUS::OTHER:
-    default:
-      stats.walltime_preproc += stats.walltime( _tstart );
-      stats.walltime_all     += stats.walltime( _tstart );
-      return STATUS::FAILED;
-  }
+  if( options.PRESOLVE > 1 ){
+    _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+    _MINLPBND.relax( nullptr, nullptr, nullptr, 0, false, false ); // reset cuts but not variables or bounds 
+    switch( _MINLPBND.solver()->get_status() ){
+      case MIP::STATUS::OPTIMAL:
+      case MIP::STATUS::SUBOPTIMAL:
+        _Zrel = _MINLPBND.solver()->get_objective_bound();
+        for( unsigned i=0; i<_var.size(); i++ )
+          _Xrel[i] = _MINLPBND.solver()->get_variable( _var[i] );
+        break;
+      case MIP::STATUS::INFEASIBLE:
+      case MIP::STATUS::INFORUNBND:
+        stats.walltime_preproc += stats.walltime( _tstart );
+        stats.walltime_all     += stats.walltime( _tstart );
+        return STATUS::INFEASIBLE;
+      case MIP::STATUS::UNBOUNDED:
+        stats.walltime_preproc += stats.walltime( _tstart );
+        stats.walltime_all     += stats.walltime( _tstart );
+        return STATUS::UNBOUNDED;
+      case MIP::STATUS::TIMELIMIT:
+        stats.walltime_preproc += stats.walltime( _tstart );
+        stats.walltime_all     += stats.walltime( _tstart );
+        return STATUS::INTERRUPTED;
+      case MIP::STATUS::OTHER:
+      default:
+        stats.walltime_preproc += stats.walltime( _tstart );
+        stats.walltime_all     += stats.walltime( _tstart );
+        return STATUS::FAILED;
+    }
 
 #ifdef MC__MINLGO_PREPROCESS_DEBUG
-  std::cout << std::scientific << std::setprecision(4);
-  std::cout << "Relaxation bound: " << _Zrel << std::endl
-            << "@";
-  for( unsigned i=0; i<_var.size(); i++ ) std::cout << " " << _Xrel[i];
-  std::cout << std::endl;
-  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+    std::cout << std::scientific << std::setprecision(4);
+    std::cout << "Relaxation bound: " << _Zrel << std::endl
+              << "@";
+    for( unsigned i=0; i<_var.size(); i++ ) std::cout << " " << _Xrel[i];
+    std::cout << std::endl;
+    { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 
-  // Apply MINLP feasibility pump from relaxation optimum and using tightened bounds
-  if( options.PRESOLVE > 1 ){
+    // Apply MINLP feasibility pump from relaxation optimum and using tightened bounds
     if( _varini.empty() )
       _varini.resize( _var.size() );
     for( unsigned i=0; i<_var.size(); i++ )
@@ -866,7 +874,8 @@ MINLGO<T,NLP,MIP>::_solve_relax
   
   // Solve master MIP problem - do NOT reset bounds, otherwise reinitializing lifted variable bounds
   auto tMIP = stats.start();
-  int flag = _MINLPBND.relax( _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, _incumbent.x.data(), 0, false, _iter>1? false: true );
+  int flag = _MINLPBND.relax( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
+                              _incumbent.x.data(), 0, false, _iter>1? false: true );
   stats.walltime_slvrel += stats.walltime( tMIP );
 
   return flag;
@@ -1021,6 +1030,7 @@ inline
 MINLGO<T,NLP,MIP>::Options::Options()
 : PRESOLVE( 1 ),
   CORRINC( 1 ),
+  CUTINC( 0 ),
   BKPTINC( 0 ),
   FEASTOL( 1e-5 ),
   CVATOL( 1e-5 ),
@@ -1095,6 +1105,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "CVRTOL",    opt::value<double>(&CVRTOL),            "convergence relative tolerance" )
     ( "FEASTOL",   opt::value<double>(&FEASTOL),           "feasibility tolerance" )
     ( "CORRINC",   opt::value<bool>(&CORRINC),             "feasibility correction of incumbent using KKT multipliers" )
+    ( "CUTINC",    opt::value<bool>(&CUTINC),              "add cut at current incumbent in relaxation" )
     ( "BKPTINC",   opt::value<bool>(&BKPTINC),             "add breakpoint at current incumbent in piecewise relaxation" )
     ( "MAXITER",   opt::value<unsigned>(&MAXITER),         "maximal number of iterations" )
     ( "TIMELIMIT", opt::value<double>(&TIMELIMIT),         "runtime limit" )
@@ -1176,6 +1187,7 @@ MINLGO<T,NLP,MIP>::Options::operator=
 {
   PRESOLVE   = other.PRESOLVE;
   CORRINC    = other.CORRINC;
+  CUTINC     = other.CUTINC;
   BKPTINC    = other.BKPTINC;
   FEASTOL    = other.FEASTOL;
   CVATOL     = other.CVATOL;
@@ -1285,6 +1297,8 @@ MINLGO<T,NLP,MIP>::Options::display
      << FEASTOL << std::endl;
   os << std::setw(60) << "  FEASIBILITY CORRECTION"
      << (CORRINC?'Y':'N') << std::endl;
+  os << std::setw(60) << "  INCUMBENT CUT"
+     << (CUTINC?'Y':'N') << std::endl;
   os << std::setw(60) << "  INCUMBENT BREAKPOINT"
      << (BKPTINC?'Y':'N') << std::endl;
   os << std::setw(60) << "  MAXIMAL ITERATIONS"

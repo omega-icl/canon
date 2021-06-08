@@ -21,6 +21,8 @@ CANON depends on the following third-party libraries:
 - <A href="https://projects.coin-or.org/MCpp">MC++</A> (version 2.1) for construction, manipulation and bounding of factorable functions
 - <A href="https://web.stanford.edu/group/SOL/snopt.htm">SNOPT</A> or <A href="https://projects.coin-or.org/Ipopt">IPOPT</A> for local solution of NLP problems
 - <A href="http://www.gurobi.com/">Gurobi</A> for solution of LP/QP/MILP/MIQP/MIQCQP problems
+- <A href="https://www.boost.org/">Boost</A> for managing the commandline and option files as well as random sampling
+- <A href="hhttps://www.gams.com/">GAMS</A> for importing model files written in the GAMS language
 .
 
 On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <TT>INSTALL</TT>, <TT>LICENSE</TT> and <TT>README</TT>, as well as 3 subdirectories:

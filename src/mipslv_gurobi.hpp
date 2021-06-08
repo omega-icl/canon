@@ -60,8 +60,9 @@ public:
   //! @brief Constructor
   MIPSLV_GUROBI
     ()
-    : _GRBenv( new GRBEnv() ), _GRBmodel( 0 ), _POLenv( 0 )
-    {}
+    : _GRBenv( new GRBEnv( true ) ), _GRBmodel( nullptr ), _POLenv( nullptr )
+    { _GRBenv->set( GRB_IntParam_LogToConsole, 0 );
+      _GRBenv->start(); }
 
   //! @brief Destructor
   virtual ~MIPSLV_GUROBI()
@@ -291,6 +292,11 @@ public:
     ()
     const
     { return _GRBmodel; }
+
+  //! @brief Terminate solve process
+  void terminate
+    ()
+    { if( _GRBmodel ) _GRBmodel->terminate(); }
   /** @} */
 
 protected:
