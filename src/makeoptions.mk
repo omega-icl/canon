@@ -2,7 +2,7 @@
 
 PATH_MC = $(HOME)/Programs/mcpp
 LIB_MC  = -llapack -lblas -lmc13 -lmc21 -lmc33 -lgfortran
-INC_MC  = -I$(PATH_MC)/src/mc -I$(PATH_MC)/src/3rdparty/fadbad++ -I$(PATH_MC)/src/3rdparty/cpplapack-2015.05.11-1/include
+INC_MC  = -I$(PATH_MC)/src/mc -I$(PATH_MC)/src/3rdparty/fadbad++ -I$(PATH_MC)/src/3rdparty/cpplapack-2015.05.11-1/include -I$(PATH_MC)/src/3rdparty/boost
 FLAG_MC = -Wno-misleading-indentation -Wno-unknown-pragmas -DMC__USE_HSL -DMC__USE_PROFIL
 
 PATH_PROFIL = /opt/Profil-2.0.8
@@ -48,7 +48,7 @@ LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_g++5.2 -lgurobi91 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 
-PATH_GAMS = /opt/gams/gams32.2_linux_x64_64_sfx
+PATH_GAMS = /opt/gams/gams35.1_linux_x64_64_sfx
 LIB_GAMS  = 
 INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"
@@ -61,7 +61,7 @@ INC_DEP  = $(INC_MC) $(INC_PROFIL) $(INC_FILIB) $(INC_BOOST) $(INC_MIP) $(INC_NL
 
 DEBUG = -g
 #PROF = -pg
-#OPTIM = -Ofast
+OPTIM = -Ofast
 WARN  = -Wall
 CPP17 = -std=c++17
 
