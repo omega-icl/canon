@@ -1071,6 +1071,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::MONOM;
   MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
   MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS               = 0;
+  MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC            = 1;
   MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS            = 1;
   MINLPPRE.DCQUADCUTS             = MINLPBND.DCQUADCUTS             = 0;
   MINLPPRE.NCOCUTS                = MINLPBND.NCOCUTS                = 0;
@@ -1147,6 +1148,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.MONMIG",        opt::value<double>(&MINLPBND.CMODEL.MIN_FACTOR),        "monomial minimal coefficient in sparse polynomial model" )
     ( "MINLPBND.MONBASIS",      opt::value<unsigned>(&MINLPBND.SQUAD.BASIS),            "monomial basis in sparse quadratic form" )
     ( "MINLPBND.MONSCALE",      opt::value<bool>(&MINLPBND.MONSCALE),                   "monomial scaling in sparse quadratic form" )
+    ( "MINLPBND.REDQUADCUTS",   opt::value<bool>(&MINLPBND.SQUAD.REDUC),                "add redundant cuts within quadratisation" )
     ( "MINLPBND.PSDQUADCUTS",   opt::value<unsigned>(&MINLPBND.PSDQUADCUTS),            "add PSD cuts within quadratisation" )
     ( "MINLPBND.DCQUADCUTS",    opt::value<bool>(&MINLPBND.DCQUADCUTS),                 "add DC cuts within quadratisation" )
     ( "MINLPBND.RRLTCUTS",      opt::value<bool>(&MINLPBND.RRLTCUTS),                   "add reduced RLT cuts" )
@@ -1266,6 +1268,7 @@ MINLGO<T,NLP,MIP>::Options::read
   if( _USRMAP.count( "MINLPBND.MONMIG"       ) ) MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR;
   if( _USRMAP.count( "MINLPBND.MONBASIS"     ) ) MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS;
   if( _USRMAP.count( "MINLPBND.MONSCALE"     ) ) MINLPPRE.MONSCALE               = MINLPBND.MONSCALE;
+  if( _USRMAP.count( "MINLPBND.REDQUADCUTS"  ) ) MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC;
   if( _USRMAP.count( "MINLPBND.PSDQUADCUTS"  ) ) MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS;
   if( _USRMAP.count( "MINLPBND.DCQUADCUTS"   ) ) MINLPPRE.DCQUADCUTS             = MINLPBND.DCQUADCUTS;
   if( _USRMAP.count( "MINLPBND.RRLTCUTS"     ) ) MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS;

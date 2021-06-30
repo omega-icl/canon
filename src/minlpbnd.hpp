@@ -342,10 +342,10 @@ public:
       ISM     //!< Interval superposition model relaxations, controlled by parameters ISMDIV
     };
     //! @brief Reduced-space strategy
-    enum REDUC{
-      NOREDUC=0, //!< Do not use Chebyshev-reduction constraints
-      APPEND	 //!< Append Chebyshev-reduction constraints to the other constraints
-    };
+    //enum REDUC{
+    //  NOREDUC=0, //!< Do not use Chebyshev-reduction constraints
+    //  APPEND	 //!< Append Chebyshev-reduction constraints to the other constraints
+    //};
     //! @brief Sensitivity strategy
     enum SENS{
       FSA=0,      //!< Forward sensitivity analysis

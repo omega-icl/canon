@@ -100,11 +100,13 @@ CMODPROP         = 15
 # Monomial minimal coefficient in sparse polynomial model
 MONMIG           = 1e-10
 # Monomial basis in sparse quadratic form - 0: monomial; 1: Chebyshev
-MONBASIS         = 1
+MONBASIS         = 0
 # Monomial scaling in sparse quadratic form
-MONSCALE         = 1
+MONSCALE         = 0
 # Add reduced RLT cuts
 RRLTCUTS         = 0
+# Add redundant cuts within quadratisation
+REDQUADCUTS      = 1
 # Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
 PSDQUADCUTS      = 1
 # Add DC cuts within quadratisation
