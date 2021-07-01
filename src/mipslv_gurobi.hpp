@@ -223,14 +223,15 @@ public:
   void solve
     ();
 
-  //! @brief Set PolImg variable <a>X</a> and intialize value
-  void set_variable
-    ( PolVar<T> const& X, double val=GRB_UNDEFINED )
+  //! @brief Set starting point and branch priority of PolImg variable <a>X</a>
+  bool set_variable
+    ( PolVar<T> const& X, double const* pval, unsigned const priority )//=GRB_UNDEFINED )
     {
       auto itv = _MIPvar.find( const_cast<PolVar<T>*>(&X) );
-      if( itv != _MIPvar.end() )
-        return itv->second.set( GRB_DoubleAttr_Start, val );
-      return _add_var( &X ).first->second.set( GRB_DoubleAttr_Start, val );
+      if( itv == _MIPvar.end() ) return false;
+      itv->second.set( GRB_DoubleAttr_Start, pval? *pval: GRB_UNDEFINED );
+      itv->second.set( GRB_IntAttr_BranchPriority, (int)priority );
+      return true;
     }
 
   //! @brief Value of PolImg variable <a>X</a> after last MIP call

@@ -344,12 +344,12 @@ protected:
   bool _is_integer_feasible
     ( double const* Xval, double const& feastol )
     const;
-
+#if 0
     //! @brief Test whether a variable vector is integer feasible
   bool _is_bounded
     ( T const* Xbnd, double const& inflim )
     const;
-
+#endif
   //! @brief Initialize display
   void _display_init
     ( std::ostream& os=std::cout );
@@ -531,6 +531,7 @@ const
   }
   return true;
 }
+#if 0
 template <typename T, typename NLP, typename MIP>
 inline bool
 MINLGO<T,NLP,MIP>::_is_bounded
@@ -545,7 +546,7 @@ const
   }
   return true;
 }
-
+#endif
 template <typename T, typename NLP, typename MIP>
 inline int
 MINLGO<T,NLP,MIP>::presolve
@@ -583,6 +584,41 @@ MINLGO<T,NLP,MIP>::presolve
   if( _MINLPSLV.is_feasible( _varini.data(), options.CORRINC? 0.: options.FEASTOL ) ){
     _incumbent = _MINLPSLV.NLPsolver().solution();
     _Zinc = _MINLPSLV.NLPsolver().solution().f[0];
+  }
+
+  // Simple bound propagation if presolve is turned off
+  if( !options.PRESOLVE ){
+    // Set presolve bounder options
+    _MINLPBND.options = options.MINLPPRE;
+    _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+
+    // Apply domain contraction for both linear and nonlinear constraints
+    switch( _MINLPBND.propagate( _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, true ) ){
+      case MIP::STATUS::INFEASIBLE:
+        stats.walltime_preproc += stats.walltime( _tstart );
+        stats.walltime_all     += stats.walltime( _tstart );
+        return STATUS::INFEASIBLE;
+      default:
+        break;
+    }
+    _Xbnd.assign( _MINLPBND.varbnd(), _MINLPBND.varbnd()+_var.size() );
+    for( unsigned i=0; Xbnd && i<_var.size(); i++ )
+      Xbnd[i] = _Xbnd[i];
+
+#ifdef MC__MINLGO_PREPROCESS_DEBUG
+    std::cout << "Reduced bounds:" << std::endl;
+    for( auto const& Xi : _Xbnd ) std::cout << " " << Xi;
+    std::cout << std::endl;
+    { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
+    // Check boundedness
+    _isbnd = _MINLPBND.bounded_domain( BASE_OPT::INF/10, true );
+  
+    stats.walltime_preproc += stats.walltime( _tstart );
+    stats.walltime_all     += stats.walltime( _tstart );
+    _ispresolved = _isbnd? true: false;
+    return( _isbnd? STATUS::SUCCESSFUL: STATUS::UNBOUNDED );
   }
 
   // Apply MINLP feasibility pump
@@ -705,7 +741,7 @@ MINLGO<T,NLP,MIP>::presolve
   }
   
   // Check boundedness
-  _isbnd = _is_bounded( _Xbnd.data(), BASE_OPT::INF/10 );
+  _isbnd = _MINLPBND.bounded_domain( BASE_OPT::INF/10, true );
   
   stats.walltime_preproc += stats.walltime( _tstart );
   stats.walltime_all     += stats.walltime( _tstart );
@@ -1056,6 +1092,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.POLIMG.AGGREG_LQ       = MINLPBND.POLIMG.AGGREG_LQ       = 0;
   MINLPPRE.POLIMG.SANDWICH_RTOL   = MINLPBND.POLIMG.SANDWICH_RTOL   = 1e-3;
   MINLPPRE.POLIMG.SANDWICH_MAXCUT = MINLPBND.POLIMG.SANDWICH_MAXCUT = 5;
+  MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM                = 0;
   MINLPPRE.OBBTLIN                = MINLPBND.OBBTLIN                = 2;
   MINLPPRE.OBBTCONT                                                 = 1;
   MINLPPRE.OBBTMAX                                                  = 10;
@@ -1133,8 +1170,9 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.RELAXQUAD",     opt::value<bool>(&MINLPBND.POLIMG.RELAX_QUAD),          "linearize quadratic terms" )
     ( "MINLPBND.RELAXMONOM",    opt::value<int>(&MINLPBND.POLIMG.RELAX_MONOM),          "linearize monomial terms" )
     ( "MINLPBND.RELAXNLIN",     opt::value<bool>(&MINLPBND.POLIMG.RELAX_NLIN),          "linearize nonlinear terms" )
-    ( "MINLPBND.SUBSETDRL",     opt::value<unsigned>(&MINLPBND.SUBSETDRL),             "exclude functions from decomposition-relaxation-linearization" )
-    ( "MINLPBND.SUBSETSCQ",     opt::value<unsigned>(&MINLPBND.SUBSETSCQ),             "exclude functions from quadratization" )
+    ( "MINLPBND.SUBSETDRL",     opt::value<unsigned>(&MINLPBND.SUBSETDRL),              "exclude functions from decomposition-relaxation-linearization" )
+    ( "MINLPBND.SUBSETSCQ",     opt::value<unsigned>(&MINLPBND.SUBSETSCQ),              "exclude functions from quadratization" )
+    ( "MINLPBND.BCHPRIM",       opt::value<unsigned>(&MINLPBND.BCHPRIM),                "Set higher branch priority to primary variables" )
     ( "MINLPBND.OBBTLIN",       opt::value<unsigned>(&MINLPBND.OBBTLIN),                "optimization-based bounds tighteneting approach" )
     ( "MINLPBND.OBBTCONT",      opt::value<bool>(&MINLPBND.OBBTCONT),                   "continuous relaxation for optimization-based bounds tighteneting" )
     ( "MINLPBND.OBBTMAX",       opt::value<unsigned>(&MINLPBND.OBBTMAX),                "maximum rounds of optimization-based bounds tighteneting" )
@@ -1261,6 +1299,7 @@ MINLGO<T,NLP,MIP>::Options::read
       case 2: MINLPPRE.RELAXMETH.insert( { MINLPPRE.DRL, MINLPPRE.SCQ } ); break;
     }
 
+  if( _USRMAP.count( "MINLPBND.BCHPRIM"      ) ) MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM;
   if( _USRMAP.count( "MINLPBND.CPMAX"        ) ) MINLPPRE.CPMAX                  = MINLPBND.CPMAX;
   if( _USRMAP.count( "MINLPBND.CPTHRES"      ) ) MINLPPRE.CPTHRES                = MINLPBND.CPTHRES;
   if( _USRMAP.count( "MINLPBND.NPOLLIFT"     ) ) MINLPPRE.NPOLLIFT               = MINLPBND.NPOLLIFT;

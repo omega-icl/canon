@@ -279,7 +279,7 @@ public:
   {
     //! @brief Constructor
     Options():
-      RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), 
+      RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), BCHPRIM(0),
       OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(false),
       CPMAX(10), CPTHRES(0.), ISMDIV(10), ISMMIPREL(true),
       CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF), MONSCALE(false),
@@ -303,6 +303,7 @@ public:
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
         SUBSETSCQ     = options.SUBSETSCQ;
+        BCHPRIM       = options.BCHPRIM;
         OBBTMIG       = options.OBBTMIG;
         OBBTMAX       = options.OBBTMAX;
         OBBTTHRES     = options.OBBTTHRES;
@@ -357,6 +358,8 @@ public:
     unsigned SUBSETDRL;
     //! @brief Exclusion from quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
     unsigned SUBSETSCQ;
+    //! @brief Set higher branch priority to primary variables (e.g. over auxiliary variables in quadratization)
+    unsigned BCHPRIM;
     //! @brief Minimum variable range for application of bounds tighteneting
     double OBBTMIG;
     //! @brief Maximum rounds of optimization-based bounds tighteneting
@@ -538,7 +541,7 @@ public:
   void refine_polrelax
     ( double const* Xinc=nullptr, bool const resetcuts=true );
 
-//  //! @brief Setup and solve polyhedral relaxation of optimization model in the variable subdomain <a>X</a>, for the incumbent value <a>Finc</a> at point <a>Xinc</a>, and applying <a>nref</a> breakpoint refinements
+  //! @brief Setup and solve polyhedral relaxation of optimization model in the variable subdomain <a>X</a>, for the incumbent value <a>Finc</a> at point <a>Xinc</a>, and applying <a>nref</a> breakpoint refinements
   int relax
     ( T const* X=nullptr, double const* Finc=nullptr, double const* Xinc=nullptr,
       unsigned const nref=0, bool const resetbnd=true, bool const reinit=true );
@@ -547,6 +550,15 @@ public:
   int reduce
     ( unsigned& nred, T* X=nullptr, double const* Finc=nullptr,
       bool const resetbnd=true, bool const reinit=true );
+
+  //! @brief Propagate bounds, starting with variable subdomain <a>X</a>, for the incumbent value <a>Finc</a>, and using the options specified in <a>MINLPBND::Options::CPMAX</a> and <a>MINLPBND::Options::CPTHRES</a> -- returns updated variable bounds <a>X</a>
+  int propagate
+    ( T* X=nullptr, double const* Finc=nullptr, bool const resetbnd=true );
+
+    //! @brief Test whether a variable vector is integer feasible
+  bool bounded_domain
+    ( double const& maxdiam, bool const nonlin=false )
+    const;
 
   //! @brief Get const pointer to MIP solver
   MIP const* solver
@@ -964,6 +976,21 @@ MINLPBND<T,MIP>::_set_function_class
 
 template <typename T, typename MIP>
 inline bool
+MINLPBND<T,MIP>::bounded_domain
+( double const& maxdiam, bool const nonlin )
+const
+{
+  // Check domain boundedness
+  if( _Xbnd.empty() ) return false;
+  for( unsigned i=0; i<_nX; i++ ){
+    if( nonlin && _Xlin.find(i) != _Xlin.end() ) continue;
+    if( Op<T>::diam( _Xbnd[i] ) >= maxdiam ) return false;
+  }
+  return true;
+}
+
+template <typename T, typename MIP>
+inline bool
 MINLPBND<T,MIP>::update_bounds
 ( T const* X, double const* Finc, bool const resetbnd )
 {
@@ -1002,8 +1029,9 @@ MINLPBND<T,MIP>::update_bounds
     _Fbnd.resize( _nF );
     for( unsigned i=0; i<_nF; i++ ) _Fbnd[i] = T( _Flow[i], _Fupp[i] );
   }
-  if( Finc && _objsense == -1 && !Op<T>::inter( _Fbnd[0], T(-BASE_OPT::INF,*Finc), _Fbnd[0] ) ) return false;
-  if( Finc && _objsense ==  1 && !Op<T>::inter( _Fbnd[0], T( *Finc,BASE_OPT::INF), _Fbnd[0] ) ) return false;
+  if( !Finc ) _Fbnd[0] = T( _Flow[0], _Fupp[0] );
+  else if( _objsense == -1 && !Op<T>::inter( _Fbnd[0], T(-BASE_OPT::INF,*Finc), _Fbnd[0] ) ) return false;
+  else if( _objsense ==  1 && !Op<T>::inter( _Fbnd[0], T( *Finc,BASE_OPT::INF), _Fbnd[0] ) ) return false;
 
   return true;
 }
@@ -1053,9 +1081,9 @@ MINLPBND<T,MIP>::relax
   std::cout << _POLenv;
 #endif
 
-  // Set-up variable initial guess
-  for( unsigned i=0; Xinc && i<_nX0; i++ )
-    _MIPSLV->set_variable( _POLXvar[i], Xinc[i] );
+  // Set-up variable initial guess and branch priority
+  for( unsigned i=0; i<_nX0; i++ )
+    assert( _MIPSLV->set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr, options.BCHPRIM ) );
 
   for( unsigned iref=0; ; iref++ ){
     // Set-up relaxed objective, options, and solve polyhedral relaxation
@@ -1312,6 +1340,32 @@ MINLPBND<T,MIP>::reduce
 #endif
 
   return flag;
+}
+
+template <typename T, typename MIP>
+inline int
+MINLPBND<T,MIP>::propagate
+( T* X, double const* Finc, const bool resetbnd )
+{
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _tstart = stats.start();
+    
+  // Update variable bounds
+  if( !update_bounds( X, Finc, resetbnd ) ) return MIP::INFEASIBLE;
+  int cpred = _propagate_bounds();
+  if( cpred < 0 ) return MIP::INFEASIBLE;
+
+  // Update user bounds <a>X</a>
+  for( unsigned i=0; X && i<_nX0; i++ ) X[i] = _Xbnd[i];
+
+#ifdef MC__MINLPBND_SHOW_REDUC
+  std::cout << "\nPropagated Bounds:\n";
+  for( unsigned i=0; i<_nX; i++ )
+    std::cout << _Xvar[i] << " = " << _Xbnd[i] << std::endl;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
+  return MIP::OPTIMAL;
 }
 
 template <typename T, typename MIP>
