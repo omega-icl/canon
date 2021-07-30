@@ -11,9 +11,9 @@ CORRINC     = 1
 # Add cut at incumbent value
 CUTINC      = 0
 # Add breakpoint at incumbent
-BKPTINC     = 1
+BKPTINC     = 0
 # Maximal number of refinements/iterations
-MAXITER     = 1
+MAXITER     = 10
 # Wall-time limit in seconds
 TIMELIMIT   = 72e2
 # General display level
@@ -91,6 +91,8 @@ MIPMAXTHREAD     = 0
 
 # Reformulate polynomial and/or nonpolynomial subexpressions
 NPOLLIFT         = 1
+# Set higher branch priority to primary variables
+BCHPRIM          = 0
 # Maximum rounds of constraint propagation
 CPMAX            = 10
 # Threshold for constraint propagation repeats - minimum relative reduction in any variable
@@ -106,9 +108,9 @@ MONSCALE         = 0
 # Add reduced RLT cuts
 RRLTCUTS         = 0
 # Add redundant cuts within quadratisation
-REDQUADCUTS      = 1
+REDQUADCUTS      = 0
 # Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
-PSDQUADCUTS      = 1
+PSDQUADCUTS      = 0
 # Add DC cuts within quadratisation
 DCQUADCUTS       = 0
 # Add NCO cuts

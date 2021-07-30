@@ -344,12 +344,7 @@ protected:
   bool _is_integer_feasible
     ( double const* Xval, double const& feastol )
     const;
-#if 0
-    //! @brief Test whether a variable vector is integer feasible
-  bool _is_bounded
-    ( T const* Xbnd, double const& inflim )
-    const;
-#endif
+
   //! @brief Initialize display
   void _display_init
     ( std::ostream& os=std::cout );
@@ -531,22 +526,7 @@ const
   }
   return true;
 }
-#if 0
-template <typename T, typename NLP, typename MIP>
-inline bool
-MINLGO<T,NLP,MIP>::_is_bounded
-( T const* Xbnd, const double& inflim )
-const
-{
-  // Check domain boundedness
-  if( !Xbnd ) return false;
-  for( unsigned i=0; i<_var.size(); i++ ){
-    if( Op<T>::diam( Xbnd[i] ) >= inflim )
-      return false;
-  }
-  return true;
-}
-#endif
+
 template <typename T, typename NLP, typename MIP>
 inline int
 MINLGO<T,NLP,MIP>::presolve

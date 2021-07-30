@@ -3,9 +3,6 @@ SETS
   N      Circles  / 1*10 /;
 ALIAS (N2, N);
 
-SCALAR
-  W      Width of arrangement / 30 /;
-
 PARAMETERS
   R(N)   Radii
    / 1 6.0
@@ -19,29 +16,33 @@ PARAMETERS
      9 2.9
     10 2.3 /;
 
+SCALAR
+  W      Width of arrangement / 30 /
+  LMAX   Max length of arrangement;
+LMAX = SUM(N,R(N));
+
 VARIABLES
   X(N)   Centre X-coordinate
   Y(N)   Centre Y-coordinate
   L      Total lenfth of arrangement;
 
-L.lo    = 0;
-L.up    = 40;
 X.lo(N) = R(N);
 Y.lo(N) = R(N);
-X.up(N) = L.up - R(N);
+X.up(N) = LMAX - R(N);
 Y.up(N) = W - R(N);
 
 EQUATIONS xposmax(N), distmin(N,N2), symbreakx, symbreaky;
 
+*objmax .. L =L= LMAX;
 xposmax(N) .. L - X(N) =G= R(N);
 distmin(N,N2)$(ORD(N)<ORD(N2)) .. POWER(X(N)-X(N2),2) + POWER(Y(N)-Y(N2),2) =G= POWER(R(N)+R(N2),2);
 symbreakx .. X('1') =L= X('2');
 symbreaky .. Y('1') =L= Y('2');
 
-OPTION QCP = GUROBI;
-$onecho > gurobi.opt
-nonconvex 2
-$offecho
+*OPTION QCP = GUROBI;
+*$onecho > gurobi.opt
+*nonconvex 2
+*$offecho
 
 *OPTION QCP = ANTIGONE;
 OPTION OPTCR = 1e-3;

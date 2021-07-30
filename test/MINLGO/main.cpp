@@ -8,9 +8,11 @@
 //#define MC__REVAL_DEBUG
 //#define MC__FFUNC_DEBUG_SIGNOM
 //#define MC__SQUAD_DEBUG_REDUC
+//#define MC__SPARSEENV_DEBUG_PROCESS
 
 #include <fstream>
 #include <iomanip>
+#include <csignal>
 
 #ifdef MC__USE_PROFIL
  #include "mcprofil.hpp"
@@ -50,7 +52,18 @@
 #endif
 
 #include "minlgo.hpp"
- 
+mc::MINLGO<I,NLP,MIP> MINLP;
+
+static
+void
+signalHandler
+( int signum )
+{
+  std::cout << "Interrupt signal (" << signum << ") received.\n";
+  MINLP.interrupt();
+  exit( signum );  
+}
+
 ////////////////////////////////////////////////////////////////////////
 int main()
 ////////////////////////////////////////////////////////////////////////
@@ -59,9 +72,9 @@ int main()
   throw std::runtime_error("Error: CPLEX solver not yet implemented");
 #endif
 
-  // Global optimization
-  mc::MINLGO<I,NLP,MIP> MINLP;
-
+  signal( SIGINT,  signalHandler );
+//  signal( SIGTSTP, signalHandler );
+  
 #ifdef READ_GAMS
   MINLP.options.read( "canon.opt" );
 //  MINLP.read( "doxydoc.gms" );
@@ -70,11 +83,14 @@ int main()
 //  MINLP.read( "ex1252a.gms" );
 //  MINLP.read( "transswitch0009r.gms" );
 //  MINLP.read( "batch0812.gms" );
-  MINLP.read( "batch_nc.gms" );
+//  MINLP.read( "batch_nc.gms" );
 //  MINLP.read( "jit1.gms" );
 //  MINLP.read( "ex7_2_2.gms" );
-//  MINLP.read( "packing.gms" );
-  
+  MINLP.read( "packing.gms" );
+//  MINLP.read( "bernasconi.40.5.gms" );
+//  MINLP.read( "tuncphd_30.gms" );
+//  MINLP.read( "kriging_peaks-red010.gms" );
+
 #else
   mc::FFGraph DAG;
   const unsigned NP = 4; mc::FFVar P[NP];
