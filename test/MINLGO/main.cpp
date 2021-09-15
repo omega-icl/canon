@@ -4,7 +4,7 @@
 //#define MC__MINLGO_PREPROCESS_DEBUG
 //#define MC__MINLGO_DEBUG
 //#define MC__MINLPBND_SHOW_REDUC
-//#define MC__MINLPBND_DEBUG_SCQ
+#define MC__MINLPBND_DEBUG_SCQ
 //#define MC__REVAL_DEBUG
 //#define MC__FFUNC_DEBUG_SIGNOM
 //#define MC__SQUAD_DEBUG_REDUC
@@ -77,19 +77,15 @@ int main()
   
 #ifdef READ_GAMS
   MINLP.options.read( "canon.opt" );
-//  MINLP.read( "doxydoc.gms" );
-//  MINLP.read( "ex1221.gms" );
-//  MINLP.read( "ex1222.gms" );
-//  MINLP.read( "ex1252a.gms" );
-//  MINLP.read( "transswitch0009r.gms" );
-//  MINLP.read( "batch0812.gms" );
-//  MINLP.read( "batch_nc.gms" );
-//  MINLP.read( "jit1.gms" );
-//  MINLP.read( "ex7_2_2.gms" );
-  MINLP.read( "packing.gms" );
-//  MINLP.read( "bernasconi.40.5.gms" );
-//  MINLP.read( "tuncphd_30.gms" );
-//  MINLP.read( "kriging_peaks-red010.gms" );
+  // List of GAMS files:
+  // doxydoc.gms ex1221.gms ex1222.gms ex1252a.gms transswitch0009r.gms
+  // batch0812.gms batch_nc.gms jit1.gms ex7_2_2.gms packing.gms bernasconi.40.5.gms
+  // tuncphd_30.gms kriging_peaks-red010.gms st_e06.gms ex14_1_5.gms
+  std::string gamsfile( "ex14_1_5.gms"); 
+  if( !MINLP.read( gamsfile, true ) ){
+    std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
+    return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
+  }
 
 #else
   mc::FFGraph DAG;
@@ -126,11 +122,41 @@ int main()
 //  MINLP.options.MINLPPRE.MIPSLV.DISPLEVEL   = 0;
 //  MINLP.options.MINLPBND.MIPSLV.OUTPUTFILE  = "main.lp";
 #endif
+      
+  ////////////////////////////////////////////////////////////
+  // OPTIMIZE MODEL
 
   MINLP.setup();
-  MINLP.presolve();
-  MINLP.optimize();
-  MINLP.stats.display();
-  
-  return 0;
+  std::ostream& os = std::cout;
+  int flag = MINLP.presolve( nullptr, nullptr, os ); 
+  switch( flag ){
+    case mc::MINLGO<I,NLP,MIP>::STATUS::INFEASIBLE:
+      std::cerr << "# Exit: GAMS model was proven infeasible during preprocessing" << std::endl;
+      return flag;
+    case mc::MINLGO<I,NLP,MIP>::STATUS::UNBOUNDED:
+      std::cerr << "# Exit: GAMS model could not be bounded during preprocessing" << std::endl;
+      return flag;
+    case mc::MINLGO<I,NLP,MIP>::STATUS::INTERRUPTED:
+      std::cerr << "# Exit: GAMS model preprocessing was interrupted" << std::endl;
+      return flag;
+    case mc::MINLGO<I,NLP,MIP>::STATUS::FAILED:
+    case mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED:
+      std::cerr << "# Exit: GAMS model preprocessing failed" << std::endl;
+      return flag;
+    default:
+      break;
+  }
+    
+  flag = MINLP.optimize( os ); 
+  if( MINLP.options.DISPLEVEL >= 1 )
+    MINLP.stats.display();
+
+  return flag;  
+
+//  MINLP.setup();
+//  MINLP.presolve();
+//  MINLP.optimize();
+//  MINLP.stats.display();
+// 
+//  return 0;
 }

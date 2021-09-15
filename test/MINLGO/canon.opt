@@ -13,7 +13,7 @@ CUTINC      = 0
 # Add breakpoint at incumbent
 BKPTINC     = 0
 # Maximal number of refinements/iterations
-MAXITER     = 10
+MAXITER     = 1
 # Wall-time limit in seconds
 TIMELIMIT   = 72e2
 # General display level
@@ -120,7 +120,7 @@ NCOADIFF         = 1
 # Separate linear constraints prior to relaxation
 LINCTRSEP        = 1
 # Keep linear and quadratic expressions aggregated
-AGGREGLQ         = 0
+AGGREGLQ         = 1
 # Relative tolerance during outer-approximation in convexification of univariate terms
 SANDWICHRTOL     = 1e-3
 # Maximal number of cuts during outer-approximation in convexification of univariate terms" )

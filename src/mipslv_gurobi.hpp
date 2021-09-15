@@ -612,6 +612,7 @@ MIPSLV_GUROBI<T>::_add_var
   switch( pVar->id().first ){
     case PolVar<T>::VARCONT:
     case PolVar<T>::AUXCONT:
+    case PolVar<T>::AUXCST:
       var = _GRBmodel->addVar( Op<T>::l(pVar->range()), Op<T>::u(pVar->range()),
         0., GRB_CONTINUOUS, pVar->name() );
       break;
