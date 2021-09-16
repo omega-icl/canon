@@ -169,7 +169,6 @@ int main
       return flag;
     default:
       break;
-
   }
     
   flag = MINLP.optimize( os ); 
