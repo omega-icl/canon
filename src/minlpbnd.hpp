@@ -128,7 +128,9 @@ protected:
   FFGraph*                  _dag;
 
   //! @brief sparse expression environment for reformulations
-  SparseEnv*                _SPenv;
+  SparseEnv                 _SEenv;
+  //! @brief sparse quadratic form environment
+  SQuad                     _SQenv;
   
   //! @brief number of parameters in model
   unsigned                  _nP;
@@ -274,7 +276,7 @@ public:
   MINLPBND
     ()
     : _dag(0), _nX(0), _nX0(0), _nX1(0), _nF(0), _CMenv(0), _ISMenv(0), _issetup(false)
-    { _MIPSLV = new MIP; _SPenv = new SparseEnv; }
+    { _MIPSLV = new MIP; }
 
   //! @brief Destructor
   virtual ~MINLPBND
@@ -283,7 +285,6 @@ public:
       delete _MIPSLV;
       delete _ISMenv;
       delete _CMenv;
-      delete _SPenv;
       delete _dag;
     }
 
@@ -621,7 +622,7 @@ private:
 
   //! @brief Lift semi-algebraic functions
   void _lift_semialgebraic
-    ();
+    ( bool const add2dag=true );
 
   //! @brief Search for reduced RLT cuts
   void _search_reduction_constraints
@@ -662,7 +663,7 @@ private:
   FFVar _var_pol
     ( SQuad::t_SQuad const& quad, std::map< SPolyMon, FFVar, lt_SPolyMon >& mapmon )
     const;
-    
+
   //! @brief Create DAG variable for given Chebyshev basis function 
   FFVar _var_cheb
     ( FFVar const& x, const unsigned n )
@@ -673,10 +674,23 @@ private:
     ( SPolyMon const& mon )
     const;
 
+  //! @brief Compute bound for given Chebyshev basis function 
+  T _bnd_cheb
+    ( T const& x, const unsigned n )
+    const;
+
   //! @brief Compute bound of (unscaled) monomial <a>mon</a>
   T _bnd_mon
     ( SPolyMon const& mon )
     const;
+
+  // Set monomial vector from quadratic form in polyhedral image
+  void _set_mon_SCQ
+    ();
+
+  // Append cuts for quadratic form in polynomial image
+  void _set_cuts_SQ
+    ( std::set<unsigned> ndxF );
 
   //! @brief Get monomial <a>mon</a> from DAG monomial map <a>_Xmon</a> or add it to the map if absent
   FFVar const& _get_mon
@@ -920,7 +934,7 @@ MINLPBND<T,MIP>::_search_reduction_constraints
 template <typename T, typename MIP>
 inline void
 MINLPBND<T,MIP>::_lift_semialgebraic
-()
+( bool const add2dag )
 {
   auto Fsalg = _Flin;
   Fsalg.insert( _Fquad.cbegin(), _Fquad.cend() );
@@ -968,19 +982,20 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   }
 
   // Apply quadratisation to polynomial expressions
-  SQuad QForm;
-  QForm.options = options.SQUAD;
+  _SQenv.reset();
+  _SQenv.options = options.SQUAD;
 #ifndef MC__MINLPBND_DEBUG_LIFT
-  QForm.process( SPol.size(), SPol.data(), SQuad::Options::MONOM );
+  _SQenv.process( SPol.size(), SPol.data(), SQuad::Options::MONOM );
 #else
-  double viol = QForm.process( SPol.size(), SPol.data(), SQuad::Options::MONOM, true );
+  double viol = _SQenv.process( SPol.size(), SPol.data(), SQuad::Options::MONOM, true );
   std::cout << "violation: " << viol << std::endl;
   {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
+  if( !add2dag ) return;
 
   // Add higher-order monomials in basis to DAG
   std::map< SPolyMon, FFVar, lt_SPolyMon > mapmon; 
-  for( auto const& mon : QForm.SetMon() ){
+  for( auto const& mon : _SQenv.SetMon() ){
     if( mon.tord == 1 ) mapmon[mon] = _Xvar[mon.expr.cbegin()->first];
     if( mon.tord <= 1 ) continue;
     auto [pAux,pVar] = _var_mon( mon );
@@ -999,7 +1014,7 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   // Substitute lifted quadratic expressions
   unsigned iquad = 0;
   for( auto i : _Fpol ){
-    _Fvar[i] = _var_pol( QForm.MatFct()[iquad++], mapmon );
+    _Fvar[i] = _var_pol( _SQenv.MatFct()[iquad++], mapmon );
 #ifdef MC__MINLPBND_DEBUG_LIFT
     std::ostringstream ostr; ostr << " of lifted quadratic expression F[" << i << "]";
     _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
@@ -1007,7 +1022,7 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   }
   
   // Append reduction quadratic cuts
-  for( auto red : QForm.MatRed() ){
+  for( auto red : _SQenv.MatRed() ){
     _Fvar.push_back( _var_pol( red, mapmon ) );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
@@ -1018,7 +1033,7 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   }
 
   // Append positive semi-definite cuts
-  for( auto psd : QForm.MatPSD() ){
+  for( auto psd : _SQenv.MatPSD() ){
     _Fvar.push_back( _var_pol( psd, mapmon ) );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
@@ -1087,6 +1102,22 @@ const
 }
 
 template <typename T, typename MIP>
+inline T
+MINLPBND<T,MIP>::_bnd_cheb
+( T const& x, const unsigned n )
+const
+{
+  switch( n ){
+    case 0:  return 1.;
+    case 1:  return x;
+    case 2:  return 2.*Op<T>::sqr(x)-1.;
+    default: return n%2? 2.*_bnd_cheb(x,n/2)*_bnd_cheb(x,n/2+1)-x:
+                         2.*Op<T>::sqr(_bnd_cheb(x,n/2))-1.;
+    //default: return 2.*x*_bnd_cheb(x,n-1)-_bnd_cheb(x,n-2);
+  }
+}
+
+template <typename T, typename MIP>
 inline std::pair< FFVar const*, FFVar const* >
 MINLPBND<T,MIP>::_var_mon
 ( SPolyMon const& mon )
@@ -1122,16 +1153,16 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
 {
   if( _Fgal.empty() ) return;
 
-  _SPenv->set( _dag );
-  _SPenv->options = options.SPARSEEXPR;
-  _SPenv->process( _Fgal, _Fvar.data(), true );
+  _SEenv.set( _dag );
+  _SEenv.options = options.SPARSEEXPR;
+  _SEenv.process( _Fgal, _Fvar.data(), true );
 #ifdef MC__MINLPBND_DEBUG_LIFT
-  std::cout << *_SPenv;
+  std::cout << _SEenv;
   {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
 
   // append auxiliary variables
-  for( auto&& [pAux,pVar] : _SPenv->Aux() ){
+  for( auto&& [pAux,pVar] : _SEenv.Aux() ){
     bool is_dep = false;
     unsigned i = 0;
     for( auto it=_Fgal.begin(); it!=_Fgal.end(); ++it ){
@@ -1158,14 +1189,14 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
   }
 
   // append lifted polynomial expressions
-  for( auto const& poly : _SPenv->Poly() ){
+  for( auto const& poly : _SEenv.Poly() ){
     _Fvar.push_back( poly );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
   }
 
   // append lifted transcendental expressions
-  for( auto const& trans : _SPenv->Trans() ){
+  for( auto const& trans : _SEenv.Trans() ){
     _Fvar.push_back( trans );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
@@ -2033,8 +2064,8 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
   }
  
   // Perform quadratisation of polynomial part of sparse Chebyshev models
-  SQuad QForm;
-  QForm.options = options.SQUAD;
+  _SQenv.reset();
+  _SQenv.options = options.SQUAD;
   SQuad::t_SPolyMonCoef coefmon;
   
   for( unsigned j : ndxF ){
@@ -2053,9 +2084,9 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
       break;
     }
 #ifndef MC__MINLPBND_DEBUG_SCQ
-    QForm.process( coefmon, options.SQUAD.BASIS );
+    _SQenv.process( coefmon, options.SQUAD.BASIS );
 #else
-    double viol = QForm.process( coefmon, options.SQUAD.BASIS, true );
+    double viol = _SQenv.process( coefmon, options.SQUAD.BASIS, true );
     if( viol > 1e-15 ){
       std::cout << _CMFvar[j].display( coefmon, options.SQUAD.BASIS );
       std::cout << "violation: " << viol << std::endl;
@@ -2064,12 +2095,29 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
 #endif
   }
 #ifdef MC__MINLPBND_DEBUG_SCQ
-  std::cout << QForm;
+  std::cout << _SQenv;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 
+  // Set monomial vector from quadratic form into polyhedral image
+  _set_mon_SCQ();
+
+  // Add cuts for quadratic form into polynomial image
+  _set_cuts_SQ( ndxF );
+
+#ifdef MC__MINLPBND_DEBUG_SCQ
+ std::cout << _POLenv;
+ { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+}
+
+template <typename T, typename MIP>
+inline void
+MINLPBND<T,MIP>::_set_mon_SCQ
+()
+{
   // Add monomial vector of quadratic from to polyhedral image
-  for( auto const& mon : QForm.SetMon() ){
+  for( auto const& mon : _SQenv.SetMon() ){
   
     // Insert monomial as auxiliary variable in polyhedral image
     if( mon.tord >= 1 ){
@@ -2101,7 +2149,7 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
                       << _POLXmon[mon].range() << std::endl;
 #endif
           }
-          continue; // Loop to next monomial in QForm.SetMon()
+          continue; // Loop to next monomial in _SQenv.SetMon()
         }
 
         // add scaled power monomial to polyhedral image
@@ -2148,10 +2196,16 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
   std::cout << _POLenv;
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
+}
 
+template <typename T, typename MIP>
+inline void
+MINLPBND<T,MIP>::_set_cuts_SQ
+( std::set<unsigned> ndxF )
+{
   // Add cuts for entries in MatFct
   auto itF = ndxF.begin();
-  for( auto const& mat : QForm.MatFct() ){
+  for( auto const& mat : _SQenv.MatFct() ){
     assert( itF != ndxF.end() );
     PolCut<T> *cutF1 = nullptr, *cutF2 = nullptr;
     if( Op<T>::diam(_CMFvar[*itF].R()) == 0. ){
@@ -2162,7 +2216,7 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
       cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(_CMFvar[*itF].R()), _POLFvar[*itF], -1. );
     }
     // Separate quadratic term
-    _add_to_cuts( QForm, mat, cutF1, cutF2 );
+    _add_to_cuts( _SQenv, mat, cutF1, cutF2 );
 #ifdef MC__MINLPBND_DEBUG_SCQ
     std::cout << "Main cuts for function F[" << *itF << "]: " << *cutF1 << std::endl;
     if( cutF2 )  std::cout << "                             " << *cutF2 << std::endl;
@@ -2174,10 +2228,10 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
 #ifdef MC__MINLPBND_DEBUG_SCQ
   unsigned ired = 0;
 #endif
-  for( auto const& mat : QForm.MatRed() ){
+  for( auto const& mat : _SQenv.MatRed() ){
     PolCut<T> *cutR = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
     //_add_to_cuts( mat, cutR );
-    _add_to_cuts( QForm, mat, cutR );
+    _add_to_cuts( _SQenv, mat, cutR );
 #ifdef MC__MINLPBND_DEBUG_SCQ
     std::cout << "Reduction cuts #" << ++ired << ": " << *cutR << std::endl;
 #endif
@@ -2188,21 +2242,16 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
 #ifdef MC__MINLPBND_DEBUG_SCQ
     unsigned ipsd = 0;
 #endif
-    QForm.tighten( options.PSDQUADCUTS>1? true: false );
-    for( auto const& mat : QForm.MatPSD() ){
+    _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
+    for( auto const& mat : _SQenv.MatPSD() ){
       PolCut<T> *cutP = *_POLenv.add_cut( PolCut<T>::GE, 0. );
       _add_to_cuts( mat, cutP );
-      //_add_to_cuts( QForm, mat, cutR );
+      //_add_to_cuts( _SQenv, mat, cutR );
 #ifdef MC__MINLPBND_DEBUG_SCQ
       std::cout << "PSD cuts #" << ++ipsd << ": " << *cutP << std::endl;
 #endif
     }
   }
-
-#ifdef MC__MINLPBND_DEBUG_SCQ
- std::cout << _POLenv;
- { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
-#endif
 }
 
 template <typename T, typename MIP>
@@ -2211,10 +2260,20 @@ MINLPBND<T,MIP>::_bnd_mon
 ( SPolyMon const& mon )
 const
 {
-  // compute unscaled power monomial bound
+  // compute (unscaled) power monomial bound
   T bndmon( 1e0 );
-  for( auto const& [ivar,iord] : mon.expr )
-    bndmon *= Op<T>::pow( _POLXvar[ivar].range(), (int)iord );
+  for( auto const& [ivar,iord] : mon.expr ){
+    switch( options.SQUAD.BASIS ){
+     // Monomial basis
+     case SQuad::Options::MONOM:
+      bndmon *= Op<T>::pow( _POLXvar[ivar].range(), (int)iord );
+      break;
+     // Chebyshev basis
+     case SQuad::Options::CHEB:
+      bndmon *= _bnd_cheb( _POLXvar[ivar].range(), iord );
+      break;
+    }
+  }
   return bndmon;
 }
 
@@ -2235,14 +2294,14 @@ MINLPBND<T,MIP>::_get_mon
 template <typename T, typename MIP>
 inline void
 MINLPBND<T,MIP>::_add_to_cuts
-( SQuad const& QForm, SQuad::t_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
+( SQuad const& _SQenv, SQuad::t_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   // DC decomposition not required
     if( !options.DCQUADCUTS )
       return _add_to_cuts( mat, cut1, cut2 );
 
   // DC decomposition required
-  for( auto const& matsep : QForm.separate( mat ) ){
+  for( auto const& matsep : _SQenv.separate( mat ) ){
   
     // Append monomial if single term
     if( matsep.size() == 1 ){
@@ -2259,7 +2318,7 @@ MINLPBND<T,MIP>::_add_to_cuts
 
     // Introduce auxiliary cuts for DC factorization
     PolCut<T> *cutDC = *_POLenv.add_cut( PolCut<T>::EQ, 0., POLsep, -1. );
-    for( auto const& [eigval,eigterm] : QForm.factorize( matsep ) ){
+    for( auto const& [eigval,eigterm] : _SQenv.factorize( matsep ) ){
       auto const& POLEVSQ = _append_cuts_dcdec( eigterm );
       cutDC->append( POLEVSQ, eigval );
     }
