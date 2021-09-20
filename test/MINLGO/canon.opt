@@ -114,9 +114,9 @@ CMODPROP         = 15
 # Monomial minimal coefficient in sparse polynomial model
 MONMIG           = 1e-10
 # Monomial basis in sparse quadratic form - 0: power; 1: Chebyshev
-MONBASIS         = 1
+MONBASIS         = 0
 # Monomial processing order in sparse quadratic form - 0: increasing order; 1: decreasing order
-MONORDER         = 1
+MONORDER         = 0
 # Monomial scaling in sparse quadratic form
 MONSCALE         = 0
 # Add reduced RLT cuts

@@ -645,12 +645,12 @@ MINLGO<T,NLP,MIP>::presolve
   for( unsigned i=0; Xbnd && i<_var.size(); i++ )
     Xbnd[i] = _Xbnd[i];
 
-//#ifdef MC__MINLGO_PREPROCESS_DEBUG
+#ifdef MC__MINLGO_PREPROCESS_DEBUG
   std::cout << "Reduced bounds:" << std::endl;
   for( auto const& Xi : _Xbnd ) std::cout << " " << Xi;
   std::cout << std::endl;
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
-//#endif
+#endif
 
   // Compute relaxation -- COULD EXIT HERE, BENEFIT OF EXTRA FEASIBILITY PUMP?!?
   if( options.PRESOLVE > 1 ){

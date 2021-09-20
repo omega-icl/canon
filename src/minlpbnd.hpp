@@ -101,8 +101,8 @@ Other options can be modified to tailor the search, including output level, maxi
 #include "mipslv_gurobi.hpp"
 
 //#undef MC__MINLPBND_DEBUG
-#define MC__MINLPBND_DEBUG_LIFT
-#define MC__MINLPBND_SHOW_REDUC
+//#define MC__MINLPBND_DEBUG_LIFT
+//#define MC__MINLPBND_SHOW_REDUC
 
 namespace mc
 {
@@ -1379,10 +1379,10 @@ inline int
 MINLPBND<T,MIP>::_reduce
 ( unsigned const ix, bool const uplo )
 {
-//#ifdef MC__MINLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
   std::cout << "\nTIGHTENING OF VARIABLE " << ix << (uplo?"U":"L") << ":\n";
 //  std::cout << _POLenv;
-//#endif
+#endif
   // Set-up lower/upper bound objective, options, and solve polyhedral relaxation
   auto tMIP = stats.start();
   _MIPSLV->set_objective( _POLXvar[ix], (uplo? BASE_OPT::MAX: BASE_OPT::MIN) );
@@ -1458,9 +1458,9 @@ MINLPBND<T,MIP>::_reduce
         break;
       }
         
-//#ifdef MC__MINLPBND_DEBUG
+#ifdef MC__MINLPBND_DEBUG
       std::cout << "  UPDATED RANGE OF VARIABLE #" << ix << ": " << _Xbnd[ix] << std::endl;
-//#endif
+#endif
       // update map of candidate reduction subproblems
       vardomredupd.clear();
       for( ++itv; itv!=vardomred.end(); ++itv ){
