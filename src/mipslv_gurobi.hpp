@@ -89,30 +89,33 @@ public:
     Options():
       ALGO( -1 ), PRESOLVE( -1 ), CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
       FEASTOL( 1e-7 ), OPTIMTOL( 1e-7 ), MIPRELGAP( 1e-5 ), MIPABSGAP( 1e-5 ),
-      HEURISTICS( 0.05 ), PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
+      NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), HEURISTICS( 0.05 ),
+      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
       PWLRELGAP( 1e-3 ), TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
       LOGFILE(), OUTPUTFILE()
       {}
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
-        ALGO        = options.ALGO;
-        PRESOLVE    = options.PRESOLVE;
-        CONTRELAX   = options.CONTRELAX;
-        DUALRED     = options.DUALRED;
-        NONCONVEX   = options.NONCONVEX;
-        FEASTOL     = options.FEASTOL;
-        OPTIMTOL    = options.OPTIMTOL;
-        MIPRELGAP   = options.MIPRELGAP;
-        MIPABSGAP   = options.MIPABSGAP;
-        HEURISTICS  = options.HEURISTICS;
-        PRESOS1BIGM = options.PRESOS1BIGM;
-        PRESOS2BIGM = options.PRESOS2BIGM;
-        PWLRELGAP   = options.PWLRELGAP;
-        TIMELIMIT   = options.TIMELIMIT;
-        THREADS     = options.THREADS;
-        DISPLEVEL   = options.DISPLEVEL;
-        LOGFILE     = options.LOGFILE;
-        OUTPUTFILE  = options.OUTPUTFILE;
+        ALGO         = options.ALGO;
+        PRESOLVE     = options.PRESOLVE;
+        CONTRELAX    = options.CONTRELAX;
+        DUALRED      = options.DUALRED;
+        NONCONVEX    = options.NONCONVEX;
+        FEASTOL      = options.FEASTOL;
+        OPTIMTOL     = options.OPTIMTOL;
+        MIPRELGAP    = options.MIPRELGAP;
+        MIPABSGAP    = options.MIPABSGAP;
+        NUMERICFOCUS = options.NUMERICFOCUS;
+        SCALEFLAG    = options.SCALEFLAG;
+        HEURISTICS   = options.HEURISTICS;
+        PRESOS1BIGM  = options.PRESOS1BIGM;
+        PRESOS2BIGM  = options.PRESOS2BIGM;
+        PWLRELGAP    = options.PWLRELGAP;
+        TIMELIMIT    = options.TIMELIMIT;
+        THREADS      = options.THREADS;
+        DISPLEVEL    = options.DISPLEVEL;
+        LOGFILE      = options.LOGFILE;
+        OUTPUTFILE   = options.OUTPUTFILE;
         return *this ;
       }
     //! @brief Algorithm used to solve continuous models or the root node of a MIP model. The default options is: -1=automatic. Other options are: 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent, 5=deterministic concurrent simplex. 
@@ -133,6 +136,10 @@ public:
     double MIPRELGAP;
     //! @brief The MIP solver will terminate (with an optimal result) when the gap between the lower and upper objective bound is less than this tolerance. 
     double MIPABSGAP;
+    //! @brief Controls the degree to which the code attempts to detect and manage numerical issues. The default setting (0) makes an automatic choice, with a slight preference for speed. Settings 1-3 increasingly shift the focus towards being more careful in numerical computations. With higher values, the code will spend more time checking the numerical accuracy of intermediate results, and it will employ more expensive techniques in order to avoid potential numerical issues. 
+    int NUMERICFOCUS;
+    //! @brief Controls model scaling. By default, the rows and columns of the model are scaled in order to improve the numerical properties of the constraint matrix. The scaling is removed before the final solution is returned. Scaling typically reduces solution times, but it may lead to larger constraint violations in the original, unscaled model. Turning off scaling (ScaleFlag=0) can sometimes produce smaller constraint violations. Choosing a different scaling setting 1-3 can sometimes improve performance for particularly numerically difficult models.  
+    int SCALEFLAG;
     //! @brief Determines the amount of time spent in MIP heuristics. You can think of the value as the desired fraction of total MIP runtime devoted to heuristics. The default value of 0.05 aims to spend 5% of runtime on heuristics. Larger values produce more and better feasible solutions, at a cost of slower progress in the best bound. 
     double HEURISTICS;
     //! @brief Controls the automatic reformulation of SOS1 constraints into binary form. SOS1 constraints are often handled more efficiently using a binary representation. The reformulation often requires big-M values to be introduced as coefficients. This parameter specifies the largest big-M that can be introduced by presolve when performing this reformulation. Larger values increase the chances that an SOS1 constraint will be reformulated, but very large values (e.g., 1e8) can lead to numerical issues. The default value of -1 chooses a threshold automatically. You should set the parameter to 0 to shut off SOS1 reformulation entirely, or a large value to force reformulation. 
@@ -386,7 +393,9 @@ MIPSLV_GUROBI<T>::_set_options
   _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGap,         options.MIPRELGAP );
   _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGapAbs,      options.MIPABSGAP );
   _GRBmodel->getEnv().set( GRB_DoubleParam_Heuristics,     options.HEURISTICS );
-  _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE  );
+  _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
+  _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
+  _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
   _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS1BigM,    options.PRESOS1BIGM );
   _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS2BigM,    options.PRESOS2BIGM );
   _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );

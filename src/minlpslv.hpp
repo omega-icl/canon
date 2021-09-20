@@ -494,6 +494,16 @@ public:
     ()
     { return _MIPSLV; }
 
+  //! @brief Test domain boundedness
+  bool is_bounded
+    ( double const& maxdiam )
+    { _isbnd = true;
+      for( unsigned i=0; _isbnd && i<_nX; i++ ){
+        if( Op<T>::diam(_Xbnd[i]) < BASE_OPT::INF/10 ) continue;
+        _isbnd = false;
+      }
+      return _isbnd; }
+
   //! @brief Test primal feasibility
   bool is_feasible
     ( double const* x, double const CTRTOL )
@@ -1191,11 +1201,7 @@ MINLPSLV<T,NLP,MIP>::optimize
 
   // Solve relaxed MINLP model
   if( locfeas ){
-    _isbnd = true;
-    for( unsigned i=0; _isbnd && i<_nX; i++ ){
-      if( Op<T>::diam(_Xbnd[i]) < BASE_OPT::INF/10 ) continue;
-      _isbnd = false;
-    }
+    is_bounded( BASE_OPT::INF/10 );
     locfeas = _solve_local( tstart, _varini.data(), _Xbnd.data(), false, false, os );
   }
 #ifdef MC__MINLPSLV_DEBUG

@@ -84,10 +84,8 @@ The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a
 */
 
 //TODO: 
-//- [OK]    Enable NPOLLIFT on polynomial too
-//- [OK]    Make sure signomial terms are handled correctly in DAG
-//- [OK]    Enable relaxation of subset of cuts only
-//- [OK]    Detect the class of problems to determine the need for refinements/iterations
+//- Detect the class of problems to determine the need for refinements/iterations
+//- Debug quadratisation in Chebyshev basis during preprocessing
 
 #ifndef MC__MINLGO_HPP
 #define MC__MINLGO_HPP
@@ -196,6 +194,8 @@ public:
     opt::variables_map _USRMAP; 
     //! @brief Log file
     std::string _LOGFILENAME;
+    //! @brief Reformulation approach
+    unsigned    _MINLPBND_REFORMMETH;
     //! @brief Relaxation approach
     unsigned    _MINLPBND_RELAXMETH;
     unsigned    _MINLPPRE_RELAXMETH;
@@ -218,7 +218,7 @@ public:
     std::string what(){
       switch( _ierr ){
       case SETUP:
-        return "MINLGO::Exceptions  Incomplete setup before a (pre)solve";
+        return "MINLGO::Exceptions  Incomplete setup before a solve";
       case INTERN: default:
         return "MINLGO::Exceptions  Internal error";
       }
@@ -592,12 +592,12 @@ MINLGO<T,NLP,MIP>::presolve
     { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 
-    // Check boundedness
-    _isbnd = _MINLPBND.bounded_domain( BASE_OPT::INF/10, true );
+    // Check boundedness of general variables
+    _isbnd = _MINLPBND.bounded_domain( BASE_OPT::INF/10, FFDep::N );
   
     stats.walltime_preproc += stats.walltime( _tstart );
     stats.walltime_all     += stats.walltime( _tstart );
-    _ispresolved = _isbnd? true: false;
+    _ispresolved = true;
     return( _isbnd? STATUS::SUCCESSFUL: STATUS::UNBOUNDED );
   }
 
@@ -636,6 +636,7 @@ MINLGO<T,NLP,MIP>::presolve
     case MIP::STATUS::INFEASIBLE:
       stats.walltime_preproc += stats.walltime( _tstart );
       stats.walltime_all     += stats.walltime( _tstart );
+      _ispresolved = true;
       return STATUS::INFEASIBLE;
     default:
       break;
@@ -644,12 +645,12 @@ MINLGO<T,NLP,MIP>::presolve
   for( unsigned i=0; Xbnd && i<_var.size(); i++ )
     Xbnd[i] = _Xbnd[i];
 
-#ifdef MC__MINLGO_PREPROCESS_DEBUG
+//#ifdef MC__MINLGO_PREPROCESS_DEBUG
   std::cout << "Reduced bounds:" << std::endl;
   for( auto const& Xi : _Xbnd ) std::cout << " " << Xi;
   std::cout << std::endl;
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
-#endif
+//#endif
 
   // Compute relaxation -- COULD EXIT HERE, BENEFIT OF EXTRA FEASIBILITY PUMP?!?
   if( options.PRESOLVE > 1 ){
@@ -666,19 +667,23 @@ MINLGO<T,NLP,MIP>::presolve
       case MIP::STATUS::INFORUNBND:
         stats.walltime_preproc += stats.walltime( _tstart );
         stats.walltime_all     += stats.walltime( _tstart );
+        _ispresolved = true;
         return STATUS::INFEASIBLE;
       case MIP::STATUS::UNBOUNDED:
         stats.walltime_preproc += stats.walltime( _tstart );
         stats.walltime_all     += stats.walltime( _tstart );
+        _ispresolved = true;
         return STATUS::UNBOUNDED;
       case MIP::STATUS::TIMELIMIT:
         stats.walltime_preproc += stats.walltime( _tstart );
         stats.walltime_all     += stats.walltime( _tstart );
+        _ispresolved = true;
         return STATUS::INTERRUPTED;
       case MIP::STATUS::OTHER:
       default:
         stats.walltime_preproc += stats.walltime( _tstart );
         stats.walltime_all     += stats.walltime( _tstart );
+        _ispresolved = true;
         return STATUS::FAILED;
     }
 
@@ -720,12 +725,12 @@ MINLGO<T,NLP,MIP>::presolve
 #endif
   }
   
-  // Check boundedness
-  _isbnd = _MINLPBND.bounded_domain( BASE_OPT::INF/10, true );
+  // Check boundedness of general variables
+  _isbnd = _MINLPBND.bounded_domain( BASE_OPT::INF/10, FFDep::N );
   
   stats.walltime_preproc += stats.walltime( _tstart );
   stats.walltime_all     += stats.walltime( _tstart );
-  _ispresolved = _isbnd? true: false;
+  _ispresolved = true;
   return( _isbnd? STATUS::SUCCESSFUL: STATUS::UNBOUNDED );
 }
 
@@ -734,9 +739,8 @@ inline int
 MINLGO<T,NLP,MIP>::optimize
 ( std::ostream& os )
 {
-  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
-  if( !_ispresolved ) return _finalize( STATUS::FAILED );
-  if( !_isbnd )       return _finalize( STATUS::UNBOUNDED );
+  if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
+  if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
 
   // Initialize solve
   _tstart = stats.start();
@@ -862,7 +866,12 @@ MINLGO<T,NLP,MIP>::_solve_local
   
   // Extra local solves from random starting points
   _NLPSLV.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-  if( _isbnd && options.MINLPSLV.MSLOC > 1 && _NLPSLV.options.TIMELIMIT > 0 ){
+  bool dombnd = true;
+  for( unsigned i=0; dombnd && i<_var.size(); i++ ){
+    if( Op<T>::diam(Xbnd[i]) < BASE_OPT::INF/10 ) continue;
+    dombnd = false;
+  }
+  if( dombnd && options.MINLPSLV.MSLOC > 1 && _NLPSLV.options.TIMELIMIT > 0 ){
     _NLPSLV.solve( options.MINLPSLV.MSLOC-1, Xbnd );
     if( _NLPSLV.is_feasible( options.FEASTOL )
      && (_solution.x.empty() || _objscal*_NLPSLV.solution().f[0] < _objscal*_solution.f[0]) )
@@ -920,6 +929,7 @@ const
 {
   if( stats.to_time( stats.walltime_all + stats.walltime( _tstart ) ) > options.TIMELIMIT
    || ( options.MAXITER && _iter >= options.MAXITER ) )
+//   || ( _iter && _MINLPBND.problem_class() <= FFDep::Q ) )
     return true;
   return false;
 }
@@ -1059,12 +1069,13 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE(),
   _USROPT( "User-defined solver options" )
 {
-  MINLPPRE.NPOLLIFT               = MINLPBND.NPOLLIFT               = 1;
+  MINLPPRE.REFORMMETH             = MINLPBND.REFORMMETH             = { MINLPBND.NPOL, MINLPBND.QUAD };
   MINLPPRE.LINCTRSEP              = MINLPBND.LINCTRSEP              = 0;
   MINLPPRE.RELAXMETH                                                = { MINLPBND.DRL };
-  MINLPBND.RELAXMETH                                                = { MINLPBND.SCQ };
-  MINLPPRE.SUBSETDRL              = MINLPBND.SUBSETDRL              = 0;
-  MINLPPRE.SUBSETSCQ              = MINLPBND.SUBSETSCQ              = 0;
+  MINLPBND.RELAXMETH                                                = { MINLPBND.DRL, MINLPBND.SCQ };
+  MINLPPRE.SUBSETDRL              = MINLPPRE.SUBSETSCQ              = 0;
+  MINLPBND.SUBSETDRL                                                = 1;
+  MINLPBND.SUBSETSCQ                                                = 2;
   MINLPPRE.POLIMG.RELAX_QUAD                                        = 1;
   MINLPBND.POLIMG.RELAX_QUAD                                        = 0;
   MINLPPRE.POLIMG.RELAX_MONOM     = MINLPBND.POLIMG.RELAX_MONOM     = 1;
@@ -1086,6 +1097,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.CMODPROP               = MINLPBND.CMODPROP               = 15;
   MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR      = 1e-13;
   MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::MONOM;
+  MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER            = SQuad::Options::INC;
   MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
   MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS               = 0;
   MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC            = 1;
@@ -1096,6 +1108,9 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 0;
   MINLPPRE.MIPSLV.MIPRELGAP       = MINLPBND.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.MIPABSGAP       = MINLPBND.MIPSLV.MIPABSGAP       = 1e-5;
+  MINLPPRE.MIPSLV.HEURISTICS      = MINLPBND.MIPSLV.HEURISTICS      = 5e-2;
+  MINLPPRE.MIPSLV.NUMERICFOCUS    = MINLPBND.MIPSLV.NUMERICFOCUS    = 0;
+  MINLPPRE.MIPSLV.SCALEFLAG       = MINLPBND.MIPSLV.SCALEFLAG       = -1;
   MINLPPRE.MIPSLV.DISPLEVEL                                         = 0;
   MINLPBND.MIPSLV.DISPLEVEL                                         = 0;
   MINLPPRE.MIPSLV.OUTPUTFILE      = MINLPBND.MIPSLV.OUTPUTFILE      = "";
@@ -1113,6 +1128,9 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPSLV.NLPSLV.MAXTHREAD       = 0;
   MINLPSLV.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPSLV.MIPSLV.MIPABSGAP       = 1e-5;
+  MINLPSLV.MIPSLV.HEURISTICS      = 5e-2;
+  MINLPSLV.MIPSLV.NUMERICFOCUS    = 0;
+  MINLPSLV.MIPSLV.SCALEFLAG       = -1;
   MINLPSLV.MIPSLV.DISPLEVEL       = 0;
   MINLPSLV.MIPSLV.OUTPUTFILE      = "";
   MINLPSLV.MIPSLV.THREADS         = 0;
@@ -1142,10 +1160,14 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.PRERELAXNLIN",     opt::value<bool>(&MINLPPRE.POLIMG.RELAX_NLIN),        "linearize nonlinear terms during presolve" )
     ( "MINLPBND.PREMIPRELGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPABSGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver during presolve" )
+    ( "MINLPBND.PREMIPHEURISTICS", opt::value<double>(&MINLPPRE.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics during presolve" )
+    ( "MINLPBND.PREMIPNUMERIC",    opt::value<int>(&MINLPPRE.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver during presolve" )
+    ( "MINLPBND.PREMIPSCALE",      opt::value<int>(&MINLPPRE.MIPSLV.SCALEFLAG),           "control of model scaling by MIP solver during presolve" )
     ( "MINLPBND.PREMIPDISPLEVEL",  opt::value<int>(&MINLPPRE.MIPSLV.DISPLEVEL),          "display level of MIP solver during presolve" )
     ( "MINLPBND.PREMIPOUTPUTFILE", opt::value<std::string>(&MINLPPRE.MIPSLV.OUTPUTFILE), "output file for MIP model during presolve" )
-    ( "MINLPBND.PREMIPMAXTHREAD",  opt::value<unsigned>(&MINLPPRE.MIPSLV.THREADS),       "set number of threads used by MIP solver during presolve" )
+    ( "MINLPBND.PREMIPMAXTHREAD",  opt::value<unsigned>(&MINLPPRE.MIPSLV.THREADS),       "number of threads used by MIP solver during presolve" )
 //
+    ( "MINLPBND.REFORMMETH",    opt::value<unsigned>(&_MINLPBND_REFORMMETH),            "reformulation approach prior to relaxation" )
     ( "MINLPBND.RELAXMETH",     opt::value<unsigned>(&_MINLPBND_RELAXMETH),             "polyhedral relaxation approach" )
     ( "MINLPBND.RELAXQUAD",     opt::value<bool>(&MINLPBND.POLIMG.RELAX_QUAD),          "linearize quadratic terms" )
     ( "MINLPBND.RELAXMONOM",    opt::value<int>(&MINLPBND.POLIMG.RELAX_MONOM),          "linearize monomial terms" )
@@ -1161,10 +1183,10 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.OBBTMIG",       opt::value<double>(&MINLPBND.OBBTMIG),                  "minimum range for optimization-based bounds tighteneting" )
     ( "MINLPBND.CPMAX",         opt::value<unsigned>(&MINLPBND.CPMAX),                  "maximum rounds of constraint propagation" )
     ( "MINLPBND.CPTHRES",       opt::value<double>(&MINLPBND.CPTHRES),                  "threshold for constraint propagation repeats" )
-    ( "MINLPBND.NPOLLIFT",      opt::value<bool>(&MINLPBND.NPOLLIFT),                   "reformulate nonpolynomial subexpressions" )
     ( "MINLPBND.CMODPROP",      opt::value<unsigned>(&MINLPBND.CMODPROP),               "maximum order of sparse polynomial model" )
     ( "MINLPBND.MONMIG",        opt::value<double>(&MINLPBND.CMODEL.MIN_FACTOR),        "monomial minimal coefficient in sparse polynomial model" )
-    ( "MINLPBND.MONBASIS",      opt::value<unsigned>(&MINLPBND.SQUAD.BASIS),            "monomial basis in sparse quadratic form" )
+    ( "MINLPBND.MONBASIS",      opt::value<int>(&MINLPBND.SQUAD.BASIS),                 "monomial basis in sparse quadratic form" )
+    ( "MINLPBND.MONORDER",      opt::value<int>(&MINLPBND.SQUAD.ORDER),                 "monomial processing order in sparse quadratic form" )
     ( "MINLPBND.MONSCALE",      opt::value<bool>(&MINLPBND.MONSCALE),                   "monomial scaling in sparse quadratic form" )
     ( "MINLPBND.REDQUADCUTS",   opt::value<bool>(&MINLPBND.SQUAD.REDUC),                "add redundant cuts within quadratisation" )
     ( "MINLPBND.PSDQUADCUTS",   opt::value<unsigned>(&MINLPBND.PSDQUADCUTS),            "add PSD cuts within quadratisation" )
@@ -1178,6 +1200,9 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.SANDWICHMAX",   opt::value<unsigned>(&MINLPBND.POLIMG.SANDWICH_MAXCUT), "maximal number of cuts in outer-approximation of univariate terms" )
     ( "MINLPBND.MIPRELGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPRELGAP),         "convergence relative tolerance of MIP solver" )
     ( "MINLPBND.MIPABSGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPABSGAP),         "convergence absolute tolerance of MIP solver" )
+    ( "MINLPBND.MIPHEURISTICS", opt::value<double>(&MINLPBND.MIPSLV.HEURISTICS),        "fraction of time spent in MIP heuristics" )
+    ( "MINLPBND.MIPNUMERIC",    opt::value<int>(&MINLPBND.MIPSLV.NUMERICFOCUS),         "control of numerical issues by MIP solver" )
+    ( "MINLPBND.MIPSCALE",      opt::value<int>(&MINLPBND.MIPSLV.SCALEFLAG),            "control of model scaling by MIP solver" )
     ( "MINLPBND.MIPDISPLEVEL",  opt::value<int>(&MINLPBND.MIPSLV.DISPLEVEL),            "display level of MIP solver" )
     ( "MINLPBND.MIPOUTPUTFILE", opt::value<std::string>(&MINLPBND.MIPSLV.OUTPUTFILE),   "output file for MIP model" )
     ( "MINLPBND.MIPMAXTHREAD",  opt::value<unsigned>(&MINLPBND.MIPSLV.THREADS),         "set number of threads used by MIP solver" )
@@ -1194,6 +1219,9 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPSLV.NLPMAXTHREAD",  opt::value<unsigned>(&MINLPSLV.NLPSLV.MAXTHREAD),     "set number of threads used by local NLP solver" )
     ( "MINLPSLV.MIPRELGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPABSGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver called by local MINLP solver" )
+    ( "MINLPSLV.MIPHEURISTICS", opt::value<double>(&MINLPSLV.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics by local MINLP solver" )
+    ( "MINLPSLV.MIPNUMERIC",    opt::value<int>(&MINLPSLV.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver called by local MINLP solver" )
+    ( "MINLPSLV.MIPSCALE",      opt::value<int>(&MINLPSLV.MIPSLV.SCALEFLAG),          "control of model scaling by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPDISPLEVEL",  opt::value<int>(&MINLPSLV.MIPSLV.DISPLEVEL),          "display level of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPOUTPUTFILE", opt::value<std::string>(&MINLPSLV.MIPSLV.OUTPUTFILE), "output file for MIP model called by local MINLP solver" )
     ( "MINLPSLV.MIPMAXTHREAD",  opt::value<unsigned>(&MINLPSLV.MIPSLV.THREADS),       "set number of threads used by MIP solver called by local MINLP solver" )
@@ -1261,6 +1289,15 @@ MINLGO<T,NLP,MIP>::Options::read
     return false;
   }
     
+  if( _USRMAP.count( "MINLPBND.REFORMMETH" ) )
+    MINLPBND.REFORMMETH.clear();
+    switch( _MINLPBND_REFORMMETH ){
+      default:
+      case 2: MINLPBND.REFORMMETH.insert( MINLPBND.QUAD ); // no break
+      case 1: MINLPBND.REFORMMETH.insert( MINLPBND.NPOL ); break;
+      case 0: break;
+    }
+    
   if( _USRMAP.count( "MINLPBND.RELAXMETH" ) )
     MINLPBND.RELAXMETH.clear();
     switch( _MINLPBND_RELAXMETH ){
@@ -1282,10 +1319,11 @@ MINLGO<T,NLP,MIP>::Options::read
   if( _USRMAP.count( "MINLPBND.BCHPRIM"      ) ) MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM;
   if( _USRMAP.count( "MINLPBND.CPMAX"        ) ) MINLPPRE.CPMAX                  = MINLPBND.CPMAX;
   if( _USRMAP.count( "MINLPBND.CPTHRES"      ) ) MINLPPRE.CPTHRES                = MINLPBND.CPTHRES;
-  if( _USRMAP.count( "MINLPBND.NPOLLIFT"     ) ) MINLPPRE.NPOLLIFT               = MINLPBND.NPOLLIFT;
+  if( _USRMAP.count( "MINLPBND.REFORMMETH"   ) ) MINLPPRE.REFORMMETH             = MINLPBND.REFORMMETH;
   if( _USRMAP.count( "MINLPBND.CMODPROP"     ) ) MINLPPRE.CMODPROP               = MINLPBND.CMODPROP;
   if( _USRMAP.count( "MINLPBND.MONMIG"       ) ) MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR;
   if( _USRMAP.count( "MINLPBND.MONBASIS"     ) ) MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS;
+  if( _USRMAP.count( "MINLPBND.MONORDER"     ) ) MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER;
   if( _USRMAP.count( "MINLPBND.MONSCALE"     ) ) MINLPPRE.MONSCALE               = MINLPBND.MONSCALE;
   if( _USRMAP.count( "MINLPBND.REDQUADCUTS"  ) ) MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC;
   if( _USRMAP.count( "MINLPBND.PSDQUADCUTS"  ) ) MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS;

@@ -1,5 +1,5 @@
 # Presolve level
-PRESOLVE    = 1
+PRESOLVE    = 0
 # Convergence absolute tolerance
 CVATOL      = 1e-5
 # Convergence relative tolerance
@@ -13,7 +13,7 @@ CUTINC      = 0
 # Add breakpoint at incumbent
 BKPTINC     = 0
 # Maximal number of refinements/iterations
-MAXITER     = 1
+MAXITER     = 10
 # Wall-time limit in seconds
 TIMELIMIT   = 72e2
 # General display level
@@ -47,12 +47,6 @@ PREOBBTMIG       = 1e-6
 PREMIPRELGAP     = 1e-3
 # Convergence absolute tolerance of MIP solver during presolve
 PREMIPABSGAP     = 1e-5
-# Fraction of time spent in MIP heuristics during presolve
-PREMIPHEURISTICS = 5e-2
-# Control of numerical issues by MIP solver during presolve - 0: automatic; 1-3: increasing numeric focus
-PREMIPNUMERIC    = 0
-# Control of model scaling by MIP solver during presolve - -1: automatic; 0: no scaling; 1-3: increasing scaling
-PREMIPSCALE      = -1
 # Display level of MIP solver during presolve - 0: no display; >0: display
 PREMIPDISPLEVEL  = 0
 # Output file for MIP model during presolve
@@ -63,7 +57,7 @@ PREMIPMAXTHREAD  = 0
 # Polyhedral relaxation approach during main iteration - 0: decomposition-linearization-relaxation; 1: quadratisation of sparse polynomial models
 RELAXMETH        = 0
 # Linearization of quadratic terms during main iteration
-RELAXQUAD        = 0
+RELAXQUAD        = 1
 # Linearization of monomial terms during main iteration - 0: no monomials linearized; 1: monomials of order >2 linearized and quadratic term linearization controlled by RELAXQUAD; 2: all monomials linearized
 RELAXMONOM       = 1
 # Linearization of nonlinear terms during main iteration
@@ -88,25 +82,19 @@ OBBTMIG          = 1e-6
 MIPRELGAP        = 1e-3
 # Convergence absolute tolerance of MIP solver during main iteration
 MIPABSGAP        = 1e-5
-# Fraction of time spent in MIP heuristics during main iteration
-MIPHEURISTICS    = 5e-2
-# Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
-MIPNUMERIC       = 0
-# Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling
-MIPSCALE         = -1
 # Display level of MIP solver during main iteration - 0: no display; >0: display
-MIPDISPLEVEL     = 1
+MIPDISPLEVEL     = 0
 # Output file for MIP model during main iteration
 MIPOUTPUTFILE    = canon.lp
 # Number of threads used by MIP solver during main iteration - 0: automatic
 MIPMAXTHREAD     = 0
 
 # Reformulations applied prior to relaxation - 0: none; 1: lifting of polynomial subexpressions and transcendental terms; 2: same as 1 plus lifting of polynomials into quadratic forms
-REFORMMETH       = 2
+REFORMMETH       = 1
 # Set higher branch priority to primary variables
 BCHPRIM          = 0
 # Maximum rounds of constraint propagation
-CPMAX            = 0
+CPMAX            = 10
 # Threshold for constraint propagation repeats - minimum relative reduction in any variable
 CPTHRES          = 0e0
 # Maximum order of sparse polynomial model
@@ -114,9 +102,9 @@ CMODPROP         = 15
 # Monomial minimal coefficient in sparse polynomial model
 MONMIG           = 1e-10
 # Monomial basis in sparse quadratic form - 0: power; 1: Chebyshev
-MONBASIS         = 1
+MONBASIS         = 0
 # Monomial processing order in sparse quadratic form - 0: increasing order; 1: decreasing order
-MONORDER         = 1
+MONORDER         = 0
 # Monomial scaling in sparse quadratic form
 MONSCALE         = 0
 # Add reduced RLT cuts
@@ -143,7 +131,7 @@ SANDWICHMAX      = 5
 [MINLPSLV]
 
 # Maximal number of outer-approximation iterations by local MINLP solver
-MAXITER          = 10
+MAXITER          = 40
 # Maximum rounds of constraint propagation during presolve of local MINLP solver
 CPMAX            = 10
 # Threshold for constraint propagation repeats during presolve of local MINLP solver - minimum relative reduction in any variable
@@ -168,12 +156,6 @@ NLPMAXTHREAD     = 0
 MIPRELGAP        = 1e-3
 # Convergence absolute tolerance of MIP solver during local MINLP search
 MIPABSGAP        = 1e-5
-# Fraction of time spent in MIP heuristics during local MINLP search
-MIPHEURISTICS    = 5e-2
-# Control of numerical issues by MIP solver during local MINLP search - 0: automatic; 1-3: increasing numeric focus
-MIPNUMERIC       = 0
-# Control of model scaling by MIP solver during local MINLP search - -1: automatic; 0: no scaling; 1-3: increasing scaling
-MIPSCALE         = -1
 # Display level of MIP solver during local MINLP search - 0: no display; >0: display
 MIPDISPLEVEL     = 0
 # Output file for MIP model during local MINLP search

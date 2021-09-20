@@ -101,6 +101,8 @@ Other options can be modified to tailor the search, including output level, maxi
 #include "mipslv_gurobi.hpp"
 
 //#undef MC__MINLPBND_DEBUG
+#define MC__MINLPBND_DEBUG_LIFT
+#define MC__MINLPBND_SHOW_REDUC
 
 namespace mc
 {
@@ -149,8 +151,14 @@ protected:
   std::vector<T>            _Xbnd;
   //! @brief vector of decision variable types
   std::vector<unsigned>     _Xtyp;
-  //! @brief subset of linear participating variables
+  //! @brief subset of variables in linear expressions
   std::set<unsigned>        _Xlin;
+  //! @brief subset of variables in quadratic expressions
+  std::set<unsigned>        _Xquad;
+  //! @brief subset of variables in polynomial expressions
+  std::set<unsigned>        _Xpol;
+  //! @brief subset of variables in general expressions
+  std::set<unsigned>        _Xgal;
   //! @brief vector of [-1,1] scaled variables
   std::vector<FFVar>        _Xscal;
   //! @brief Chebyshev basis map
@@ -176,8 +184,12 @@ protected:
   FFSubgraph                _Fallops;
   //! @brief subset of linear functions
   std::set<unsigned>         _Flin;
-  //! @brief subset of nonpolynomial functions
-  std::set<unsigned>         _Fnpol;
+  //! @brief subset of quadratic functions
+  std::set<unsigned>         _Fquad;
+  //! @brief subset of polynomial functions
+  std::set<unsigned>         _Fpol;
+  //! @brief subset of general functions
+  std::set<unsigned>         _Fgal;
   //! @brief subset of equality-constrained functions
   std::set<unsigned>         _Fctreq;
 
@@ -245,7 +257,8 @@ protected:
   //! @brief Storage vector for function evaluation in Interval superposition arithmetic
   std::vector< ISVar<T> >   _ISMwk;
 
-
+  //! @brief Worst dependence type in participating expressions
+  FFDep::TYPE               _pbclass;
   //! @brief Flag for setup function
   bool                      _issetup;
   //! @brief Flag for MIP problem
@@ -279,12 +292,12 @@ public:
   {
     //! @brief Constructor
     Options():
-      RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), BCHPRIM(0),
-      OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(false),
+      REFORMMETH({NPOL}), RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), BCHPRIM(0),
+      OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(true),
       CPMAX(10), CPTHRES(0.), ISMDIV(10), ISMMIPREL(true),
       CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF), MONSCALE(false),
-      RRLTCUTS(false), PSDQUADCUTS(1), DCQUADCUTS(false), NCOCUTS(false), NCOADIFF(ASA),
-      NPOLLIFT(false), LINCTRSEP(false), TIMELIMIT(6e2), DISPLEVEL(2),
+      RRLTCUTS(false), PSDQUADCUTS(0), DCQUADCUTS(false), NCOCUTS(false), NCOADIFF(ASA),
+      LINCTRSEP(false), TIMELIMIT(6e2), DISPLEVEL(2),
       POLIMG(), MIPSLV(), SPARSEEXPR(), SQUAD(), RLTRED()
       { CMODEL.MIXED_IA        = true;
         CMODEL.MIN_FACTOR      = 1e-13; // compatibility with GUROBI
@@ -295,11 +308,13 @@ public:
         SPARSEEXPR.LIFTDIV     = true;
         SPARSEEXPR.LIFTIPOW    = false;
         SQUAD.BASIS            = SQuad::Options::MONOM;
+        SQUAD.ORDER            = SQuad::Options::INC;
         RLTRED.METHOD          = RLTRed::Options::ILP;
         RLTRED.LEVEL           = RLTRed::Options::PRIMSIM;
         RLTRED.TIMELIMIT       = TIMELIMIT; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
+        REFORMMETH    = options.REFORMMETH;
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
         SUBSETSCQ     = options.SUBSETSCQ;
@@ -324,7 +339,6 @@ public:
         DCQUADCUTS    = options.DCQUADCUTS;
         NCOCUTS       = options.NCOCUTS;
         NCOADIFF      = options.NCOADIFF;
-        NPOLLIFT      = options.NPOLLIFT;
         LINCTRSEP     = options.LINCTRSEP;
         TIMELIMIT     = options.TIMELIMIT;
         DISPLEVEL     = options.DISPLEVEL;
@@ -342,6 +356,11 @@ public:
       SCQ,    //!< Quadratisation of sparse Chebyshev models, controlled by parameters CMODPROP and CMODCUT
       ISM     //!< Interval superposition model relaxations, controlled by parameters ISMDIV
     };
+    //! @brief Reformulation strategy
+    enum REFORM{
+      NPOL=0,  //!< Reformulate non-polynomial expressions as polynomial subexpressions and transcendental terms using mc::SparseExpr
+      QUAD     //!< Flatten linear/quadratic/polynomial expressions and lift polynomial into quadratic expressions
+    };
     //! @brief Reduced-space strategy
     //enum REDUC{
     //  NOREDUC=0, //!< Do not use Chebyshev-reduction constraints
@@ -352,6 +371,8 @@ public:
       FSA=0,      //!< Forward sensitivity analysis
       ASA         //!< Adjoint sensitivity analysis
     };
+    //! @brief Reformulation methods
+    std::set<REFORM> REFORMMETH;   
     //! @brief Relaxation methods
     std::set<RELAX> RELAXMETH;
     //! @brief Exclusion from decomposition-relaxation-linearization: 0: none; 1: non-polynomial functions; 2: polynomial functions
@@ -400,8 +421,6 @@ public:
     bool NCOCUTS;
     //! @brief NCO method
     unsigned NCOADIFF;
-    //! @brief Whether to reformulate nonpolynomial functions as polynomial and transcendental expressions using mc::SparseExpr
-    bool NPOLLIFT;
     //! @brief Whether to separate linear constraints prior to relaxation
     bool LINCTRSEP;
     //! @brief Maximum run time (seconds)
@@ -518,7 +537,7 @@ public:
   void setup
     ( std::ostream& os=std::cout );
     //( unsigned const* Xtyp=nullptr, std::ostream& os=std::cout );
-        
+
   //! @brief Update variable and function bounds before tightening / relaxation
   bool update_bounds
     ( T const* X=nullptr, double const* Finc=nullptr, bool const resetbnd=true );
@@ -555,9 +574,9 @@ public:
   int propagate
     ( T* X=nullptr, double const* Finc=nullptr, bool const resetbnd=true );
 
-    //! @brief Test whether a variable vector is integer feasible
+    //! @brief Test whether all variables of a given type are bounded
   bool bounded_domain
-    ( double const& maxdiam, bool const nonlin=false )
+    ( double const& maxdiam, FFDep::TYPE const type )
     const;
 
   //! @brief Get const pointer to MIP solver
@@ -577,6 +596,12 @@ public:
     const
     { return _Xbnd.data(); }
 
+  //! @brief Get problem class - i.e. worst dependence type in relaxed subproblem
+  FFDep::TYPE problem_class 
+    ()
+    const
+    { return _pbclass; }
+
 private:
 
   //! @brief Time point to enable TIMELIMIT option
@@ -592,6 +617,10 @@ private:
 
   //! @brief Lift nonpolynomial functions
   void _lift_nonpolynomial
+    ();
+
+  //! @brief Lift semi-algebraic functions
+  void _lift_semialgebraic
     ();
 
   //! @brief Search for reduced RLT cuts
@@ -628,6 +657,21 @@ private:
   //! @brief Set model polyhedral superposition-derived cuts
   void _set_cuts_ISM
     ();
+
+  //! @brief Create DAG variable for given quadratic form
+  FFVar _var_pol
+    ( SQuad::t_SQuad const& quad, std::map< SPolyMon, FFVar, lt_SPolyMon >& mapmon )
+    const;
+    
+  //! @brief Create DAG variable for given Chebyshev basis function 
+  FFVar _var_cheb
+    ( FFVar const& x, const unsigned n )
+    const;
+    
+  //! @brief Create DAG variable and auxiliary for given high-order monomial 
+  std::pair< FFVar const*, FFVar const* > _var_mon
+    ( SPolyMon const& mon )
+    const;
 
   //! @brief Compute bound of (unscaled) monomial <a>mon</a>
   T _bnd_mon
@@ -805,17 +849,19 @@ MINLPBND<T,MIP>::setup
 
   // reformulate nonpolynomial functions
   _Xlift.clear();
-  if( options.NPOLLIFT ) _lift_nonpolynomial();
+  if( options.REFORMMETH.count( Options::NPOL ) ) _lift_nonpolynomial();
+  if( options.REFORMMETH.count( Options::QUAD ) ) _lift_semialgebraic();
 
   // search for reduced RLT cuts
   if( options.RRLTCUTS ) _search_reduction_constraints();
 
   if( options.DISPLEVEL )
-    os << "LINEARLY PARTICIPATING VARIABLES:          " << _Xlin.size()     << std::endl
-       << "NONLINEARLY PARTICIPATING VARIABLES:       " << _nX-_Xlin.size() << std::endl
-       << "LINEAR OBJECTIVE/CONSTRAINT FUNCTIONS:     " << _Flin.size() << std::endl
-       << "POLYNOMIAL OBJECTIVE/CONSTRAINT FUNCTIONS: " << _nF-_Fnpol.size()-_Flin.size() << std::endl
-       << "NONLINEAR OBJECTIVE/CONSTRAINT FUNCTIONS:  " << _Fnpol.size() << std::endl;
+    os << "            |  VARIABLES      FUNCTIONS" << std::endl << std::right
+       << "------------+--------------------------" << std::endl
+       << "LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
+       << "QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
+       << "POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
+       << "GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl;
 
   // setup [-1,1] scaled variables for Chebyshev model arithmetic
   // do not downsize to avoid adding more variables into DAG
@@ -873,20 +919,222 @@ MINLPBND<T,MIP>::_search_reduction_constraints
 
 template <typename T, typename MIP>
 inline void
+MINLPBND<T,MIP>::_lift_semialgebraic
+()
+{
+  auto Fsalg = _Flin;
+  Fsalg.insert( _Fquad.cbegin(), _Fquad.cend() );
+  Fsalg.insert( _Fpol.cbegin(),  _Fpol.cend()  ); 
+  if( Fsalg.empty() ) return;
+
+  // Create vector of all semi-algebraic expressions
+  SPolyExpr::options.BASIS = SPolyExpr::Options::MONOM;
+  std::vector<SPolyExpr> SPXvar, SPFvar( _nF );
+  for( auto const& var: _Xvar ) SPXvar.push_back( SPolyExpr( var ) );
+  _dag->eval( Fsalg, _Fvar.data(), SPFvar.data(), _nX, _Xvar.data(), SPXvar.data() );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+  for( auto i : Fsalg ) std::cout << SPFvar[i];
+  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
+#endif
+
+  // Substitute linear and quadratic expressions in DAG
+  for( auto i : _Flin ){
+    _Fvar[i] = SPFvar[i].insert( _dag );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+    std::ostringstream ostr; ostr << " of flattened linear expression F[" << i << "]";
+    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
+#endif
+  }
+  for( auto i : _Fquad ){
+    _Fvar[i] = SPFvar[i].insert( _dag );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+    std::ostringstream ostr; ostr << " of flattened quadratic expression F[" << i << "]";
+    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
+#endif
+  }
+
+  // Transform variable indexing in polynomial expressions
+  std::vector<SQuad::t_SPolyMonCoef> SPol( _Fpol.size() );
+  std::map<FFVar const*, unsigned, lt_FFVar> FFmatch;
+  unsigned ivar = 0;
+  for( auto const& var : _Xvar ) FFmatch[&var] = ivar++;
+  unsigned ifun = 0;
+  for( auto i : _Fpol ){
+    for( auto const& [FFmon,coef] : SPFvar[i].mapmon() ){
+      SPolyMon mon( FFmon.tord, FFmon.expr, FFmatch ); 
+      SPol[ifun].insert( std::make_pair( mon, coef ) );
+    }
+    ++ifun;
+  }
+
+  // Apply quadratisation to polynomial expressions
+  SQuad QForm;
+  QForm.options = options.SQUAD;
+#ifndef MC__MINLPBND_DEBUG_LIFT
+  QForm.process( SPol.size(), SPol.data(), SQuad::Options::MONOM );
+#else
+  double viol = QForm.process( SPol.size(), SPol.data(), SQuad::Options::MONOM, true );
+  std::cout << "violation: " << viol << std::endl;
+  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
+#endif
+
+  // Add higher-order monomials in basis to DAG
+  std::map< SPolyMon, FFVar, lt_SPolyMon > mapmon; 
+  for( auto const& mon : QForm.SetMon() ){
+    if( mon.tord == 1 ) mapmon[mon] = _Xvar[mon.expr.cbegin()->first];
+    if( mon.tord <= 1 ) continue;
+    auto [pAux,pVar] = _var_mon( mon );
+    _Xlift[_Xvar.size()] = *pAux; // <- stores monomial DAG expression
+    _Xvar.push_back( *pVar );
+    _Xlow.push_back( -BASE_OPT::INF );
+    _Xupp.push_back(  BASE_OPT::INF );
+    _Xtyp.push_back( 0 );
+    mapmon[mon] = *pVar;
+#ifdef MC__MINLPBND_DEBUG_LIFT
+    std::cout << "Lifted monomial " << *pVar << " := " << mon.display(options.SQUAD.BASIS) << std::endl;
+    _dag->output( _dag->subgraph( 1, pAux ) );
+#endif
+  }
+
+  // Substitute lifted quadratic expressions
+  unsigned iquad = 0;
+  for( auto i : _Fpol ){
+    _Fvar[i] = _var_pol( QForm.MatFct()[iquad++], mapmon );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+    std::ostringstream ostr; ostr << " of lifted quadratic expression F[" << i << "]";
+    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
+#endif
+  }
+  
+  // Append reduction quadratic cuts
+  for( auto red : QForm.MatRed() ){
+    _Fvar.push_back( _var_pol( red, mapmon ) );
+    _Flow.push_back( 0. );
+    _Fupp.push_back( 0. );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+    std::ostringstream ostr; ostr << " of reduction quadratic cut";
+    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
+#endif
+  }
+
+  // Append positive semi-definite cuts
+  for( auto psd : QForm.MatPSD() ){
+    _Fvar.push_back( _var_pol( psd, mapmon ) );
+    _Flow.push_back( 0. );
+    _Fupp.push_back( 0. );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+    std::ostringstream ostr; ostr << " of semi-definite quadratic cut";
+    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
+#endif
+  }
+
+  // update variable and function size and type
+  _nX = _Xvar.size();
+  _nF = _Fvar.size();
+  _set_variable_class();    
+  _set_function_class();
+#ifdef MC__MINLPBND_DEBUG_LIFT
+  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }  
+#endif
+}
+
+template <typename T, typename MIP>
+inline FFVar
+MINLPBND<T,MIP>::_var_pol
+( SQuad::t_SQuad const& quad, std::map< SPolyMon, FFVar, lt_SPolyMon >& mapmon )
+const
+{
+  FFVar varpol = 0.;
+  for( auto const& [ijmon,coef] : quad ){
+    if( !ijmon.first->tord && !ijmon.second->tord )
+      varpol += coef;
+    else if( !ijmon.first->tord ){
+#ifdef MC__MINLPBND_DEBUG_LIFT
+      assert( mapmon.count( *ijmon.second ) );
+#endif
+      varpol += coef * mapmon[*ijmon.second];
+    }
+    else if( ijmon.first == ijmon.second ){
+#ifdef MC__MINLPBND_DEBUG_LIFT
+      assert( mapmon.count( *ijmon.first ) );
+#endif
+      varpol += coef * sqr( mapmon[*ijmon.second] );
+    }
+    else{
+#ifdef MC__MINLPBND_DEBUG_LIFT
+      assert( mapmon.count( *ijmon.first ) && mapmon.count( *ijmon.second ) );
+#endif
+      varpol += coef * ( mapmon[*ijmon.first] * mapmon[*ijmon.second] );
+    }
+  }
+  return varpol;
+}
+
+template <typename T, typename MIP>
+inline FFVar
+MINLPBND<T,MIP>::_var_cheb
+( FFVar const& x, const unsigned n )
+const
+{
+  switch( n ){
+    case 0:  return 1.;
+    case 1:  return x;
+    case 2:  return 2.*sqr(x)-1.;
+    default: return n%2? 2.*_var_cheb(x,n/2)*_var_cheb(x,n/2+1)-x:
+                         2.*sqr(_var_cheb(x,n/2))-1.;
+    //default: return 2.*x*_var_cheb(x,n-1)-_var_cheb(x,n-2);
+  }
+}
+
+template <typename T, typename MIP>
+inline std::pair< FFVar const*, FFVar const* >
+MINLPBND<T,MIP>::_var_mon
+( SPolyMon const& mon )
+const
+{
+  // define power monomial expression
+  FFVar Xlift( 1e0 );
+  for( auto const& [ivar,iord] : mon.expr ){
+    switch( options.SQUAD.BASIS ){
+     // Monomial basis
+     case SQuad::Options::MONOM:
+      Xlift *= pow( _Xvar[ivar], (int)iord );
+      break;
+     // Chebyshev basis
+     case SQuad::Options::CHEB:
+      Xlift *= _var_cheb( _Xvar[ivar], iord );
+      break;
+    }
+  }
+  auto itXlift = _dag->Vars().find( &Xlift );
+
+  // define power monomial variable
+  FFVar Xmon( _dag );
+  auto itXmon = _dag->Vars().find( &Xmon );
+
+  return std::make_pair( *itXlift, *itXmon );
+}
+
+template <typename T, typename MIP>
+inline void
 MINLPBND<T,MIP>::_lift_nonpolynomial
 ()
 {
-  if( _Fnpol.empty() ) return;
+  if( _Fgal.empty() ) return;
 
   _SPenv->set( _dag );
   _SPenv->options = options.SPARSEEXPR;
-  _SPenv->process( _Fnpol, _Fvar.data(), true );
+  _SPenv->process( _Fgal, _Fvar.data(), true );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+  std::cout << *_SPenv;
+  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
+#endif
 
   // append auxiliary variables
   for( auto&& [pAux,pVar] : _SPenv->Aux() ){
     bool is_dep = false;
     unsigned i = 0;
-    for( auto it=_Fnpol.begin(); it!=_Fnpol.end(); ++it ){
+    for( auto it=_Fgal.begin(); it!=_Fgal.end(); ++it ){
       i = *it;
       if( _Fvar[i] != *pAux ) continue;
       is_dep = true;
@@ -935,18 +1183,29 @@ inline void
 MINLPBND<T,MIP>::_set_variable_class
 ()
 {
-  FFDep Fdep( 0. );
+  FFDep Fworst( 0. );
   for( auto && Fj : _Fvar )
-    Fdep += Fj.dep();
+    Fworst += Fj.dep();
 #ifdef MC__MINLPBND_DEBUG
-  std::cout << "DEPS <- " << Fdep << std::endl;
+  std::cout << "DEPS <- " << Fworst << std::endl;
   //int dum; std::cin >> dum;
 #endif
+
   _Xlin.clear();
+  _Xquad.clear();
+  _Xpol.clear();
+  _Xgal.clear();
+
   for( unsigned i=0; i<_nX; i++ ){
-    auto it = Fdep.dep().find( _Xvar[i].id().second );
-    if( it == Fdep.dep().end() || it->second == FFDep::L )
-      _Xlin.insert( i );
+    auto it = Fworst.dep().find( _Xvar[i].id().second );
+    if( it == Fworst.dep().end() ) _Xlin.insert( i );
+    else switch( it->second ){
+     case FFDep::L: _Xlin.insert( i );  break;
+     case FFDep::Q: _Xquad.insert( i ); break;
+     case FFDep::P: _Xpol.insert( i );  break;
+     case FFDep::R:
+     case FFDep::N: _Xgal.insert( i ); break;
+    }
   }
 }
 
@@ -956,20 +1215,22 @@ MINLPBND<T,MIP>::_set_function_class
 ()
 {
   _Flin.clear();
-  _Fnpol.clear();
+  _Fquad.clear();
+  _Fpol.clear();
+  _Fgal.clear();
   _Fctreq.clear();
  
+  _pbclass = FFDep::L;
   for( unsigned j=0; j<_nF; j++ ){
-    auto && Fjdep = _Fvar[j].dep();
-    auto it = Fjdep.dep().cbegin();
-    bool is_lin = true;
-    bool is_pol = true;
-    for( ; is_lin && is_pol && it != Fjdep.dep().cend(); ++it ){
-      if( it->second > FFDep::L ) is_lin = false;
-      if( it->second > FFDep::P ) is_pol = false;
+    auto depworst = _Fvar[j].dep().worst();
+    switch( depworst ){
+     case FFDep::L: _Flin.insert( j );  break;
+     case FFDep::Q: _Fquad.insert( j ); break;
+     case FFDep::P: _Fpol.insert( j );  break;
+     case FFDep::R:
+     case FFDep::N: _Fgal.insert( j );  break;
     }
-    if( is_lin )  _Flin.insert( j );
-    if( !is_pol ) _Fnpol.insert( j );
+    if( _pbclass < depworst ) _pbclass = depworst;
     if( _Flow[j] == 0. && _Fupp[j] == 0. ) _Fctreq.insert( j );
   }
 }
@@ -977,14 +1238,15 @@ MINLPBND<T,MIP>::_set_function_class
 template <typename T, typename MIP>
 inline bool
 MINLPBND<T,MIP>::bounded_domain
-( double const& maxdiam, bool const nonlin )
+( double const& maxdiam, FFDep::TYPE const type )
 const
 {
-  // Check domain boundedness
-  if( _Xbnd.empty() ) return false;
-  for( unsigned i=0; i<_nX; i++ ){
-    if( nonlin && _Xlin.find(i) != _Xlin.end() ) continue;
-    if( Op<T>::diam( _Xbnd[i] ) >= maxdiam ) return false;
+  switch( type ){
+    case FFDep::L: for( auto i : _Xlin  ) if( Op<T>::diam( _Xbnd[i] ) >= maxdiam ) return false; break;
+    case FFDep::Q: for( auto i : _Xquad ) if( Op<T>::diam( _Xbnd[i] ) >= maxdiam ) return false; break;
+    case FFDep::P: for( auto i : _Xpol  ) if( Op<T>::diam( _Xbnd[i] ) >= maxdiam ) return false; break;
+    case FFDep::R:
+    case FFDep::N: for( auto i : _Xgal  ) if( Op<T>::diam( _Xbnd[i] ) >= maxdiam ) return false; break;
   }
   return true;
 }
@@ -1117,10 +1379,10 @@ inline int
 MINLPBND<T,MIP>::_reduce
 ( unsigned const ix, bool const uplo )
 {
-#ifdef MC__MINLPBND_DEBUG
+//#ifdef MC__MINLPBND_DEBUG
   std::cout << "\nTIGHTENING OF VARIABLE " << ix << (uplo?"U":"L") << ":\n";
-  std::cout << _POLenv;
-#endif
+//  std::cout << _POLenv;
+//#endif
   // Set-up lower/upper bound objective, options, and solve polyhedral relaxation
   auto tMIP = stats.start();
   _MIPSLV->set_objective( _POLXvar[ix], (uplo? BASE_OPT::MAX: BASE_OPT::MIN) );
@@ -1196,9 +1458,9 @@ MINLPBND<T,MIP>::_reduce
         break;
       }
         
-#ifdef MC__MINLPBND_DEBUG
+//#ifdef MC__MINLPBND_DEBUG
       std::cout << "  UPDATED RANGE OF VARIABLE #" << ix << ": " << _Xbnd[ix] << std::endl;
-#endif
+//#endif
       // update map of candidate reduction subproblems
       vardomredupd.clear();
       for( ++itv; itv!=vardomred.end(); ++itv ){
@@ -1687,9 +1949,9 @@ MINLPBND<T,MIP>::_set_cuts_DRL
   // Add polyhedral cuts for each nonlinear function
   //_POLFvar.resize( _nF );
   for( unsigned j=0; j<_nF; j++ ){
-   if( ( options.LINCTRSEP      && _Flin.find( j )  != _Flin.end()  )   // exclude cut of linear function
-    || ( options.SUBSETDRL == 1 && _Fnpol.find( j ) != _Fnpol.end() )   // exclude cut of non-polynomial function
-    || ( options.SUBSETDRL == 2 && _Fnpol.find( j ) == _Fnpol.end() ) ) // exclude cut of polynomial function
+   if( ( options.LINCTRSEP      && _Flin.find( j ) != _Flin.end() )   // exclude cut of linear function
+    || ( options.SUBSETDRL == 1 && _Fgal.find( j ) != _Fgal.end() )   // exclude cut of non-polynomial function
+    || ( options.SUBSETDRL == 2 && _Fgal.find( j ) == _Fgal.end() ) ) // exclude cut of polynomial function
      continue;
    try{
      _dag->eval( _Fops[j], _POLwk, 1, &_Fvar[j], &_POLFvar[j], _nX, _Xvar.data(), _POLXvar.data() );
@@ -1720,9 +1982,9 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
   // Subset of functions to be relaxed
   std::set<unsigned> ndxF;
   for( unsigned j=0; j<_nF; j++ ){
-    if( ( options.LINCTRSEP      && _Flin.find( j )  != _Flin.end()  )   // exclude cut of linear function
-     || ( options.SUBSETSCQ == 1 && _Fnpol.find( j ) != _Fnpol.end() )   // exclude cut of non-polynomial function
-     || ( options.SUBSETSCQ == 2 && _Fnpol.find( j ) == _Fnpol.end() ) ) // exclude cut of polynomial function
+    if( ( options.LINCTRSEP      && _Flin.find( j ) != _Flin.end() )   // exclude cut of linear function
+     || ( options.SUBSETSCQ == 1 && _Fgal.find( j ) != _Fgal.end() )   // exclude cut of non-polynomial function
+     || ( options.SUBSETSCQ == 2 && _Fgal.find( j ) == _Fgal.end() ) ) // exclude cut of polynomial function
       continue;
     ndxF.insert( j );
   }
@@ -1791,9 +2053,9 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
       break;
     }
 #ifndef MC__MINLPBND_DEBUG_SCQ
-    QForm.process( coefmon );
+    QForm.process( coefmon, options.SQUAD.BASIS );
 #else
-    double viol = QForm.process( coefmon, true );
+    double viol = QForm.process( coefmon, options.SQUAD.BASIS, true );
     if( viol > 1e-15 ){
       std::cout << _CMFvar[j].display( coefmon, options.SQUAD.BASIS );
       std::cout << "violation: " << viol << std::endl;
