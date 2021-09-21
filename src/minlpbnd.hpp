@@ -688,9 +688,13 @@ private:
   void _set_mon_SCQ
     ();
 
+  // Set monomial vector from quadratic form in polyhedral image
+  void _set_mon_SQ
+    ();
+
   // Append cuts for quadratic form in polynomial image
   void _set_cuts_SQ
-    ( std::set<unsigned> ndxF );
+    ( std::set<unsigned> ndxF, bool const chkrem );
 
   //! @brief Get monomial <a>mon</a> from DAG monomial map <a>_Xmon</a> or add it to the map if absent
   FFVar const& _get_mon
@@ -864,18 +868,18 @@ MINLPBND<T,MIP>::setup
   // reformulate nonpolynomial functions
   _Xlift.clear();
   if( options.REFORMMETH.count( Options::NPOL ) ) _lift_nonpolynomial();
-  if( options.REFORMMETH.count( Options::QUAD ) ) _lift_semialgebraic();
+  if( options.REFORMMETH.count( Options::QUAD ) ) _lift_semialgebraic( false );
 
   // search for reduced RLT cuts
   if( options.RRLTCUTS ) _search_reduction_constraints();
 
   if( options.DISPLEVEL )
-    os << "            |  VARIABLES      FUNCTIONS" << std::endl << std::right
-       << "------------+--------------------------" << std::endl
-       << "LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
-       << "QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
-       << "POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
-       << "GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl;
+    os << "             |  VARIABLES      FUNCTIONS" << std::endl << std::right
+       << "-------------+---------------------------" << std::endl
+       << " LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
+       << " QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
+       << " POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
+       << " GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl;
 
   // setup [-1,1] scaled variables for Chebyshev model arithmetic
   // do not downsize to avoid adding more variables into DAG
@@ -967,13 +971,14 @@ MINLPBND<T,MIP>::_lift_semialgebraic
 #endif
   }
 
-  // Transform variable indexing in polynomial expressions
-  std::vector<SQuad::t_SPolyMonCoef> SPol( _Fpol.size() );
+  // Transform variable indexing in quadratic and polynomial expressions
   std::map<FFVar const*, unsigned, lt_FFVar> FFmatch;
   unsigned ivar = 0;
   for( auto const& var : _Xvar ) FFmatch[&var] = ivar++;
   unsigned ifun = 0;
-  for( auto i : _Fpol ){
+  auto Ftpol = _Fpol; Ftpol.insert( _Fquad.cbegin(), _Fquad.cend() );
+  std::vector<SQuad::t_SPolyMonCoef> SPol( Ftpol.size() );
+  for( auto i : Ftpol ){
     for( auto const& [FFmon,coef] : SPFvar[i].mapmon() ){
       SPolyMon mon( FFmon.tord, FFmon.expr, FFmatch ); 
       SPol[ifun].insert( std::make_pair( mon, coef ) );
@@ -1013,7 +1018,7 @@ MINLPBND<T,MIP>::_lift_semialgebraic
 
   // Substitute lifted quadratic expressions
   unsigned iquad = 0;
-  for( auto i : _Fpol ){
+  for( auto i : Ftpol ){
     _Fvar[i] = _var_pol( _SQenv.MatFct()[iquad++], mapmon );
 #ifdef MC__MINLPBND_DEBUG_LIFT
     std::ostringstream ostr; ostr << " of lifted quadratic expression F[" << i << "]";
@@ -1022,7 +1027,7 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   }
   
   // Append reduction quadratic cuts
-  for( auto red : _SQenv.MatRed() ){
+  for( auto const& red : _SQenv.MatRed() ){
     _Fvar.push_back( _var_pol( red, mapmon ) );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
@@ -1033,12 +1038,13 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   }
 
   // Append positive semi-definite cuts
-  for( auto psd : _SQenv.MatPSD() ){
+  _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
+  for( auto const& psd : _SQenv.MatPSD() ){
     _Fvar.push_back( _var_pol( psd, mapmon ) );
     _Flow.push_back( 0. );
-    _Fupp.push_back( 0. );
+    _Fupp.push_back( BASE_OPT::INF );
 #ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of semi-definite quadratic cut";
+    std::ostringstream ostr; ostr << " of semi-definite quadratic cut >=0";
     _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
 #endif
   }
@@ -1747,6 +1753,10 @@ MINLPBND<T,MIP>::update_polrelax
   // Reset polyhedral cuts
   if( resetcuts ) _POLenv.reset_cuts();
 
+  // Reset monomial vectors
+  _POLXmon.clear();
+  _POLXprodmon.clear();
+
   // Update polyhedral main variables
   auto itX = _POLXvar.begin();
   for( unsigned i=0; itX!=_POLXvar.end(); ++itX, i++ )
@@ -1762,29 +1772,18 @@ MINLPBND<T,MIP>::update_polrelax
       // Add McCormick-derived polyhedral cuts
       default:
       case Options::DRL:
+        // Add polyhedral cuts
         _set_cuts_DRL();
         break;
 
       // Add Chebyshev-derived polyhedral cuts
       case Options::SCDRL:
-        // Update Chebyshev variables
-        //for( unsigned i=0; i<_nX; i++ )
-        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-
         // Add polyhedral cuts
         _set_cuts_SCDRL();
         break;
 
       // Add Chebyshev-derived polyhedral cuts
       case Options::SCQ:
-        // Update Chebyshev variables
-        //for( unsigned i=0; i<_nX; i++ )
-        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-
-        // Reset Chebyshev basis map in polyhedral image
-        _POLXmon.clear();
-        _POLXprodmon.clear();
-
         // Add quadratic cuts
         _set_cuts_SCQ();
         break;
@@ -1857,89 +1856,7 @@ MINLPBND<T,MIP>::refine_polrelax
 
   // Reset polyhedral cuts
   if( resetcuts ) _POLenv.reset_cuts();
-
-//  // Add linear cuts
-//  _set_cuts_LIN();
-
-//  // Add nonlinear cuts
-//  for( auto && meth : options.RELAXMETH ){
-//    switch( meth ){
-
-//      // Add McCormick-derived polyhedral cuts
-//      default:
-//      case Options::DRL:
-//        _set_cuts_DRL();
-//        break;
-
-//      // Add Chebyshev-derived polyhedral cuts
-//      case Options::SCDRL:
-//        // Update Chebyshev variables
-//        //for( unsigned i=0; i<_nX; i++ )
-//        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-
-//        // Add polyhedral cuts
-//        _set_cuts_SCDRL();
-//        break;
-
-//      // Add Chebyshev-derived polyhedral cuts
-//      case Options::SCQ:
-//        // Update Chebyshev variables
-//        //for( unsigned i=0; i<_nX; i++ )
-//        //  _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-
-//        // Reset Chebyshev basis map in polyhedral image
-//        _POLXmon.clear();
-//        _POLXprodmon.clear();
-
-//        // Add quadratic cuts
-//        _set_cuts_SCQ();
-//        break;
-
-//      // Add Interval superposition-derived polyhedral cuts
-//      case Options::ISM:
-//        // Update ISM variables
-//        for( unsigned i=0; i<_nX; i++ )
-//          _ISMXvar[i].set( _ISMenv, i, _Xbnd[i] );
-
-//        // Add polyhedral cuts
-//        _set_cuts_ISM();
-//        break;
-//    }
-//  }
-
-//  // Update polyhedral dependent bounds
-//  for( unsigned i=0; i<_nF; i++ ){
-//   T Fupdi = _Fbnd[i];
-//    Op<T>::inter( Fupdi, _Fbnd[i], _POLFvar[i].range() );
-//    _POLFvar[i].update( Fupdi );
-//  }
-
-////  // Update polyhedral cuts
-////  _set_cuts_LIN();
-////  for( auto && meth : options.RELAXMETH ){
-////    switch( meth ){
-////      default:
-////      case Options::DRL:
-////        _set_cuts_DRL();
-////        break;
-////      case Options::SCDRL:
-////        _set_cuts_SCDRL();
-////        break;
-////      case Options::SCQ:
-////        _set_cuts_SCQ();
-////        break;
-////      case Options::ISM:
-////        _set_cuts_ISM();
-////        break;
-////    }
-////  }
-
   stats.walltime_polimg += stats.walltime( tstart );
-
-//  // Input cuts in MIP solver
-//  tstart = stats.start();
-//  _MIPSLV->set_cuts( &_POLenv, true );
-//  stats.walltime_setmip += stats.walltime( tstart );
 }
 
 template <typename T, typename MIP>
@@ -1977,28 +1894,45 @@ inline void
 MINLPBND<T,MIP>::_set_cuts_DRL
 ()
 {
-  // Add polyhedral cuts for each nonlinear function
-  //_POLFvar.resize( _nF );
+  // Subset of functions to be relaxed
+  std::set<unsigned> Frel, Fsalg = _Fquad; Fsalg.insert( _Fpol.cbegin(), _Fpol.cend() );
   for( unsigned j=0; j<_nF; j++ ){
-   if( ( options.LINCTRSEP      && _Flin.find( j ) != _Flin.end() )   // exclude cut of linear function
-    || ( options.SUBSETDRL == 1 && _Fgal.find( j ) != _Fgal.end() )   // exclude cut of non-polynomial function
-    || ( options.SUBSETDRL == 2 && _Fgal.find( j ) == _Fgal.end() ) ) // exclude cut of polynomial function
-     continue;
-   try{
-     _dag->eval( _Fops[j], _POLwk, 1, &_Fvar[j], &_POLFvar[j], _nX, _Xvar.data(), _POLXvar.data() );
-     // Update bounds of intermediate factors from constraint propagation results
-     if( options.CPMAX ){
-       _dag->wkextract( _Fops[j], _Iwk, _Fallops, _CPbnd );
-       for( unsigned i=0; i<_Iwk.size(); i++ ) _POLwk[i].update( _Iwk[i] );
-     }
-     // Generate cuts
-     _POLenv.generate_cuts( 1, &_POLFvar[j], false );
-   }
-   catch(...){
-     // No cut added for function #j in case DAG evaluation failed
-     continue;
-   }
+    if( ( options.LINCTRSEP       && _Flin.find( j ) != _Flin.end() )   // exclude cut of linear function
+     || ( options.REFORMMETH.count( Options::QUAD ) && Fsalg.find( j ) != Fsalg.end() ) // exclude cut of quadratic/polynomial function if quadratisation requested
+     || ( options.SUBSETDRL == 1  && _Fgal.find( j ) != _Fgal.end() )   // exclude cut of non-polynomial function
+     || ( options.SUBSETDRL == 2  && _Fgal.find( j ) == _Fgal.end() ) ) // exclude cut of polynomial function
+      continue;
+    Frel.insert( j );
   }
+  if( Frel.empty() && Fsalg.empty() ) return;
+
+  // Add polyhedral cuts for selected functions
+  for( unsigned j : Frel ){
+  //for( unsigned j=0; j<_nF; j++ ){
+    try{
+      _dag->eval( _Fops[j], _POLwk, 1, &_Fvar[j], &_POLFvar[j], _nX, _Xvar.data(), _POLXvar.data() );
+      // Update bounds of intermediate factors from constraint propagation results
+      if( options.CPMAX ){
+        _dag->wkextract( _Fops[j], _Iwk, _Fallops, _CPbnd );
+        for( unsigned i=0; i<_Iwk.size(); i++ ) _POLwk[i].update( _Iwk[i] );
+      }
+      // Generate cuts
+      _POLenv.generate_cuts( 1, &_POLFvar[j], false );
+    }
+    catch(...){
+      // No cut added for function #j in case DAG evaluation failed
+      continue;
+    }
+  }
+
+  // Add polyhedral cuts for quadratised polynomial functions
+  if( options.REFORMMETH.count( Options::QUAD ) && !Fsalg.empty() ){
+    // Set monomial vector from quadratic form into polyhedral image
+    _set_mon_SQ();
+    // Add cuts for quadratic form into polynomial image
+    _set_cuts_SQ( Fsalg, false );
+  }
+
 #ifdef MC__MINLPBND_DEBUG_DRL
   std::cout << _POLenv;
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
@@ -2103,11 +2037,58 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
   _set_mon_SCQ();
 
   // Add cuts for quadratic form into polynomial image
-  _set_cuts_SQ( ndxF );
+  _set_cuts_SQ( ndxF, true );
 
 #ifdef MC__MINLPBND_DEBUG_SCQ
  std::cout << _POLenv;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+}
+
+template <typename T, typename MIP>
+inline void
+MINLPBND<T,MIP>::_set_mon_SQ
+()
+{
+  // Add monomial vector of quadratic from to polyhedral image
+  for( auto const& mon : _SQenv.SetMon() ){
+    if( !mon.tord ) continue;
+    
+    // Insert monomial as auxiliary variable in polyhedral image
+#ifdef MC__MINLPBND_DEBUG_SQ
+    std::cout << "Current monomial: " << mon.display(options.SQUAD.BASIS) << std::endl;
+#endif
+    assert( _POLXmon.find( mon ) == _POLXmon.end() );
+
+    // First-order monomials correspond to existing variables
+    if( mon.tord == 1 ){
+      auto ivar = mon.expr.cbegin()->first;
+      _Xmon[mon]    = _Xvar[ivar];
+      _POLXmon[mon] = _POLXvar[ivar];
+#ifdef MC__MINLPBND_DEBUG_SQ
+      std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
+                << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
+#endif
+    }
+      
+    // Add higher-order monomials to polyhedral image
+    else{
+      _POLXmon[mon].set( &_POLenv, _get_mon(mon), _bnd_mon(mon), true );
+#ifdef MC__MINLPBND_DEBUG_SQ
+      std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+                << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                << _POLXmon[mon].range() << std::endl;
+#endif
+    }
+  }
+
+#ifdef MC__MINLPBND_DEBUG_SQ
+  std::cout << "Monomial map:" << std::endl;
+  for( auto const& [mon,polvar] : _POLXmon )
+    std::cout << " " << mon.display(options.SQUAD.BASIS) << " == " << polvar
+              << " (DAG: " << polvar.var() << ")" << std::endl;
+  std::cout << _POLenv;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 }
 
@@ -2118,60 +2099,59 @@ MINLPBND<T,MIP>::_set_mon_SCQ
 {
   // Add monomial vector of quadratic from to polyhedral image
   for( auto const& mon : _SQenv.SetMon() ){
-  
+    if( !mon.tord ) continue;
+    
     // Insert monomial as auxiliary variable in polyhedral image
-    if( mon.tord >= 1 ){
 #ifdef MC__MINLPBND_DEBUG_SCQ
-      std::cout << "Current monomial: " << mon.display(options.SQUAD.BASIS) << std::endl;
+    std::cout << "Current monomial: " << mon.display(options.SQUAD.BASIS) << std::endl;
 #endif
-      assert( _POLXmon.find( mon ) == _POLXmon.end() );
-      switch( options.SQUAD.BASIS ){
+    assert( _POLXmon.find( mon ) == _POLXmon.end() );
+    switch( options.SQUAD.BASIS ){
       
-       // Case of power monomials
-       case SQuad::Options::MONOM:
-        if( !options.MONSCALE ){
-          if( mon.tord == 1 ){
-            // non-scaled first-order monomials correspond to existing variables
-            auto const& ivar = mon.expr.begin()->first;
-            _Xmon[mon] = _Xvar[ivar];
-            _POLXmon[mon] = _POLXvar[ivar];
+     // Case of power monomials
+     case SQuad::Options::MONOM:
+      if( !options.MONSCALE ){
+        if( mon.tord == 1 ){
+          // non-scaled first-order monomials correspond to existing variables
+          auto const& ivar = mon.expr.begin()->first;
+          _Xmon[mon] = _Xvar[ivar];
+          _POLXmon[mon] = _POLXvar[ivar];
 #ifdef MC__MINLPBND_DEBUG_SCQ
-            std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
-                      << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
+          std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
+                    << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
 #endif
-          }
-          else{
-            // add unscaled power monomial to polyhedral image
-            _POLXmon[mon].set( &_POLenv, _get_mon(mon), _bnd_mon(mon), true );
-#ifdef MC__MINLPBND_DEBUG_SCQ
-            std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                      << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
-                      << _POLXmon[mon].range() << std::endl;
-#endif
-          }
-          continue; // Loop to next monomial in _SQenv.SetMon()
         }
-
-        // add scaled power monomial to polyhedral image
-        _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), (mon.gcexp()%2? T(-1e0,1e0): T(0e0,1e0)), true );
+        else{
+          // add unscaled power monomial to polyhedral image
+          _POLXmon[mon].set( &_POLenv, _get_mon(mon), _bnd_mon(mon), true );
 #ifdef MC__MINLPBND_DEBUG_SCQ
-        std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                  << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
-                  << _POLXmon[mon].range() << std::endl;
+          std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+                    << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                    << _POLXmon[mon].range() << std::endl;
 #endif
-        break;
-
-       // Case of Chebyshev monomials
-       case SQuad::Options::CHEB:
-        // add Chebyshev monomial to polyhedral image
-        _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), T(-1e0,1e0), true );
-#ifdef MC__MINLPBND_DEBUG_SCQ
-        std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                  << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
-                  << _POLXmon[mon].range() << std::endl;
-#endif
-        break;
+        }
+        continue; // Loop to next monomial in _SQenv.SetMon()
       }
+
+      // add scaled power monomial to polyhedral image
+      _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), (mon.gcexp()%2? T(-1e0,1e0): T(0e0,1e0)), true );
+#ifdef MC__MINLPBND_DEBUG_SCQ
+      std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+                << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                << _POLXmon[mon].range() << std::endl;
+#endif
+      break;
+
+     // Case of Chebyshev monomials
+     case SQuad::Options::CHEB:
+      // add Chebyshev monomial to polyhedral image
+      _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), T(-1e0,1e0), true );
+#ifdef MC__MINLPBND_DEBUG_SCQ
+      std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+                << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                << _POLXmon[mon].range() << std::endl;
+#endif
+      break;
     }
 
     // Add linear cut between degree 1 monomial and actual (unscaled) decision variable
@@ -2201,14 +2181,14 @@ MINLPBND<T,MIP>::_set_mon_SCQ
 template <typename T, typename MIP>
 inline void
 MINLPBND<T,MIP>::_set_cuts_SQ
-( std::set<unsigned> ndxF )
+( std::set<unsigned> ndxF, bool const chkrem )
 {
   // Add cuts for entries in MatFct
   auto itF = ndxF.begin();
   for( auto const& mat : _SQenv.MatFct() ){
     assert( itF != ndxF.end() );
     PolCut<T> *cutF1 = nullptr, *cutF2 = nullptr;
-    if( Op<T>::diam(_CMFvar[*itF].R()) == 0. ){
+    if( !chkrem || Op<T>::diam(_CMFvar[*itF].R()) == 0. ){
       cutF1 = *_POLenv.add_cut( PolCut<T>::EQ, 0., _POLFvar[*itF], -1. );
     }
     else{
@@ -2217,7 +2197,7 @@ MINLPBND<T,MIP>::_set_cuts_SQ
     }
     // Separate quadratic term
     _add_to_cuts( _SQenv, mat, cutF1, cutF2 );
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SQ
     std::cout << "Main cuts for function F[" << *itF << "]: " << *cutF1 << std::endl;
     if( cutF2 )  std::cout << "                             " << *cutF2 << std::endl;
 #endif
@@ -2225,29 +2205,28 @@ MINLPBND<T,MIP>::_set_cuts_SQ
   }
 
   // Check entries in MatRed
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SQ
   unsigned ired = 0;
 #endif
   for( auto const& mat : _SQenv.MatRed() ){
     PolCut<T> *cutR = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
     //_add_to_cuts( mat, cutR );
     _add_to_cuts( _SQenv, mat, cutR );
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SQ
     std::cout << "Reduction cuts #" << ++ired << ": " << *cutR << std::endl;
 #endif
   }
 
   // Check entries in MatPSD
   if( options.PSDQUADCUTS ){
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SQ
     unsigned ipsd = 0;
 #endif
     _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
     for( auto const& mat : _SQenv.MatPSD() ){
       PolCut<T> *cutP = *_POLenv.add_cut( PolCut<T>::GE, 0. );
       _add_to_cuts( mat, cutP );
-      //_add_to_cuts( _SQenv, mat, cutR );
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SQ
       std::cout << "PSD cuts #" << ++ipsd << ": " << *cutP << std::endl;
 #endif
     }

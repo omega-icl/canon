@@ -196,6 +196,7 @@ public:
     std::string _LOGFILENAME;
     //! @brief Reformulation approach
     unsigned    _MINLPBND_REFORMMETH;
+    unsigned    _MINLPPRE_REFORMMETH;
     //! @brief Relaxation approach
     unsigned    _MINLPBND_RELAXMETH;
     unsigned    _MINLPPRE_RELAXMETH;
@@ -1069,17 +1070,18 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE(),
   _USROPT( "User-defined solver options" )
 {
-  MINLPPRE.REFORMMETH             = MINLPBND.REFORMMETH             = { MINLPBND.NPOL, MINLPBND.QUAD };
+  MINLPPRE.REFORMMETH                                               = { MINLPBND.NPOL };
+  MINLPBND.REFORMMETH                                               = { MINLPBND.NPOL, MINLPBND.QUAD };
   MINLPPRE.LINCTRSEP              = MINLPBND.LINCTRSEP              = 0;
   MINLPPRE.RELAXMETH                                                = { MINLPBND.DRL };
-  MINLPBND.RELAXMETH                                                = { MINLPBND.DRL, MINLPBND.SCQ };
+  MINLPBND.RELAXMETH                                                = { MINLPBND.DRL };
   MINLPPRE.SUBSETDRL              = MINLPPRE.SUBSETSCQ              = 0;
-  MINLPBND.SUBSETDRL                                                = 1;
-  MINLPBND.SUBSETSCQ                                                = 2;
+  MINLPBND.SUBSETDRL                                                = 0;
+  MINLPBND.SUBSETSCQ                                                = 0;
   MINLPPRE.POLIMG.RELAX_QUAD                                        = 1;
   MINLPBND.POLIMG.RELAX_QUAD                                        = 0;
-  MINLPPRE.POLIMG.RELAX_MONOM     = MINLPBND.POLIMG.RELAX_MONOM     = 1;
-  MINLPPRE.POLIMG.RELAX_NLIN      = MINLPBND.POLIMG.RELAX_NLIN      = 1;
+  MINLPPRE.POLIMG.RELAX_MONOM     = MINLPBND.POLIMG.RELAX_MONOM     = 0;
+  MINLPPRE.POLIMG.RELAX_NLIN      = MINLPBND.POLIMG.RELAX_NLIN      = 0;
   MINLPPRE.POLIMG.AGGREG_LQ       = MINLPBND.POLIMG.AGGREG_LQ       = 0;
   MINLPPRE.POLIMG.SANDWICH_RTOL   = MINLPBND.POLIMG.SANDWICH_RTOL   = 1e-3;
   MINLPPRE.POLIMG.SANDWICH_MAXCUT = MINLPBND.POLIMG.SANDWICH_MAXCUT = 5;
@@ -1108,6 +1110,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 0;
   MINLPPRE.MIPSLV.MIPRELGAP       = MINLPBND.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.MIPABSGAP       = MINLPBND.MIPSLV.MIPABSGAP       = 1e-5;
+  MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.HEURISTICS      = MINLPBND.MIPSLV.HEURISTICS      = 5e-2;
   MINLPPRE.MIPSLV.NUMERICFOCUS    = MINLPBND.MIPSLV.NUMERICFOCUS    = 0;
   MINLPPRE.MIPSLV.SCALEFLAG       = MINLPBND.MIPSLV.SCALEFLAG       = -1;
@@ -1200,6 +1203,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.SANDWICHMAX",   opt::value<unsigned>(&MINLPBND.POLIMG.SANDWICH_MAXCUT), "maximal number of cuts in outer-approximation of univariate terms" )
     ( "MINLPBND.MIPRELGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPRELGAP),         "convergence relative tolerance of MIP solver" )
     ( "MINLPBND.MIPABSGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPABSGAP),         "convergence absolute tolerance of MIP solver" )
+    ( "MINLPBND.MIPPWLRELGAP",  opt::value<double>(&MINLPBND.MIPSLV.PWLRELGAP),         "tolerance in piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPHEURISTICS", opt::value<double>(&MINLPBND.MIPSLV.HEURISTICS),        "fraction of time spent in MIP heuristics" )
     ( "MINLPBND.MIPNUMERIC",    opt::value<int>(&MINLPBND.MIPSLV.NUMERICFOCUS),         "control of numerical issues by MIP solver" )
     ( "MINLPBND.MIPSCALE",      opt::value<int>(&MINLPBND.MIPSLV.SCALEFLAG),            "control of model scaling by MIP solver" )
@@ -1288,13 +1292,14 @@ MINLGO<T,NLP,MIP>::Options::read
     os << "# Error: " << e.what() << std::endl;
     return false;
   }
-    
+
   if( _USRMAP.count( "MINLPBND.REFORMMETH" ) )
     MINLPBND.REFORMMETH.clear();
     switch( _MINLPBND_REFORMMETH ){
       default:
       case 2: MINLPBND.REFORMMETH.insert( MINLPBND.QUAD ); // no break
-      case 1: MINLPBND.REFORMMETH.insert( MINLPBND.NPOL ); break;
+      case 1: MINLPBND.REFORMMETH.insert( MINLPBND.NPOL );
+              MINLPPRE.REFORMMETH.insert( MINLPBND.NPOL ); break;
       case 0: break;
     }
     
@@ -1319,7 +1324,6 @@ MINLGO<T,NLP,MIP>::Options::read
   if( _USRMAP.count( "MINLPBND.BCHPRIM"      ) ) MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM;
   if( _USRMAP.count( "MINLPBND.CPMAX"        ) ) MINLPPRE.CPMAX                  = MINLPBND.CPMAX;
   if( _USRMAP.count( "MINLPBND.CPTHRES"      ) ) MINLPPRE.CPTHRES                = MINLPBND.CPTHRES;
-  if( _USRMAP.count( "MINLPBND.REFORMMETH"   ) ) MINLPPRE.REFORMMETH             = MINLPBND.REFORMMETH;
   if( _USRMAP.count( "MINLPBND.CMODPROP"     ) ) MINLPPRE.CMODPROP               = MINLPBND.CMODPROP;
   if( _USRMAP.count( "MINLPBND.MONMIG"       ) ) MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR;
   if( _USRMAP.count( "MINLPBND.MONBASIS"     ) ) MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS;

@@ -50,7 +50,7 @@ PREMIPABSGAP     = 1e-5
 # Fraction of time spent in MIP heuristics during presolve
 PREMIPHEURISTICS = 5e-2
 # Control of numerical issues by MIP solver during presolve - 0: automatic; 1-3: increasing numeric focus
-PREMIPNUMERIC    = 0
+PREMIPNUMERIC    = 3
 # Control of model scaling by MIP solver during presolve - -1: automatic; 0: no scaling; 1-3: increasing scaling
 PREMIPSCALE      = -1
 # Display level of MIP solver during presolve - 0: no display; >0: display
@@ -60,20 +60,22 @@ PREMIPOUTPUTFILE =
 # Number of threads used by MIP solver during presolve - 0: automatic
 PREMIPMAXTHREAD  = 0
 
+# Reformulations applied prior to relaxation - 0: none; 1: lifting of polynomial subexpressions and transcendental terms; 2: same as 1 plus lifting of polynomials into quadratic forms
+REFORMMETH       = 2
 # Polyhedral relaxation approach during main iteration - 0: decomposition-linearization-relaxation; 1: quadratisation of sparse polynomial models
 RELAXMETH        = 0
 # Linearization of quadratic terms during main iteration
 RELAXQUAD        = 0
 # Linearization of monomial terms during main iteration - 0: no monomials linearized; 1: monomials of order >2 linearized and quadratic term linearization controlled by RELAXQUAD; 2: all monomials linearized
-RELAXMONOM       = 1
+RELAXMONOM       = 0
 # Linearization of nonlinear terms during main iteration
-RELAXNLIN        = 1
+RELAXNLIN        = 0
 # Exclusion from decomposition-relaxation-linearization: 0: none; 1: non-polynomial functions; 2: polynomial functions
-SUBSETDRL        = 1
-# Exclusion from quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
-SUBSETSCQ        = 2
+SUBSETDRL        = 0
+# Exclusion from sparse polynomial quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
+SUBSETSCQ        = 0
 # Optimization-based bounds tightening approach during main iteration - 0: linear only; 1: linear first; 2: joint linear & nonlinear
-OBBTLIN          = 2
+OBBTLIN          = 1
 # Continuous relaxation for optimization-based bounds tightening during main iteration
 OBBTCONT         = 1
 # Maximum rounds of optimization-based bounds tightening during main iteration
@@ -88,10 +90,12 @@ OBBTMIG          = 1e-6
 MIPRELGAP        = 1e-3
 # Convergence absolute tolerance of MIP solver during main iteration
 MIPABSGAP        = 1e-5
+# Tolerance in piecewise-linear approximation of nonlinear univariate terms during main iteration
+MIPPWLRELGAP     = 5e-2
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
-MIPNUMERIC       = 0
+MIPNUMERIC       = 3
 # Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling
 MIPSCALE         = -1
 # Display level of MIP solver during main iteration - 0: no display; >0: display
@@ -101,9 +105,7 @@ MIPOUTPUTFILE    = canon.lp
 # Number of threads used by MIP solver during main iteration - 0: automatic
 MIPMAXTHREAD     = 0
 
-# Reformulations applied prior to relaxation - 0: none; 1: lifting of polynomial subexpressions and transcendental terms; 2: same as 1 plus lifting of polynomials into quadratic forms
-REFORMMETH       = 2
-# Set higher branch priority to primary variables
+# Set higher branch priority to original variables
 BCHPRIM          = 0
 # Maximum rounds of constraint propagation
 CPMAX            = 0
