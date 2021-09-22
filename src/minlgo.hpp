@@ -1177,7 +1177,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.RELAXNLIN",     opt::value<bool>(&MINLPBND.POLIMG.RELAX_NLIN),          "linearize nonlinear terms" )
     ( "MINLPBND.SUBSETDRL",     opt::value<unsigned>(&MINLPBND.SUBSETDRL),              "exclude functions from decomposition-relaxation-linearization" )
     ( "MINLPBND.SUBSETSCQ",     opt::value<unsigned>(&MINLPBND.SUBSETSCQ),              "exclude functions from quadratization" )
-    ( "MINLPBND.BCHPRIM",       opt::value<unsigned>(&MINLPBND.BCHPRIM),                "Set higher branch priority to primary variables" )
+    ( "MINLPBND.BCHPRIM",       opt::value<unsigned>(&MINLPBND.BCHPRIM),                "Set higher branch priority to original variables" )
     ( "MINLPBND.OBBTLIN",       opt::value<unsigned>(&MINLPBND.OBBTLIN),                "optimization-based bounds tighteneting approach" )
     ( "MINLPBND.OBBTCONT",      opt::value<bool>(&MINLPBND.OBBTCONT),                   "continuous relaxation for optimization-based bounds tighteneting" )
     ( "MINLPBND.OBBTMAX",       opt::value<unsigned>(&MINLPBND.OBBTMAX),                "maximum rounds of optimization-based bounds tighteneting" )
@@ -1322,6 +1322,7 @@ MINLGO<T,NLP,MIP>::Options::read
     }
 
   if( _USRMAP.count( "MINLPBND.BCHPRIM"      ) ) MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM;
+  if( _USRMAP.count( "MINLPBND.MIPPWLRELGAP" ) ) MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP;
   if( _USRMAP.count( "MINLPBND.CPMAX"        ) ) MINLPPRE.CPMAX                  = MINLPBND.CPMAX;
   if( _USRMAP.count( "MINLPBND.CPTHRES"      ) ) MINLPPRE.CPTHRES                = MINLPBND.CPTHRES;
   if( _USRMAP.count( "MINLPBND.CMODPROP"     ) ) MINLPPRE.CMODPROP               = MINLPBND.CMODPROP;
