@@ -36,7 +36,7 @@ PREOBBTLIN       = 1
 # Continuous relaxation for optimization-based bounds tightening during presolve
 PREOBBTCONT      = 1
 # Maximum rounds of optimization-based bounds tightening during presolve
-PREOBBTMAX       = 5
+PREOBBTMAX       = 2
 # Threshold for optimization-based bounds tightening repeats during presolve - minimum relative reduction in any variable
 PREOBBTTHRES     = 5e-2
 # Backoff of tightened variable bounds to compensate for numerical errors during presolve
@@ -50,7 +50,7 @@ PREMIPABSGAP     = 1e-5
 # Fraction of time spent in MIP heuristics during presolve
 PREMIPHEURISTICS = 5e-2
 # Control of numerical issues by MIP solver during presolve - 0: automatic; 1-3: increasing numeric focus
-PREMIPNUMERIC    = 3
+PREMIPNUMERIC    = 0
 # Control of model scaling by MIP solver during presolve - -1: automatic; 0: no scaling; 1-3: increasing scaling
 PREMIPSCALE      = -1
 # Display level of MIP solver during presolve - 0: no display; >0: display
@@ -75,7 +75,7 @@ SUBSETDRL        = 0
 # Exclusion from sparse polynomial quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
 SUBSETSCQ        = 0
 # Optimization-based bounds tightening approach during main iteration - 0: linear only; 1: linear first; 2: joint linear & nonlinear
-OBBTLIN          = 1
+OBBTLIN          = 2
 # Continuous relaxation for optimization-based bounds tightening during main iteration
 OBBTCONT         = 1
 # Maximum rounds of optimization-based bounds tightening during main iteration
@@ -95,7 +95,7 @@ MIPPWLRELGAP     = 5e-2
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
-MIPNUMERIC       = 3
+MIPNUMERIC       = 0
 # Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling
 MIPSCALE         = -1
 # Display level of MIP solver during main iteration - 0: no display; >0: display
@@ -108,7 +108,7 @@ MIPMAXTHREAD     = 0
 # Set higher branch priority to original variables
 BCHPRIM          = 0
 # Maximum rounds of constraint propagation
-CPMAX            = 0
+CPMAX            = 10
 # Threshold for constraint propagation repeats - minimum relative reduction in any variable
 CPTHRES          = 0e0
 # Maximum order of sparse polynomial model

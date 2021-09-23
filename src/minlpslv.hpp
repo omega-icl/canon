@@ -1407,7 +1407,7 @@ inline void
 MINLPSLV<T,NLP,MIP>::_display_setup
 ( std::ostream& os )
 {
-  if( options.DISPLEVEL < 1 ) return;
+  if( options.DISPLEVEL < 2 ) return;
   _odisp << "#  CONTINUOUS / DISCRETE VARIABLES:  " << _nX-_Xint.size()  << " / " << _Xint.size() << std::endl
          << "#  LINEAR / NONLINEAR FUNCTIONS:     " << _Flin.size() << " / " << _Fnlin.size() << std::endl;
   _display_flush( os ); 

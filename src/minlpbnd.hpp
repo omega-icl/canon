@@ -874,12 +874,12 @@ MINLPBND<T,MIP>::setup
   if( options.RRLTCUTS ) _search_reduction_constraints();
 
   if( options.DISPLEVEL )
-    os << "             |  VARIABLES      FUNCTIONS" << std::endl << std::right
-       << "-------------+---------------------------" << std::endl
-       << " LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
-       << " QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
-       << " POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
-       << " GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl;
+    os << "#              |  VARIABLES      FUNCTIONS" << std::endl << std::right
+       << "# -------------+---------------------------" << std::endl
+       << "#  LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
+       << "#  QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
+       << "#  POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
+       << "#  GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl;
 
   // setup [-1,1] scaled variables for Chebyshev model arithmetic
   // do not downsize to avoid adding more variables into DAG

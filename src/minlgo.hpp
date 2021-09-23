@@ -1062,8 +1062,8 @@ MINLGO<T,NLP,MIP>::Options::Options()
   FEASTOL( 1e-5 ),
   CVATOL( 1e-5 ),
   CVRTOL( 1e-3 ),
-  MAXITER( 10 ),
-  TIMELIMIT( 9e2 ),
+  MAXITER( 1 ),
+  TIMELIMIT( 72e2 ),
   DISPLEVEL( 1 ),
   MINLPSLV(),
   MINLPBND(),
@@ -1072,42 +1072,45 @@ MINLGO<T,NLP,MIP>::Options::Options()
 {
   MINLPPRE.REFORMMETH                                               = { MINLPBND.NPOL };
   MINLPBND.REFORMMETH                                               = { MINLPBND.NPOL, MINLPBND.QUAD };
-  MINLPPRE.LINCTRSEP              = MINLPBND.LINCTRSEP              = 0;
+  MINLPPRE.LINCTRSEP              = MINLPBND.LINCTRSEP              = 1;
   MINLPPRE.RELAXMETH                                                = { MINLPBND.DRL };
   MINLPBND.RELAXMETH                                                = { MINLPBND.DRL };
   MINLPPRE.SUBSETDRL              = MINLPPRE.SUBSETSCQ              = 0;
   MINLPBND.SUBSETDRL                                                = 0;
   MINLPBND.SUBSETSCQ                                                = 0;
   MINLPPRE.POLIMG.RELAX_QUAD                                        = 1;
+  MINLPPRE.POLIMG.RELAX_MONOM                                       = 1;
+  MINLPPRE.POLIMG.RELAX_NLIN                                        = 1;
   MINLPBND.POLIMG.RELAX_QUAD                                        = 0;
-  MINLPPRE.POLIMG.RELAX_MONOM     = MINLPBND.POLIMG.RELAX_MONOM     = 0;
-  MINLPPRE.POLIMG.RELAX_NLIN      = MINLPBND.POLIMG.RELAX_NLIN      = 0;
-  MINLPPRE.POLIMG.AGGREG_LQ       = MINLPBND.POLIMG.AGGREG_LQ       = 0;
+  MINLPBND.POLIMG.RELAX_MONOM                                       = 0;
+  MINLPBND.POLIMG.RELAX_NLIN                                        = 0;
+  MINLPPRE.POLIMG.AGGREG_LQ       = MINLPBND.POLIMG.AGGREG_LQ       = 1;
   MINLPPRE.POLIMG.SANDWICH_RTOL   = MINLPBND.POLIMG.SANDWICH_RTOL   = 1e-3;
   MINLPPRE.POLIMG.SANDWICH_MAXCUT = MINLPBND.POLIMG.SANDWICH_MAXCUT = 5;
   MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM                = 0;
-  MINLPPRE.OBBTLIN                = MINLPBND.OBBTLIN                = 2;
+  MINLPPRE.OBBTLIN                                                  = 1;
+  MINLPBND.OBBTLIN                                                  = 2;
   MINLPPRE.OBBTCONT                                                 = 1;
-  MINLPPRE.OBBTMAX                                                  = 10;
+  MINLPPRE.OBBTMAX                                                  = 2;
   MINLPBND.OBBTCONT                                                 = 1;
-  MINLPBND.OBBTMAX                                                  = 10;
+  MINLPBND.OBBTMAX                                                  = 0;
   MINLPPRE.OBBTTHRES              = MINLPBND.OBBTTHRES              = 5e-2;
   MINLPPRE.OBBTBKOFF              = MINLPBND.OBBTBKOFF              = 1e-7;
   MINLPPRE.OBBTMIG                = MINLPBND.OBBTMIG                = 1e-6;
   MINLPPRE.CPMAX                  = MINLPBND.CPMAX                  = 10;
   MINLPPRE.CPTHRES                = MINLPBND.CPTHRES                = 0.;
   MINLPPRE.CMODPROP               = MINLPBND.CMODPROP               = 15;
-  MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR      = 1e-13;
+  MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR      = 1e-10;
   MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::MONOM;
   MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER            = SQuad::Options::INC;
   MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
   MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS               = 0;
-  MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC            = 1;
-  MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS            = 1;
+  MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC            = 0;
+  MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS            = 0;
   MINLPPRE.DCQUADCUTS             = MINLPBND.DCQUADCUTS             = 0;
   MINLPPRE.NCOCUTS                = MINLPBND.NCOCUTS                = 0;
   MINLPPRE.NCOADIFF               = MINLPBND.NCOADIFF               = MINLPBND.ASA;
-  MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 0;
+  MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 1;
   MINLPPRE.MIPSLV.MIPRELGAP       = MINLPBND.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.MIPABSGAP       = MINLPBND.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-3;
@@ -1115,11 +1118,11 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.MIPSLV.NUMERICFOCUS    = MINLPBND.MIPSLV.NUMERICFOCUS    = 0;
   MINLPPRE.MIPSLV.SCALEFLAG       = MINLPBND.MIPSLV.SCALEFLAG       = -1;
   MINLPPRE.MIPSLV.DISPLEVEL                                         = 0;
-  MINLPBND.MIPSLV.DISPLEVEL                                         = 0;
+  MINLPBND.MIPSLV.DISPLEVEL                                         = 1;
   MINLPPRE.MIPSLV.OUTPUTFILE      = MINLPBND.MIPSLV.OUTPUTFILE      = "";
   MINLPPRE.MIPSLV.THREADS         = MINLPBND.MIPSLV.THREADS         = 0;
 
-  MINLPSLV.MAXITER                = 40;
+  MINLPSLV.MAXITER                = 10;
   MINLPSLV.CPMAX                  = 10;
   MINLPSLV.CPTHRES                = 0.;
   MINLPSLV.MSLOC                  = 16;
