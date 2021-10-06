@@ -43,6 +43,8 @@ PREOBBTTHRES     = 5e-2
 PREOBBTBKOFF     = 1e-7
 # Minimum variable range for application of bounds tightening during presolve
 PREOBBTMIG       = 1e-6
+# Presolve level of MIP solver during presolve - -1: automatic; 0: none; 1: presolve; 2: aggressive
+PREMIPPRESOLVE   = -1
 # Convergence relative tolerance of MIP solver during presolve
 PREMIPRELGAP     = 1e-3
 # Convergence absolute tolerance of MIP solver during presolve
@@ -50,7 +52,7 @@ PREMIPABSGAP     = 1e-5
 # Fraction of time spent in MIP heuristics during presolve
 PREMIPHEURISTICS = 5e-2
 # Control of numerical issues by MIP solver during presolve - 0: automatic; 1-3: increasing numeric focus
-PREMIPNUMERIC    = 0
+PREMIPNUMERIC    = 3
 # Control of model scaling by MIP solver during presolve - -1: automatic; 0: no scaling; 1-3: increasing scaling
 PREMIPSCALE      = -1
 # Display level of MIP solver during presolve - 0: no display; >0: display
@@ -69,7 +71,7 @@ RELAXQUAD        = 0
 # Linearization of monomial terms during main iteration - 0: no monomials linearized; 1: monomials of order >2 linearized and quadratic term linearization controlled by RELAXQUAD; 2: all monomials linearized
 RELAXMONOM       = 0
 # Linearization of nonlinear terms during main iteration
-RELAXNLIN        = 0
+RELAXNLIN        = 1
 # Exclusion from decomposition-relaxation-linearization: 0: none; 1: non-polynomial functions; 2: polynomial functions
 SUBSETDRL        = 0
 # Exclusion from sparse polynomial quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
@@ -86,6 +88,8 @@ OBBTTHRES        = 5e-2
 OBBTBKOFF        = 1e-7
 # Minimum variable range for application of bounds tightening during main iteration
 OBBTMIG          = 1e-6
+# Presolve level of MIP solver during main iteration - -1: automatic; 0: none; 1: presolve; 2: aggressive
+MIPPRESOLVE      = -1
 # Convergence relative tolerance of MIP solver during main iteration
 MIPRELGAP        = 1e-3
 # Convergence absolute tolerance of MIP solver during main iteration
@@ -95,7 +99,7 @@ MIPPWLRELGAP     = 5e-2
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
-MIPNUMERIC       = 0
+MIPNUMERIC       = 3
 # Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling
 MIPSCALE         = -1
 # Display level of MIP solver during main iteration - 0: no display; >0: display
@@ -124,9 +128,9 @@ MONSCALE         = 0
 # Add reduced RLT cuts
 RRLTCUTS         = 0
 # Add redundant cuts within quadratisation
-REDQUADCUTS      = 0
+REDQUADCUTS      = 1
 # Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
-PSDQUADCUTS      = 0
+PSDQUADCUTS      = 1
 # Add DC cuts within quadratisation
 DCQUADCUTS       = 0
 # Add NCO cuts

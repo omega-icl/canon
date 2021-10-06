@@ -5,6 +5,7 @@
 //#define MC__MINLGO_DEBUG
 //#define MC__MINLPBND_SHOW_REDUC
 //#define MC__MINLPBND_DEBUG_SCQ
+//#define MC__MINLPBND_DEBUG_DRL
 //#define MC__REVAL_DEBUG
 //#define MC__FFUNC_DEBUG_SIGNOM
 //#define MC__SQUAD_DEBUG_REDUC
@@ -76,13 +77,13 @@ int main()
 //  signal( SIGTSTP, signalHandler );
   
 #ifdef READ_GAMS
-//  MINLP.options.read( "canon.opt" );
+  MINLP.options.read( "canon.opt" );
   // List of GAMS files:
-  // doxydoc.gms ex1221.gms ex1222.gms ex1252a.gms transswitch0009r.gms
+  // doxydoc.gms ex1221.gms ex1222.gms ex1252a.gms transswitch0009r.gms nvs05.gms
   // batch0812.gms batch_nc.gms jit1.gms ex7_2_2.gms packing.gms bernasconi.40.5.gms
   // tuncphd_30.gms kriging_peaks-red010.gms st_e06.gms ex14_1_5.gms hybriddynamic_varcc.gms
-  std::string gamsfile( "hybriddynamic_varcc.gms"); 
-  if( !MINLP.read( gamsfile ) ){//, true ) ){
+  std::string gamsfile( "jit1.gms"); 
+  if( !MINLP.read( gamsfile, true ) ){
     std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
     return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
   }
@@ -130,12 +131,14 @@ int main()
   std::ostream& os = std::cout;
   int flag = MINLP.presolve( nullptr, nullptr, os ); 
   switch( flag ){
+/*
     case mc::MINLGO<I,NLP,MIP>::STATUS::INFEASIBLE:
       std::cerr << "# Exit: GAMS model was proven infeasible during preprocessing" << std::endl;
       return flag;
     case mc::MINLGO<I,NLP,MIP>::STATUS::UNBOUNDED:
       std::cerr << "# Exit: GAMS model could not be bounded during preprocessing" << std::endl;
       return flag;
+*/
     case mc::MINLGO<I,NLP,MIP>::STATUS::INTERRUPTED:
       std::cerr << "# Exit: GAMS model preprocessing was interrupted" << std::endl;
       return flag;
@@ -146,7 +149,8 @@ int main()
     default:
       break;
   }
-    
+  //return flag;
+  
   flag = MINLP.optimize( os ); 
   if( MINLP.options.DISPLEVEL >= 1 )
     MINLP.stats.display();
