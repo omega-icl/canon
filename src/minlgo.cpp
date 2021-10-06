@@ -84,6 +84,7 @@ int main
   opt::options_description cli_main( header_usage( argv[0] ) ); 
   cli_main.add_options()
     ( "option-file,o", opt::value<std::string>(), "load option file" )
+    ( "gams-verbose,v", "verbose GAMS reader" )
     ( "help,h", "display help and exit" )
     ;
 
@@ -141,7 +142,7 @@ int main
       
   ////////////////////////////////////////////////////////////
   // READ AND OPTIMIZE GAMS MODEL
-  if( !MINLP.read( GAMSFILE ) ){
+  if( !MINLP.read( GAMSFILE, map_main.count( "gams-verbose" ) ) ){
     std::cerr << "# Exit: Error reading GAMS file" << std::endl;
     return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
   }
@@ -150,14 +151,14 @@ int main
   std::ostream& os = logfile.is_open()? logfile: std::cout;
   int flag = MINLP.presolve( nullptr, nullptr, os ); 
   switch( flag ){
-    case mc::MINLGO<I,NLP,MIP>::STATUS::INFEASIBLE:
-      if( logfile.is_open() ) logfile.close();
-      std::cerr << "# Exit: GAMS model was proven infeasible during preprocessing" << std::endl;
-      return flag;
-    case mc::MINLGO<I,NLP,MIP>::STATUS::UNBOUNDED:
-      if( logfile.is_open() ) logfile.close();
-      std::cerr << "# Exit: GAMS model could not be bounded during preprocessing" << std::endl;
-      return flag;
+//    case mc::MINLGO<I,NLP,MIP>::STATUS::INFEASIBLE:
+//      if( logfile.is_open() ) logfile.close();
+//      std::cerr << "# Exit: GAMS model was proven infeasible during preprocessing" << std::endl;
+//      return flag;
+//    case mc::MINLGO<I,NLP,MIP>::STATUS::UNBOUNDED:
+//      if( logfile.is_open() ) logfile.close();
+//      std::cerr << "# Exit: GAMS model could not be bounded during preprocessing" << std::endl;
+//      return flag;
     case mc::MINLGO<I,NLP,MIP>::STATUS::INTERRUPTED:
       if( logfile.is_open() ) logfile.close();
       std::cerr << "# Exit: GAMS model preprocessing was interrupted" << std::endl;

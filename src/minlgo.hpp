@@ -741,7 +741,7 @@ MINLGO<T,NLP,MIP>::optimize
 ( std::ostream& os )
 {
   if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
-  if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
+  //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
 
   // Initialize solve
   _tstart = stats.start();
@@ -1111,6 +1111,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.NCOCUTS                = MINLPBND.NCOCUTS                = 0;
   MINLPPRE.NCOADIFF               = MINLPBND.NCOADIFF               = MINLPBND.ASA;
   MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 1;
+  MINLPPRE.MIPSLV.PRESOLVE        = MINLPBND.MIPSLV.PRESOLVE        = -1;
   MINLPPRE.MIPSLV.MIPRELGAP       = MINLPBND.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.MIPABSGAP       = MINLPBND.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-3;
@@ -1132,6 +1133,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPSLV.NLPSLV.MAXITER         = 200;
   MINLPSLV.NLPSLV.DISPLEVEL       = 0;
   MINLPSLV.NLPSLV.MAXTHREAD       = 0;
+  MINLPSLV.MIPSLV.PRESOLVE        = -1;
   MINLPSLV.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPSLV.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPSLV.MIPSLV.HEURISTICS      = 5e-2;
@@ -1164,6 +1166,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.PRERELAXQUAD",     opt::value<bool>(&MINLPPRE.POLIMG.RELAX_QUAD),        "linearize quadratic terms during presolve" )
     ( "MINLPBND.PRERELAXMONOM",    opt::value<int>(&MINLPPRE.POLIMG.RELAX_MONOM),        "linearize monomial terms during presolve" )
     ( "MINLPBND.PRERELAXNLIN",     opt::value<bool>(&MINLPPRE.POLIMG.RELAX_NLIN),        "linearize nonlinear terms during presolve" )
+    ( "MINLPBND.PREMIPPRESOLVE",   opt::value<int>(&MINLPPRE.MIPSLV.PRESOLVE),           "presolve level in MIP solver during presolve" )
     ( "MINLPBND.PREMIPRELGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPABSGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPHEURISTICS", opt::value<double>(&MINLPPRE.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics during presolve" )
@@ -1204,6 +1207,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.AGGREGLQ",      opt::value<bool>(&MINLPBND.POLIMG.AGGREG_LQ),           "keep linear and quadratic expressions aggregated" )
     ( "MINLPBND.SANDWICHRTOL",  opt::value<double>(&MINLPBND.POLIMG.SANDWICH_RTOL),     "relative tolerance in outer-approximation of univariate terms" )
     ( "MINLPBND.SANDWICHMAX",   opt::value<unsigned>(&MINLPBND.POLIMG.SANDWICH_MAXCUT), "maximal number of cuts in outer-approximation of univariate terms" )
+    ( "MINLPBND.MIPPRESOLVE",   opt::value<int>(&MINLPBND.MIPSLV.PRESOLVE),             "presolve level in MIP solver" )
     ( "MINLPBND.MIPRELGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPRELGAP),         "convergence relative tolerance of MIP solver" )
     ( "MINLPBND.MIPABSGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPABSGAP),         "convergence absolute tolerance of MIP solver" )
     ( "MINLPBND.MIPPWLRELGAP",  opt::value<double>(&MINLPBND.MIPSLV.PWLRELGAP),         "tolerance in piecewise-linear approximation of nonlinear univariate terms" )
@@ -1224,6 +1228,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPSLV.NLPMAXITER",    opt::value<int>(&MINLPSLV.NLPSLV.MAXITER),            "maximal number of iterations of local NLP solver" )
     ( "MINLPSLV.NLPDISPLEVEL",  opt::value<int>(&MINLPSLV.NLPSLV.DISPLEVEL),          "display level of local NLP solver" )
     ( "MINLPSLV.NLPMAXTHREAD",  opt::value<unsigned>(&MINLPSLV.NLPSLV.MAXTHREAD),     "set number of threads used by local NLP solver" )
+    ( "MINLPSLV.MIPPRESOLVE",   opt::value<int>(&MINLPSLV.MIPSLV.PRESOLVE),           "presolve level in MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPRELGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPABSGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPHEURISTICS", opt::value<double>(&MINLPSLV.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics by local MINLP solver" )

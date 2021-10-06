@@ -49,7 +49,7 @@ protected:
   BASE_OPT& operator=(const BASE_OPT&);
 };
 
-inline double BASE_OPT::INF = 1E20;
+inline double BASE_OPT::INF = 1E30;
 }
 
 #include <iostream>
