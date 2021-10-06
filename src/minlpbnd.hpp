@@ -305,6 +305,7 @@ public:
         POLIMG.BREAKPOINT_TYPE = PolImg<T>::Options::BIN;
         MIPSLV.DISPLEVEL       = 0;
         MIPSLV.DUALRED         = 0;
+        //MIPSLV.PRESOLVE        = 1;
         MIPSLV.TIMELIMIT       = TIMELIMIT;
         SPARSEEXPR.LIFTDIV     = true;
         SPARSEEXPR.LIFTIPOW    = false;
@@ -1163,11 +1164,23 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
   _SEenv.options = options.SPARSEEXPR;
   _SEenv.process( _Fgal, _Fvar.data(), true );
 #ifdef MC__MINLPBND_DEBUG_LIFT
-  std::cout << _SEenv;
+  std::cout << std::endl << _SEenv.Var().size() << " participating variables: ";
+  for( auto&& var : _SEenv.Var() ) std::cout << var << " ";
+  std::cout << std::endl;
+  std::cout << std::endl << _SEenv.Aux().size() << " auxiliary variables: ";
+  for( auto&& aux : _SEenv.Aux() ) std::cout << *aux.first << "->" << *aux.second << " ";
+  std::cout << std::endl;
+  std::cout << std::endl << _SEenv.Poly().size() << " polynomial constraints: " << std::endl;
+  for( auto&& expr : _SEenv.Poly() ) _dag->output( _dag->subgraph( 1, &expr ) );
+  //std::cout << std::endl;
+  std::cout << std::endl << _SEenv.Trans().size() << " transcendental constraints: " << std::endl;
+  for( auto&& expr : _SEenv.Trans() ) _dag->output( _dag->subgraph( 1, &expr ) );
+  //std::cout << _SEenv;
   {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
 
   // append auxiliary variables
+  std::set<unsigned> Fred;
   for( auto&& [pAux,pVar] : _SEenv.Aux() ){
     bool is_dep = false;
     unsigned i = 0;
@@ -1189,11 +1202,18 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
       _Fvar[0] = *pVar;
       continue;
     }
+    Fred.insert( i ); 
+    //auto itFvar = _Fvar.begin(); std::advance( itFvar, i ); _Fvar.erase( itFvar );
+    //auto itFlow = _Flow.begin(); std::advance( itFlow, i ); _Flow.erase( itFlow );
+    //auto itFupp = _Fupp.begin(); std::advance( itFupp, i ); _Fupp.erase( itFupp );
+  }
+  for( auto it=Fred.rbegin(); it!=Fred.rend(); ++it ){
+    unsigned i = *it;
     auto itFvar = _Fvar.begin(); std::advance( itFvar, i ); _Fvar.erase( itFvar );
     auto itFlow = _Flow.begin(); std::advance( itFlow, i ); _Flow.erase( itFlow );
     auto itFupp = _Fupp.begin(); std::advance( itFupp, i ); _Fupp.erase( itFupp );
   }
-
+  
   // append lifted polynomial expressions
   for( auto const& poly : _SEenv.Poly() ){
     _Fvar.push_back( poly );
