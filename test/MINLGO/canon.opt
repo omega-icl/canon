@@ -71,7 +71,7 @@ RELAXQUAD        = 0
 # Linearization of monomial terms during main iteration - 0: no monomials linearized; 1: monomials of order >2 linearized and quadratic term linearization controlled by RELAXQUAD; 2: all monomials linearized
 RELAXMONOM       = 0
 # Linearization of nonlinear terms during main iteration
-RELAXNLIN        = 1
+RELAXNLIN        = 0
 # Exclusion from decomposition-relaxation-linearization: 0: none; 1: non-polynomial functions; 2: polynomial functions
 SUBSETDRL        = 0
 # Exclusion from sparse polynomial quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions

@@ -994,7 +994,7 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   _SQenv.process( SPol.size(), SPol.data(), SQuad::Options::MONOM );
 #else
   double viol = _SQenv.process( SPol.size(), SPol.data(), SQuad::Options::MONOM, true );
-  std::cout << "violation: " << viol << std::endl;
+  std::cout << "violation: " << viol << _SQenv << std::endl;
   {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
   if( !add2dag ) return;
@@ -2421,7 +2421,7 @@ MINLPBND<T,MIP>::_append_cuts_monprod
       PolVar<T> POLprod( &_POLenv, Op<T>::sqr( Xmon1.range() ), true );
       _POLenv.append_cuts_SQR( POLprod, Xmon1 );
       itijmon = ( _POLXprodmon.insert( std::make_pair( ijmon, POLprod ) ) ).first;
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#if defined( MC__MINLPBND_DEBUG_SQ ) || defined( MC__MINLPBND_DEBUG_SCQ )
       //std::cout << POLprod << std::endl;
       std::cout << "Auxiliary variable " << itijmon->second << ": " << Xmon1 << "^2" << std::endl;
 #endif
@@ -2432,7 +2432,7 @@ MINLPBND<T,MIP>::_append_cuts_monprod
       PolVar<T> POLprod( &_POLenv, Xmon1.range() * Xmon2.range(), true );
       _POLenv.append_cuts_TIMES( POLprod, Xmon1, Xmon2 );
       itijmon = ( _POLXprodmon.insert( std::make_pair( ijmon, POLprod ) ) ).first;
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#if defined( MC__MINLPBND_DEBUG_SQ ) || defined( MC__MINLPBND_DEBUG_SCQ )
       //std::cout << POLprod << std::endl;
       std::cout << "Auxiliary variable " << itijmon->second << ": " << Xmon1 << "·" << Xmon2 << std::endl;
 #endif
