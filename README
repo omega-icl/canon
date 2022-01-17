@@ -1,8 +1,10 @@
 
       CANON - Complete search Algorithms for Nonlinear OptimizatioN
+      
                                  ----
 
 This directory contains the C++ implementation of the library CANON
 implementing complete search algorithms for nonlinear optimization models.
 
 For more information, see: doc/html/index.html
+

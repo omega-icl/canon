@@ -17,77 +17,91 @@ Consider a nonlinear optimization problem in the form:
 \f}
 where \f$f, g_1, \ldots, g_m\f$ are factorable, possibly nonlinear, real-valued functions; and \f$x_1, \ldots, x_n\f$ can be either continuous or integer decision variables. The class mc::MINLPBND computes rigorous bounds on the global solution of such (MI)NLP problems using various set arithmetics, as available in <A href="https://projects.coin-or.org/MCpp">MC++</A>.
 
-\section sec_MINLPBND_setup How do I setup my optimization model?
+\section sec_MINLPBND_bound How to Compute a Rigorous Bound on the Global Solution Value of my Optimization Model?
 
-Consider the following NLP:
+Consider the following MINLP model:
 \f{align*}
-  \max_{\bf p}\ & p_1\,p_4\,(p_1+p_2+p_3)+p_3 \\
-  \text{s.t.} \ & p_1\,p_2\,p_3\,p_4 \geq 25 \\
-  & p_1^2+p_2^2+p_3^2+p_4^2 = 40 \\
-  & 1 \leq p_1,p_2,p_3,p_4 \leq 5\,.
+  \min_{x,y}\ & -6x-y \\
+  \text{s.t.} \ & 0.3(x-8)^2+0.04(y-6)^4+0.1\frac{{\rm e}^{2x}}{y^4} \leq 56 \\
+                & \frac{1}{x}+\frac{1}{y}-\sqrt{x}\sqrt{y}+4 \leq 0 \\
+                & 2x-5y+1 \leq 0 \\
+  & 1 \leq x \leq 20\\
+  & 1 \leq y \leq 20,\ y\in\mathbb{Z}
 \f}
 
-We start by defining an mc::MINLPBND class instance:
+We start by instantiating an mc::MINLPBND class object, which is defined in the header file <tt>minlpbnd.hpp</tt>:
 
 \code
-  #include "minlpbnd.hpp"
-  ...
-  mc::MINLPBND NLP;
+  mc::MINLPBND MINLP;
 \endcode
 
-Next, we set the variables and objective/constraint functions by creating a direct acyclic graph (DAG) of the problem: 
+Next, we set the variables and objective/constraint functions by creating a DAG of the problem: 
 
 \code
   mc::FFGraph DAG;
-  const unsigned NP = 4; mc::FFVar P[NP];
+  const unsigned NP = 2; mc::FFVar P[NP];
   for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
 
-  NLP.set_dag( &DAG );  // DAG
-  NLP.set_var( NP, P ); // decision variables
-  NLP.set_obj( mc::BASE_NLP::MIN, (P[0]*P[3])*(P[0]+P[1]+P[2])+P[2] ); // ojective
-  NLP.add_ctr( mc::BASE_NLP::GE,  (P[0]*P[3])*P[1]*P[2]-25 );          // constraints
-  NLP.add_ctr( mc::BASE_NLP::EQ,  sqr(P[0])+sqr(P[1])+sqr(P[2])+sqr(P[3])-40 );
-  NLP.setup();
+  MINLP.set_dag( &DAG );
+  MINLP.add_var( P[0], 1, 20, 0 );
+  MINLP.add_var( P[1], 1, 20, 1 );
+  MINLP.set_obj( mc::BASE_NLP::MIN, -6*P[0]-P[1] );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
+  MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
 \endcode
 
-The variable bounds and types are passed to mc::MINLPBND in invoking the various methods, as described below.
-
-
-\section sec_MINLPBND_bound How do I compute a rigorous bound on the global solution of my optimization model?
-
-
-Given initial bounds \f$P\f$ and initial guesses \f$p_0\f$ on the decision variables, the NLP model is solved using branch-and-bound search (default) as follows:
+The MINLP model is solved using:
 
 \code
-  #include "interval.hpp"
-
-  typedef mc::Interval I;
-  I Ip[NP] = { I(1,5), I(1,5), I(1,5), I(1,5) };
-
-  std::cout << NLP;
-  int status = NLP.solve( Ip );
+  MINLP.setup();
+  switch( MINLP.relax() ){
+    case mc::MIPSLV_GUROBI<I>::OPTIMAL:
+      std::cout << std::endl
+                <<"MINLP relaxation bound: " << MINLP.solver()->get_objective() << std::endl;
+      for( unsigned i=0; i<NP; i++ ) 
+        std::cout << "  " << P[i] << " = " << MINLP.solver()->get_variable( P[i] ) << std::endl;
+      MINLP.stats.display();
+      break;
+    default:
+      std::cout << "MINLP relaxation was unsuccessful" << std::endl;
+      break;
+  }
 \endcode
 
-The following result is produced:
+The return value of mc::MINLPBND is per the enumeration mc::MIPSLV_GUROBI<I>::STATUS. The following result is displayed (with the option mc::MINLPBND::Options::MIPSLV::DISPLEVEL defaulting to 1):
 
 \verbatim
+#              |  VARIABLES      FUNCTIONS
+# -------------+---------------------------
+#  LINEAR      |         0              2
+#  QUADRATIC   |         0              0
+#  POLYNOMIAL  |         0              0
+#  GENERAL     |         2              2
+
+MINLP relaxation bound: -63.9709
+  X0 = 8.82848
+  X1 = 11
+
+#  WALL-CLOCK TIMES
+#  CTR PROPAG:       0.00 SEC
+#  POL IMAGE:        0.00 SEC
+#  MIP SETUP:        0.00 SEC
+#  MIP SOLVE:        0.00 SEC, 1 PROBLEMS
 \endverbatim
 
-Other options can be modified to tailor the search, including output level, maximum number of iterations, tolerances, maximum CPU time, etc. These options can be modified through the public member mc::MINLPBND::options. 
+Other options can be modified to tailor the relaxations, tune the MIP solver, set a maximum CPU time, etc. These options can be modified through the public member mc::MINLPBND::options.
 */
 
 //TODO: 
-//- [TO DO] Enable KKT cuts and reduction constraints
-//- [TO DO] Make it possible to add/remove a constraint from the model?
-//- [TO DO] Exploit the degree of separability to introduce auxiliary variables
-//- [TO DO] Enable constraint propagation before generating the cuts in PolImg
-
-// SEPARATE VARIOUS RELAXATION CLASSES AND INHERIT IN MINLPBND?
+//- Enable RLT cuts in addition to quadratization
+//- SEPARATE VARIOUS RELAXATION CLASSES AND INHERIT IN MINLPBND?
 
 #ifndef MC__MINLPBND_HPP
 #define MC__MINLPBND_HPP
 
 #include <stdexcept>
+#include <chrono>
 
 #include "rltred.hpp"
 #include "sparseexpr.hpp"
@@ -96,7 +110,6 @@ Other options can be modified to tailor the search, including output level, maxi
 #include "scmodel.hpp"
 #include "ismodel.hpp"
 
-#include "mctime.hpp"
 #include "base_nlp.hpp"
 #include "mipslv_gurobi.hpp"
 
@@ -293,7 +306,7 @@ public:
   {
     //! @brief Constructor
     Options():
-      REFORMMETH({NPOL}), RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), BCHPRIM(0),
+      REFORMMETH({NPOL,QUAD}), RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), BCHPRIM(0),
       OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(true),
       CPMAX(10), CPTHRES(0.), ISMDIV(10), ISMMIPREL(true),
       CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF), MONSCALE(false),

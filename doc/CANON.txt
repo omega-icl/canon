@@ -5,12 +5,20 @@
 @author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and Tanuj Karia <tt>(tanuj.karia17@imperial.ac.uk)</tt>
 @date 2020
 
-
-<CENTER><TABLE BORDER=0>
+<TABLE BORDER=0>
 <TR>
-<TD>\image html CANON.png<TD>CANON provides a collection of C++ classes for global optimization of nonlinear models using complete search algorithms.</TD>
+<TD>\image html CANON.png width=20%</TD>
+<TD>CANON is a C++ library for global optimization of nonlinear models using complete search algorithms.</TD>
 </TR>
-</TABLE></CENTER>
+</TABLE>
+
+The main workflow in <a>CANON</a> for global optimization of mixed-integer nonlinear programs (MINLP) entails:
+- reading the MINLP model, for instance in <a>GAMS</a> format
+- preprocessing the MINLP model by applying local search and bound-tightening techniques
+- reformulating the MINLP model as an equivalent mixed-integer quadratically constrained program (MIQCP), possibly with redundant constraints
+- solving the MIQCP, possibly within a refinement of piecewise relaxations for nonlinear intrinsic functions
+.
+The final solution step exploits the capability of the optimization solver <a>GUROBI</a> for globally optimizing nonconvex MIQCPs. The MIPOP preprocessing step relies on <a>MC++</a> to perform constraint propagation (FBBT) and to construct the polyhedral (LP) relaxations of the MIPOP for OBBT, which are solved using <a>GUROBI</a>. <a>CANON</a> also implements its own outer-approximation algorithm with feasibility pump for local MINLP search as part of preprocessing, using <a>GUROBI</a> to solve the master (MIP) subproblems and <a>SNOPT</a> to solve the primal (NLP) subproblems. \textsf{CANON} builds on the library \textsf{MC++} for the construction and manipulation of expression trees and their evaluation in various computer algebra, including the decomposition of multivariate polynomials into quadratic forms as well as the generation of redundant quadratic constraints.
 
 
 \section sec_CANON_install What do I need to run CANON?
@@ -35,7 +43,7 @@ On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <
 <TR>
 <TD><CENTER><TABLE BORDER=0>
   <TR>
-  <TD>CANON has been developed and tested primarily under Ubuntu Linux with the compiler <a href="http://gcc.gnu.org/"><tt>gcc</tt></a> (version >7)</TD>
+  <TD>CANON has been developed and tested primarily under Ubuntu Linux with the compiler <a href="http://gcc.gnu.org/"><tt>gcc</tt></a> (with C++17)</TD>
   </TR>
   </TABLE></CENTER></TD>
 </TR>
@@ -46,25 +54,10 @@ On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <
 
 A description of the main components of CANON can be found under <A HREF="pages.html">Related Pages</A>:
 - \ref page_NLPSLV_SNOPT Local (Continuous) Nonlinear Optimization interfacing SNOPT with MC++
-- \ref page_NLPSLV_IPOPT Local (Continuous) Nonlinear Optimization interfacing IPOPT with MC++
 - \ref page_MINLPSLV Local Mixed-Integer Nonlinear Optimization via Outer-Approximation using MC++
 - \ref page_MINLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
 - \ref page_MINLGO Global Mixed-Integer Nonlinear Optimization using MC++
 .
-
-\section sec_MC_examples How do I run the test examples of CANON?
-
-Change into the <tt>test</tt> directory, and select one of the subdirectories, e.g.
-
-<tt>
-$ cd test/NLGO
-</tt>
-
-At the command line, create the executables by typing:
-
-<tt>
-$ make
-</tt>
 
 <CENTER><TABLE border="1">
 <TR>

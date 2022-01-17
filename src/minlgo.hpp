@@ -90,8 +90,6 @@ The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a
 #ifndef MC__MINLGO_HPP
 #define MC__MINLGO_HPP
 
-#include <chrono>
-
 #include <boost/program_options.hpp> 
 namespace opt = boost::program_options; 
 
