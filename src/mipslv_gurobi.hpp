@@ -734,25 +734,33 @@ MIPSLV_GUROBI<T>::_add_cut
         if( _cutvar.size() < 2 || _cutvar.size() > 3 )
           throw std::runtime_error("MIPSLV_GUROBI - Error: Incorrect number of variables in nonlinear cut");
         switch( pCut->op()->type ){
-          case FFOp::IPOW:{
-            const unsigned ncoef = pCut->op()->pops[1]->num().n+1;
-            std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
+          case FFOp::IPOW:
+          case FFOp::DPOW:{
+            double const& dExp = pCut->op()->pops[1]->num().val();
+            if( dExp < 0 ) throw std::runtime_error("MIPSLV_GUROBI - Error: Nonlinear cut not yet implemented");
+            _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], dExp, "", options.pwl() );
             break;}
+          //case FFOp::DPOW:{
+            //unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
+            //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            //_GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
+            //break;}
           case FFOp::CHEB:{
-            const unsigned ncoef = pCut->op()->pops[1]->num().n+1;
+            unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
             std::vector<double>&& coef = chebcoef( ncoef-1 );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
           case FFOp::SQR:{
-            const unsigned ncoef = 3;
-            std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
+            _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 2, "", options.pwl() );
+            //unsigned const ncoef = 3;
+            //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            //_GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
           case FFOp::SQRT:{
-            const unsigned ncoef = 3;
-            std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            _GRBmodel->addGenConstrPoly( _cutvar[0], _cutvar[1], ncoef, coef.data(), "", options.pwl() );
+            _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 0.5, "", options.pwl() );
+            //const unsigned ncoef = 3;
+            //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            //_GRBmodel->addGenConstrPoly( _cutvar[0], _cutvar[1], ncoef, coef.data(), "", options.pwl() );
             break;}
           case FFOp::EXP:
             _GRBmodel->addGenConstrExp( _cutvar[1], _cutvar[0], "", options.pwl() );
