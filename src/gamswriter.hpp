@@ -1,35 +1,29 @@
-// Copyright (C) 2020 Benoit Chachuat, Imperial College London.
+// Copyright (C) 2022 Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
-#ifndef MC__MIPSLV_GUROBI_HPP
-#define MC__MIPSLV_GUROBI_HPP
+#ifndef MC__GAMSWRITER_HPP
+#define MC__GAMSWRITER_HPP
 
 #include <stdexcept>
 #include <cassert>
+#include <fstream>
 
 #include "base_opt.hpp"
 #include "polimage.hpp"
-#include "gurobi_c++.h"
 
-#undef MC__MIPSLV_DEBUG
-#undef MC__MIPSLV_TRACE
-
-extern "C"{
-  #include <fenv.h>
-  int fedisableexcept( int );
-}
+#undef MC__GAMSWRITER_DEBUG
+#undef MC__GAMSWRITER_TRACE
 
 namespace mc
 {
-//! @brief C++ class for solution of mixed-integer programs using GUROBI
+//! @brief C++ class for exporting a CANON reformulated model into GAMS
 ////////////////////////////////////////////////////////////////////////
-//! mc::MIPSLV_GUROBI is a C++ class to enable the construction and 
-//! solution of mixed-integer programs (MILP, MIQP, MIQCQP)  using the
-//! C++ API of GUROBI (v9.0.1 or later).
+//! mc::GAMSWRITER is a C++ class for exporting a reformulated CANON
+//! model into GAMS language.
 ////////////////////////////////////////////////////////////////////////
 template< typename T>
-class MIPSLV_GUROBI
+class GAMSWRITER
 : public virtual BASE_OPT
 {
   // Typedef's
@@ -38,17 +32,11 @@ class MIPSLV_GUROBI
   
 protected:
 
-  //! @brief GUROBI environment
-  GRBEnv* _GRBenv;
-
-  //! @brief GUROBI model
-  GRBModel* _GRBmodel;
+  //! @brief GAMS output file
+  std::ofstream _GAMSmodel;
 
   //! @brief map of variables in MIP model vs DAG
   t_MIPVar _MIPvar;
-
-  //! @brief whether GUROBI has sent an exception
-  bool _GRBexcpt;
 
   //! @brief Polyhedral image environment
   PolImg<T>* _POLenv;
@@ -58,131 +46,25 @@ public:
    *  @{
    */
   //! @brief Constructor
-  MIPSLV_GUROBI
-    ()
-    : _GRBenv( new GRBEnv( true ) ), _GRBmodel( nullptr ), _POLenv( nullptr )
-    { _GRBenv->set( GRB_IntParam_LogToConsole, 1 );//0 );
-      _GRBenv->start(); }
+  GAMSWRITER
+    ( std::string const GAMSfile )
+    : _GAMSfile( GAMSfile ), _POLenv( nullptr )
+    {
+      _GAMSmodel.open( GAMSfile, std::ios::trunc );
+      if( !_GAMSmodel.is_open() )
+        std::cerr << "Could not create GAMS model. Do you have write permissions in execution directory?"
+                  << std::endl;
+    }
 
   //! @brief Destructor
   virtual ~MIPSLV_GUROBI()
-    {
-      delete _GRBmodel;
-      delete _GRBenv;
-    }
+    { if( _GAMSmodel.is_open() ) _GAMSmodel.close(); }
 
-  //! @brief MIP solution status
-  enum STATUS{
-     OPTIMAL=0,   //!< Optimal solution found within tolerances
-     SUBOPTIMAL,  //!< Unable to satisfy optimality tolerances, but sub-optimal solution available
-     INFEASIBLE,  //!< Infeasible, but not unbounded
-     INFORUNBND,  //!< Infeasible or unbounded
-     UNBOUNDED,   //!< Unbounded
-     TIMELIMIT,   //!< Time limit reached
-     OTHER        //!< Undefined
-  };
-  
-  //! @brief MIP options
-  struct Options
-  {
-    //! @brief Constructor
-    Options():
-      ALGO( -1 ), PRESOLVE( -1 ), CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
-      FEASTOL( 1e-7 ), OPTIMTOL( 1e-7 ), MIPRELGAP( 1e-5 ), MIPABSGAP( 1e-5 ),
-      NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), HEURISTICS( 0.05 ),
-      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
-      PWLRELGAP( 1e-3 ), TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
-      LOGFILE(), OUTPUTFILE()
-      {}
-    //! @brief Assignment operator
-    Options& operator= ( Options const& options ){
-        ALGO         = options.ALGO;
-        PRESOLVE     = options.PRESOLVE;
-        CONTRELAX    = options.CONTRELAX;
-        DUALRED      = options.DUALRED;
-        NONCONVEX    = options.NONCONVEX;
-        FEASTOL      = options.FEASTOL;
-        OPTIMTOL     = options.OPTIMTOL;
-        MIPRELGAP    = options.MIPRELGAP;
-        MIPABSGAP    = options.MIPABSGAP;
-        NUMERICFOCUS = options.NUMERICFOCUS;
-        SCALEFLAG    = options.SCALEFLAG;
-        HEURISTICS   = options.HEURISTICS;
-        PRESOS1BIGM  = options.PRESOS1BIGM;
-        PRESOS2BIGM  = options.PRESOS2BIGM;
-        PWLRELGAP    = options.PWLRELGAP;
-        TIMELIMIT    = options.TIMELIMIT;
-        THREADS      = options.THREADS;
-        DISPLEVEL    = options.DISPLEVEL;
-        LOGFILE      = options.LOGFILE;
-        OUTPUTFILE   = options.OUTPUTFILE;
-        return *this ;
-      }
-    //! @brief Algorithm used to solve continuous models or the root node of a MIP model. The default options is: -1=automatic. Other options are: 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent, 5=deterministic concurrent simplex. 
-    int ALGO;
-    //! @brief Controls the presolve level. A value of -1 corresponds to an automatic setting. Other options are off (0), conservative (1), or aggressive (2). More aggressive application of presolve takes more time, but can sometimes lead to a significantly tighter model.
-    int PRESOLVE;
-    //! @brief Determines whether to relax binary/integer variables as continuous variables during solve.
-    bool CONTRELAX;
-    //! @brief Determines whether dual reductions are performed in presolve. The default value of 1 enables these redutions. You can set the parameter to 0 to disable these reductions if you received an optimization status of INF_OR_UNBD and would like a more definitive conclusion. 
-    int DUALRED;
-    //! @brief Sets the strategy for handling non-convex quadratic objectives or non-convex quadratic constraints. With setting 0, an error is reported if the original user model contains non-convex quadratic constructs. With setting 1, an error is reported if non-convex quadratic constructs could not be discarded or linearized during presolve. With the default setting 2, non-convex quadratic problems are solved by means of translating them into bilinear form and applying spatial branching. The default -1 setting is currently equivalent to 1, and may change in future GUROBI releases to be equivalent to 2. 
-    int NONCONVEX;
-    //! @brief All constraints must be satisfied to this tolerance. Tightening this tolerance can produce smaller constraint violations, but for numerically challenging models it can sometimes lead to much larger iteration counts. 
-    double FEASTOL;
-     //! @brief Reduced costs must all be smaller than this tolerance in the improving direction in order for a model to be declared optimal.
-    double OPTIMTOL;
-    //! @brief The MIP solver will terminate (with an optimal result) when the gap between the lower and upper objective bound is less than this tolerance times the absolute value of the upper bound. 
-    double MIPRELGAP;
-    //! @brief The MIP solver will terminate (with an optimal result) when the gap between the lower and upper objective bound is less than this tolerance. 
-    double MIPABSGAP;
-    //! @brief Controls the degree to which the code attempts to detect and manage numerical issues. The default setting (0) makes an automatic choice, with a slight preference for speed. Settings 1-3 increasingly shift the focus towards being more careful in numerical computations. With higher values, the code will spend more time checking the numerical accuracy of intermediate results, and it will employ more expensive techniques in order to avoid potential numerical issues. 
-    int NUMERICFOCUS;
-    //! @brief Controls model scaling. By default, the rows and columns of the model are scaled in order to improve the numerical properties of the constraint matrix. The scaling is removed before the final solution is returned. Scaling typically reduces solution times, but it may lead to larger constraint violations in the original, unscaled model. Turning off scaling (ScaleFlag=0) can sometimes produce smaller constraint violations. Choosing a different scaling setting 1-3 can sometimes improve performance for particularly numerically difficult models.  
-    int SCALEFLAG;
-    //! @brief Determines the amount of time spent in MIP heuristics. You can think of the value as the desired fraction of total MIP runtime devoted to heuristics. The default value of 0.05 aims to spend 5% of runtime on heuristics. Larger values produce more and better feasible solutions, at a cost of slower progress in the best bound. 
-    double HEURISTICS;
-    //! @brief Controls the automatic reformulation of SOS1 constraints into binary form. SOS1 constraints are often handled more efficiently using a binary representation. The reformulation often requires big-M values to be introduced as coefficients. This parameter specifies the largest big-M that can be introduced by presolve when performing this reformulation. Larger values increase the chances that an SOS1 constraint will be reformulated, but very large values (e.g., 1e8) can lead to numerical issues. The default value of -1 chooses a threshold automatically. You should set the parameter to 0 to shut off SOS1 reformulation entirely, or a large value to force reformulation. 
-    double PRESOS1BIGM;
-    //! @brief Controls the automatic reformulation of SOS2 constraints into binary form. SOS2 constraints are often handled more efficiently using a binary representation. The reformulation often requires big-M values to be introduced as coefficients. This parameter specifies the largest big-M that can be introduced by presolve when performing this reformulation. Larger values increase the chances that an SOS2 constraint will be reformulated, but very large values (e.g., 1e8) can lead to numerical issues. The default value of 0 disables the reformulation. You can set the parameter to -1 to choose an automatic approach, or a large value to force reformulation. 
-    double PRESOS2BIGM;
-    //! @brief Sets the maximum relative error in the piecewise-linear approximations of the nonlinear functions. Gurobi will choose pieces, typically of different sizes, to achieve that error bound. Note that the number of pieces required may be quite large when setting a tight error tolerance. The default value of 0.05 specifies a 5% maximal relative error gap.  
-    double PWLRELGAP;
-    //! @brief Limits the total time expended (in seconds). Optimization returns with a TIMELIMIT status if the limit is exceeded.
-    double TIMELIMIT;
-    //! @brief Limits the number of threads used by the MIP solver. The default value of 0 allows to use all available threads.
-    unsigned THREADS;
-    //! @brief Enables or disables solver output. The default value of 1 shows the solver iterations and results.
-    int DISPLEVEL;
-    //! @brief The name of the Gurobi log file. Modifying this parameter closes the current log file and opens the specified file. Use an empty string for no log file.
-    std::string LOGFILE;
-    //! @brief The name of the file to be written before solving the model. Valid suffixes are .mps, .rew, .lp, or .rlp for writing the model.
-    std::string OUTPUTFILE;
-    //! @brief Display
-    void display
-      ( std::ostream&out = std::cout )
-      const;
-    //! @brief Piecewise-linear option string
-    std::string pwl
-      ()
-      const;
-  };
-  //! @brief MIP options
-  Options options;
-
-  //! @brief Reset MIP model
-  void reset
-    ();
-
-  //! @brief Set variables and cuts in MIP
+  //! @brief Set variables and cuts in GAMS model
   void set_cuts
-    ( PolImg<T>* env, bool const reset_=true );
+    ( PolImg<T>* env );
 
-//  //! @brief Set objective in MIP
-//  void set_objective
-//    ( FFVar const& pObj, t_OBJ const& tObj );
-
-  //! @brief Set objective in MIP
+  //! @brief Set objective in 
   void set_objective
     ( PolVar<T> const& pObj, t_OBJ const& tObj, bool const appvar_=true );
 
@@ -191,44 +73,15 @@ public:
     ( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
       t_OBJ const& tObj, bool const appvar_=true );
 
-  //! @brief Update objective term in MIP
-  void update_objective
-    ( PolVar<T> const& pObj, double const& cObj, bool const appvar_=true );
-
-  //! @brief Update objective terms in MIP
-  void update_objective
-    ( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
-      bool const appvar_=true );
-
-//  //! @brief Add constraint in MIP
-//  t_MIPCtr add_constraint
-//    ( FFVar const& pCtr, t_CTR const& tCtr, const double rhs=0. );
-
-  //! @brief Add constraint in MIP
+  //! @brief Add extra constraint in GAMS model
   t_MIPCtr add_constraint
     ( PolVar<T> const& pCtr, t_CTR const& tCtr, const double rhs=0.,
       bool const appvar_=true );
 
-  //! @brief Add constraint in MIP
+  //! @brief Add extra constraint in GAMS model
   t_MIPCtr add_constraint
     ( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr, 
       t_CTR const& tCtr, double const rhs=0., bool const appvar_=true );
-
-  //! @brief Modify constraint RHS in MIP
-  t_MIPCtr & update_constraint
-    ( t_MIPCtr & ctr, double const rhs );
-
-  //! @brief Dummy constraint in MIP
-  t_MIPCtr dummy_constraint
-    ();
-    
-  //! @brief Remove constraint from MIP
-  void remove_constraint
-    ( t_MIPCtr & ctr );
-
-  //! @brief Solve MIP
-  void solve
-    ();
 
   //! @brief Set starting point and branch priority of PolImg variable <a>X</a>
   bool set_variable
@@ -241,70 +94,10 @@ public:
       return true;
     }
 
-  //! @brief Value of PolImg variable <a>X</a> after last MIP call
-  double get_variable
-    ( PolVar<T> const& X )
-    const
-    {
-      auto itv = _MIPvar.find( const_cast<PolVar<T>*>(&X) );
-      return itv->second.get( GRB_DoubleAttr_X );
-    }
-
-  //! @brief Value of DAG variable <a>X</a> after last MIP call
-  double get_variable
-    ( FFVar const& X )
-    const
-    {
-      auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&X) );
-      auto itv = _MIPvar.find( itp->second );
-      return itv->second.get( GRB_DoubleAttr_X );
-    }
-
-  //! @brief Optimal cost value after last MIP call
-  double get_objective
+  //! @brief Close GAMS model
+  void close
     ()
-    const
-    {
-      return _GRBmodel->get( GRB_DoubleAttr_ObjVal );
-    }
-
-  //! @brief Optimal cost bound after last MIP call
-  double get_objective_bound
-    ()
-    const
-    {
-      return _GRBmodel->get( GRB_IntAttr_IsMIP )?
-             _GRBmodel->get( GRB_DoubleAttr_ObjBound ):
-             _GRBmodel->get( GRB_DoubleAttr_ObjVal );
-    }
-
-  //! @brief Status after last MIP call
-  STATUS get_status
-    ()
-    const
-    {
-      if( _GRBexcpt )         return OTHER;
-      switch( _GRBmodel->get( GRB_IntAttr_Status ) ){
-       case GRB_OPTIMAL:      return OPTIMAL;
-       case GRB_SUBOPTIMAL:   return SUBOPTIMAL;
-       case GRB_INFEASIBLE:   return INFEASIBLE;
-       case GRB_INF_OR_UNBD:  return INFORUNBND;
-       case GRB_UNBOUNDED:    return UNBOUNDED;
-       case GRB_TIME_LIMIT:   return TIMELIMIT;
-       default:               return OTHER;
-      }
-    }
-
-  //! @brief Pointer to MIP model
-  GRBModel const* get_model
-    ()
-    const
-    { return _GRBmodel; }
-
-  //! @brief Terminate solve process
-  void terminate
-    ()
-    { if( _GRBmodel ) _GRBmodel->terminate(); }
+    { if( _GAMSmodel.is_open() ) _GAMSmodel.close(); }
   /** @} */
 
 protected:
