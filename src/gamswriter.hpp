@@ -25,96 +25,112 @@ namespace mc
 template< typename T>
 class GAMSWRITER
 : public virtual BASE_OPT
-{
-  // Typedef's
-  typedef std::map< const PolVar<T>*, GRBVar, lt_PolVar<T> > t_MIPVar;
-  typedef GRBConstr t_MIPCtr;
-  
+{  
+  // Typedef for variable set
+  typedef std::set< PolVar<T> const*, lt_PolVar<T> > t_Var;
+
+public:
+
+  //! @brief Model type
+  enum MODELTYPE{
+     LIN=0,  //!< Linear program
+     QUAD,   //!< Quadratically constrained program
+     NLIN,   //!< Nonlinear program
+  };
+
 protected:
 
-  //! @brief GAMS output file
-  std::ofstream _GAMSmodel;
+  //! @brief Model type
+  MODELTYPE _type;
 
-  //! @brief map of variables in MIP model vs DAG
-  t_MIPVar _MIPvar;
+  //! @brief Objective direction
+  t_OBJ _DirObj;
+
+  //! @brief Objective variable
+  std::string _VarObj;
+
+  //! @brief Continuous variable declaration
+  std::ostringstream _CVarDec;
+
+  //! @brief Binary variable declaration
+  std::ostringstream _BVarDec;
+
+  //! @brief Integer variable declaration
+  std::ostringstream _IVarDec;
+
+  //! @brief Variable bounds
+  std::ostringstream _VarBnd;
+
+  //! @brief Variable Fixings
+  std::ostringstream _VarFix;
+
+  //! @brief Variable levels
+  std::ostringstream _VarIni;
+
+  //! @brief Equation declaration
+  std::ostringstream _EqnDec;
+
+  //! @brief Equation definition
+  std::ostringstream _EqnDef;
+
+  //! @brief Equation counter
+  unsigned long _EqnCnt;
+
+  //! @brief set of variables in GAMS model
+  t_Var _GAMSvar;
 
   //! @brief Polyhedral image environment
   PolImg<T>* _POLenv;
 
 public:
-  /** @defgroup MIPSLV_GUROBI MIP optimization using GUROBI
-   *  @{
-   */
+
   //! @brief Constructor
   GAMSWRITER
-    ( std::string const GAMSfile )
-    : _GAMSfile( GAMSfile ), _POLenv( nullptr )
-    {
-      _GAMSmodel.open( GAMSfile, std::ios::trunc );
-      if( !_GAMSmodel.is_open() )
-        std::cerr << "Could not create GAMS model. Do you have write permissions in execution directory?"
-                  << std::endl;
-    }
+    ()
+    : _VarObj( "objvar" ), _EqnCnt( 0 ), _POLenv( nullptr )
+    {}
 
   //! @brief Destructor
-  virtual ~MIPSLV_GUROBI()
-    { if( _GAMSmodel.is_open() ) _GAMSmodel.close(); }
+  virtual ~GAMSWRITER()
+    {}
+
+  //! @brief Reset GAMS model
+  void reset
+    ();
+
+  //! @brief Write GAMS model to file
+  bool write
+    ( std::string const filename );
 
   //! @brief Set variables and cuts in GAMS model
+  template <typename T>
   void set_cuts
-    ( PolImg<T>* env );
+    ( PolImg<T>* env, bool const reset_=true );
 
-  //! @brief Set objective in 
+  //! @brief Set objective variable and direction in GAMS model
+  template <typename T>
   void set_objective
     ( PolVar<T> const& pObj, t_OBJ const& tObj, bool const appvar_=true );
 
-  //! @brief Set objective in MIP
-  void set_objective
-    ( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
-      t_OBJ const& tObj, bool const appvar_=true );
-
-  //! @brief Add extra constraint in GAMS model
-  t_MIPCtr add_constraint
-    ( PolVar<T> const& pCtr, t_CTR const& tCtr, const double rhs=0.,
-      bool const appvar_=true );
-
-  //! @brief Add extra constraint in GAMS model
-  t_MIPCtr add_constraint
-    ( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr, 
-      t_CTR const& tCtr, double const rhs=0., bool const appvar_=true );
-
   //! @brief Set starting point and branch priority of PolImg variable <a>X</a>
+  template <typename T>
   bool set_variable
-    ( PolVar<T> const& X, double const* pval, unsigned const priority )//=GRB_UNDEFINED )
-    {
-      auto itv = _MIPvar.find( const_cast<PolVar<T>*>(&X) );
-      if( itv == _MIPvar.end() ) return false;
-      itv->second.set( GRB_DoubleAttr_Start, pval? *pval: GRB_UNDEFINED );
-      itv->second.set( GRB_IntAttr_BranchPriority, (int)priority );
-      return true;
-    }
-
-  //! @brief Close GAMS model
-  void close
-    ()
-    { if( _GAMSmodel.is_open() ) _GAMSmodel.close(); }
-  /** @} */
+    ( PolVar<T> const& X, double const* pval ); //, unsigned const priority );
 
 protected:
 
-  //! @brief Set options of MIP solver
-  void _set_options
-    ();
-
   //! @brief Append variable to MIP model
-  std::pair<typename t_MIPVar::iterator,bool> _add_var
+  template <typename T>
+  std::pair<typename t_Var::iterator,bool> _add_var
     ( PolVar<T> const* pVar );
 
   //! @brief Append constraint to MIP model
+  template <typename T>
   void _add_cut
     ( PolCut<T> const* pCut );
 
   //! @brief Append constraint to MIP model
+  template <typename T>
   void _add_cut
     ( PolCut<T> const* pCut, char GRB_Type );
 
@@ -128,326 +144,209 @@ private:
 
   //! @brief Vector of Gurobi variables in quadratic terms
   std::vector<GRBVar> _cutqvar2;
-
-  //! @brief Private methods to block default compiler methods
-  MIPSLV_GUROBI
-    (const MIPSLV_GUROBI&);
-  MIPSLV_GUROBI& operator=
-    (const MIPSLV_GUROBI&);
 };
 
-template <typename T>
 inline void
-MIPSLV_GUROBI<T>::solve
+GAMSWRITER::reset
 ()
 {
-  //_GRBexcpt = false;
+  _type = LIN;
+  _EqnCnt = 0;
+  _CVarDec.clear(); _CVarDec.set("");
+  _BVarDec.clear(); _BVarDec.set("");
+  _IVarDec.clear(); _IVarDec.set("");
+  _EqnDec.clear();  _EqnDec.set("");
+  _EqnDef.clear();  _EqnDef.set("");
+  _VarBnd.clear();  _VarBnd.set("");
+  _VarFix.clear();  _VarFix.set("");
+  _VarIni.clear();  _VarIni.set("");
+}
 
-  try{
-    _set_options();
-    _GRBmodel->update();
-    if( options.OUTPUTFILE != "" )
-      _GRBmodel->write( options.OUTPUTFILE );
-    fedisableexcept(FE_ALL_EXCEPT);
-    _GRBmodel->optimize();
+inline bool
+GAMSWRITER::write
+( std::string const filename )
+{
+  // Create GAMS file
+  std::ofstream GAMSmodel;
+  GAMSmodel.open( filename, std::ios::trunc );
+  if( !GAMSmodel.is_open() ){
+    std::cerr << "Could not create GAMS model. Do you have write permissions in execution directory?"
+              << std::endl;
+    return false;
   }
 
-  catch( GRBException& e ){
-    //if( options.DISPLEVEL )
-      std::cout << "GRBException - Error code: " << e.getErrorCode() << std::endl
-                << e.getMessage() << std::endl;
-    //_GRBexcpt = true;
-    throw;
-  }
+  // Write GAMS model to file
+  GAMSmode << "VARIABLE " << _VarObj << ";" << std::endl;
+  if( _CVarDec.tellp() > 0 )
+    GAMSmodel << "VARIABLES " << _CVarDec.str() << ";" << std::endl << std::endl;
+  if( _BVarDec.tellp() > 0 )
+    GAMSmodel << "BINARY VARIABLES " << _BVarDec.str() << ";" << std::endl << std::endl;
+  if( _IVarDec.tellp() > 0 )
+    GAMSmodel << "INTEGER VARIABLES " << _IVarDec.str() << ";" << std::endl << std::endl;
+  GAMSmodel << "EQUATIONS " << _EqnDec.str() << ";" << std::endl << std::endl;
+  GAMSmodel << _EqnDef.str() << std::endl << std::endl;
+  GAMSmodel << _VarBnd.str() << std::endl << std::endl;
+  GAMSmodel << _VarIni.str() << std::endl << std::endl;
+  GAMSmodel << _VarFix.str() << std::endl << std::endl;
+  GAMSmodel << "MODEL canon / ALL /;" << std::endl;
+  GAMSmodel << "SOLVE canon USING ";
+  switch( _type ){
+    case LIN  : GAMSmodel << (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MIP"  : "LP" ; break;
+    case QUAD : GAMSmodel << (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MIQCP": "QCP"; break;
+    case NLIN : GAMSmodel << (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MINLP": "NLP"; break;
+  };
+  GAMSmodel << " / ALL /;" << std::endl;
 
-  //if( !_GRBexcpt && options.DISPLEVEL > 1
-  if( options.DISPLEVEL > 1
-   && (get_status() == OPTIMAL || get_status() == TIMELIMIT) ){
-    std::cout << "MIP solution complete\n";
-    std::cout << std::scientific << std::setprecision(4);
-    std::cout << "  Optimal solution: " << get_objective() << std::endl;
-    for( auto && pvar : _POLenv->Vars() )
-      std::cout << pvar.second->var().name() << " = "
-                << get_variable( *pvar.second ) << std::endl;
-  }
+  // Close GAMS file
+  GAMSmodel.close();
+  return true;
 }
 
 template <typename T>
 inline void
-MIPSLV_GUROBI<T>::_set_options
-()
-{
-  // Gurobi options
-  _GRBmodel->getEnv().set( GRB_IntParam_LogToConsole,      options.LOGFILE!=""? 0:1 );
-  _GRBmodel->getEnv().set( GRB_StringParam_LogFile,        options.LOGFILE );
-  _GRBmodel->getEnv().set( GRB_IntParam_OutputFlag,        options.DISPLEVEL>0?1:0 );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_TimeLimit,      options.TIMELIMIT );
-  _GRBmodel->getEnv().set( GRB_IntParam_Method,            options.ALGO );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_OptimalityTol,  options.OPTIMTOL );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_FeasibilityTol, options.FEASTOL );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGap,         options.MIPRELGAP );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGapAbs,      options.MIPABSGAP );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_Heuristics,     options.HEURISTICS );
-  _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
-  _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
-  _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS1BigM,    options.PRESOS1BIGM );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS2BigM,    options.PRESOS2BIGM );
-  _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );
-  _GRBmodel->getEnv().set( GRB_IntParam_NonConvex,         options.NONCONVEX );
-  _GRBmodel->getEnv().set( GRB_IntParam_Threads,           options.THREADS );
-}
-
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::reset
-()
-{
-  delete _GRBmodel;
-  _GRBmodel = new GRBModel( *_GRBenv );
-  _MIPvar.clear();
-  //_MIPcut.clear();
-}
-
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::set_cuts
+GAMSWRITER::set_cuts
 ( PolImg<T>* env, bool const reset_ )
 {
   if( reset_ ) reset();
   _POLenv = env;
-    
+
   // Add participating variables into Gurobi model
   for( auto && pvar : _POLenv->Vars() ){
-    if( !reset_ && _MIPvar.find( pvar.second ) != _MIPvar.end() ) continue;
+    if( !reset_ && _GAMSvar.find( pvar.second ) != _GAMSvar.end() ) continue;
     _add_var( pvar.second );
   }
   for( auto && paux : _POLenv->Aux() ){
-    if( !reset_ && _MIPvar.find( paux ) != _MIPvar.end() ) continue;
+    if( !reset_ && _GAMSvar.find( paux ) != _GAMSvar.end() ) continue;
     _add_var( paux );
   }
 
-  // Update Gurobi model before adding cuts
-  _GRBmodel->update();
-
   // Add cuts into Gurobi model
   for( auto && pcut : _POLenv->Cuts() ){
-#ifdef MC__MIPSLV_DEBUG
+#ifdef MC__GAMSWRITER_DEBUG
     std::cout << *pcut << std::endl;
 #endif
     _add_cut( pcut );
   }
 }
 
-//template <typename T>
-//inline void
-//MIPSLV_GUROBI<T>::set_objective
-//( FFVar const& pObj, t_OBJ const& tObj )
-//{
-//  auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&pObj) );
-//  set_objective( *itp->second, tObj );
-//}
-
 template <typename T>
 inline void
-MIPSLV_GUROBI<T>::set_objective
-( PolVar<T> const& pObj, t_OBJ const& tObj, bool const appvar_ )
+GAMSWRITER::_add_var
+( PolVar<T> const* pVar )
 {
-  // Set objective
-  auto jtobj = _MIPvar.find( &pObj );
-  if( jtobj == _MIPvar.end() && appvar_)
-    jtobj = _add_var( &pObj ).first;
-  else if( jtobj == _MIPvar.end() )
-    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
-  _GRBmodel->setObjective( GRBLinExpr( jtobj->second ) );
-  switch( tObj ){
-    case MIN: _GRBmodel->set( GRB_IntAttr_ModelSense,  1 ); break;
-    case MAX: _GRBmodel->set( GRB_IntAttr_ModelSense, -1 ); break;
+  switch( pVar->id().first ){
+    case PolVar<T>::AUXCST:
+      _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
+      _VarFix  << pVar->name() << ".FX = " << Op<T>::mid(pVar->range()) << ";" << std::endl;
+      break;
+
+    case PolVar<T>::VARCONT:
+    case PolVar<T>::AUXCONT:
+      _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
+      if( Op<T>::l(pVar->range()) > -0.999*BASE_OPT::INF )
+        _VarBnd << pVar->name() << ".LO = " << Op<T>::l(pVar->range()) << ";" << std::endl;
+      if( Op<T>::u(pVar->range()) <  0.999*BASE_OPT::INF )
+        _VarBnd << pVar->name() << ".UP = " << Op<T>::u(pVar->range()) << ";" << std::endl;
+      break;
+      
+    case PolVar<T>::VARINT:
+    case PolVar<T>::AUXINT:
+      if( isequal( Op<T>::l(pVar->range()), 0. ) && isequal( Op<T>::u(pVar->range()), 1. ) )
+        _BVarDec << (_BVarDec.tellp()>0?", ":" ") << pVar->name();
+      else{
+        _IVarDec << (_IVarDec.tellp()>0?", ":" ") << pVar->name();
+        if( !isequal( Op<T>::l(pVar->range()), 0. ) )
+          _VarBnd << pVar->name() << ".LO = " << Op<T>::l(pVar->range()) << ";" << std::endl;
+        if( !isequal( Op<T>::u(pVar->range()), 100. ) )
+          _VarBnd << pVar->name() << ".UP = " << Op<T>::u(pVar->range()) << ";" << std::endl;
+      }
+      break;
+
+    default:
+      throw std::runtime_error("GAMSWRITER - Error: Unsupported variable type");
   }
 }
 
 template <typename T>
-inline void
-MIPSLV_GUROBI<T>::set_objective
-( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
-  t_OBJ const& tObj, bool const appvar_ )
+inline bool
+GAMSWRITER::set_variable
+( PolVar<T> const& pVar, double const* pVal )//, unsigned const priority )
 {
-  // Set objective
-  GRBLinExpr linobj;
-  _cutvar.resize( nObj );
-  for( unsigned k=0; k<nObj; k++ ){
-    auto itvar = _MIPvar.find( &pObj[k] );
-    if( itvar == _MIPvar.end() && appvar_)
-      itvar = _add_var( &pObj[k] ).first;
-    else if( itvar == _MIPvar.end() )
-      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
-    _cutvar[k] = itvar->second;
-  }
-  linobj.addTerms( cObj, _cutvar.data(), nObj );
-  _GRBmodel->setObjective( linobj );
-  switch( tObj ){
-    case MIN: _GRBmodel->set( GRB_IntAttr_ModelSense,  1 ); break;
-    case MAX: _GRBmodel->set( GRB_IntAttr_ModelSense, -1 ); break;
-  }
+  auto itv = _GAMSvar.find( const_cast<PolVar<T>*>(&pVar) );
+  if( itv == _GAMSvar.end() ) return false;
+  if( pVal ) _VarIni << pVar.name() << ".L = " << *pVal << ";" << std::endl;
+  //itv->second.set( GRB_IntAttr_BranchPriority, (int)priority );
+  return true;
 }
 
 template <typename T>
 inline void
-MIPSLV_GUROBI<T>::update_objective
-( PolVar<T> const& pObj, double const& cObj, bool const appvar_ )
+GAMSWRITER::set_objective
+( PolVar<T> const& pObj, t_OBJ const& tObj )
 {
-  // Update objective
-  auto jtobj = _MIPvar.find( &pObj );
-  if( jtobj == _MIPvar.end() && appvar_)
-    jtobj = _add_var( &pObj ).first;
-  else if( jtobj == _MIPvar.end() )
-    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
-  jtobj->second.set( GRB_DoubleAttr_Obj, cObj );
-}
-
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::update_objective
-( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
-  bool const appvar_ )
-{
-  // Set objective
-  for( unsigned k=0; k<nObj; k++ ){
-    auto jtobj = _MIPvar.find( &pObj[k] );
-    if( jtobj == _MIPvar.end() && appvar_)
-      jtobj = _add_var( &pObj[k] ).first;
-    else if( jtobj == _MIPvar.end() )
-      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
-    jtobj->second.set( GRB_DoubleAttr_Obj, cObj[k] );
-  }
-}
-
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::remove_constraint
-( typename MIPSLV_GUROBI<T>::t_MIPCtr & ctr )
-{
-  _GRBmodel->remove( ctr );
-}
-
-template <typename T>
-inline typename MIPSLV_GUROBI<T>::t_MIPCtr &
-MIPSLV_GUROBI<T>::update_constraint
-( typename MIPSLV_GUROBI<T>::t_MIPCtr & ctr, double const rhs )
-{
-  ctr.set( GRB_DoubleAttr_RHS, rhs );
-  return ctr;
+  _DirObj = tObj;
+  if( _GAMSvar.find( &pObj ) == _GAMSvar.end() ) _add_var( &pObj );
+  _EndDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++EqnCnt;
+  _EqnDef << "E" << EqnCnt << " .. " << _VarObj << " =E= " << pObj.name() << ";" << std::endl;
 }
 
 //template <typename T>
 //inline typename MIPSLV_GUROBI<T>::t_MIPCtr
 //MIPSLV_GUROBI<T>::add_constraint
-//( FFVar const& pCtr, t_CTR const& tCtr, double const rhs )
+//( PolVar<T> const& pCtr, t_CTR const& tCtr, double const rhs,
+//  bool const appvar_ )
 //{
-//  auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&pCtr) );
-//  return add_constraint( *itp->second, tCtr, rhs );
+//  // Set constraint
+//  auto jtctr = _MIPvar.find( &pCtr );
+//  if( jtctr == _MIPvar.end() && appvar_ )
+//      jtctr = _add_var( &pCtr ).first;
+//  else if( jtctr == _MIPvar.end() )
+//    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
+//  GRBLinExpr lhs( jtctr->second );
+//  GRBConstr ctr;
+//  switch( tCtr ){
+//    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
+//    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
+//    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
+//  }
+//  return ctr;
 //}
 
-template <typename T>
-inline typename MIPSLV_GUROBI<T>::t_MIPCtr
-MIPSLV_GUROBI<T>::add_constraint
-( PolVar<T> const& pCtr, t_CTR const& tCtr, double const rhs,
-  bool const appvar_ )
-{
-  // Set constraint
-  auto jtctr = _MIPvar.find( &pCtr );
-  if( jtctr == _MIPvar.end() && appvar_ )
-      jtctr = _add_var( &pCtr ).first;
-  else if( jtctr == _MIPvar.end() )
-    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
-  GRBLinExpr lhs( jtctr->second );
-  GRBConstr ctr;
-  switch( tCtr ){
-    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
-    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
-    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
-  }
-  return ctr;
-}
+//template <typename T>
+//inline typename MIPSLV_GUROBI<T>::t_MIPCtr
+//MIPSLV_GUROBI<T>::add_constraint
+//( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr,
+//  t_CTR const& tCtr, double const rhs, bool const appvar_ )
+//{
+//  // Set constraint
+//  GRBLinExpr lhs;
+//  _cutvar.resize( nCtr );
+//  for( unsigned k=0; k<nCtr; k++ ){
+//    auto jtctr = _MIPvar.find( &pCtr[k] );
+//    if( jtctr == _MIPvar.end() && appvar_)
+//        jtctr = _add_var( &pCtr[k] ).first;
+//    else if( jtctr == _MIPvar.end() )
+//      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
+//    _cutvar[k] = jtctr->second;
+//  }
+//  lhs.addTerms( cCtr, _cutvar.data(), nCtr );
+//  GRBConstr ctr;
+//  switch( tCtr ){
+//    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
+//    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
+//    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
+//  }
+//  return ctr;
+//}
 
-template <typename T>
-inline typename MIPSLV_GUROBI<T>::t_MIPCtr
-MIPSLV_GUROBI<T>::add_constraint
-( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr,
-  t_CTR const& tCtr, double const rhs, bool const appvar_ )
-{
-  // Set constraint
-  GRBLinExpr lhs;
-  _cutvar.resize( nCtr );
-  for( unsigned k=0; k<nCtr; k++ ){
-    auto jtctr = _MIPvar.find( &pCtr[k] );
-    if( jtctr == _MIPvar.end() && appvar_)
-        jtctr = _add_var( &pCtr[k] ).first;
-    else if( jtctr == _MIPvar.end() )
-      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
-    _cutvar[k] = jtctr->second;
-  }
-  lhs.addTerms( cCtr, _cutvar.data(), nCtr );
-  GRBConstr ctr;
-  switch( tCtr ){
-    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
-    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
-    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
-  }
-  return ctr;
-}
-
-template <typename T>
-inline typename MIPSLV_GUROBI<T>::t_MIPCtr
-MIPSLV_GUROBI<T>::dummy_constraint
-()
-{
-  GRBConstr ctr;
-  return ctr;
-}
-
-template <typename T>
-inline std::pair<typename MIPSLV_GUROBI<T>::t_MIPVar::iterator,bool>
-MIPSLV_GUROBI<T>::_add_var
-( PolVar<T> const* pVar )
-{
-  GRBVar var;
-  try{
-    switch( pVar->id().first ){
-      case PolVar<T>::VARCONT:
-      case PolVar<T>::AUXCONT:
-      case PolVar<T>::AUXCST:
-        var = _GRBmodel->addVar( Op<T>::l(pVar->range()), Op<T>::u(pVar->range()),
-          0., GRB_CONTINUOUS, pVar->name() );
-        break;
-      
-      case PolVar<T>::VARINT:
-      case PolVar<T>::AUXINT:
-        if( options.CONTRELAX )
-        var = _GRBmodel->addVar( Op<T>::l(pVar->range()), Op<T>::u(pVar->range()),
-          0., GRB_CONTINUOUS, pVar->name() );
-        else if( isequal( Op<T>::l(pVar->range()), 0. ) && isequal( Op<T>::u(pVar->range()), 1. ) )
-          var = _GRBmodel->addVar( 0., 1., 0., GRB_BINARY, pVar->name() );
-        else
-          var = _GRBmodel->addVar( Op<T>::l(pVar->range()), Op<T>::u(pVar->range()),
-            0., GRB_INTEGER, pVar->name() );
-        break;
-
-      default:
-        throw std::runtime_error("MIPSLV_GUROBI - Error: Invalid auxiliary variable type");
-    }
-  }
-
-  catch( GRBException& e ){
-    //if( options.DISPLEVEL )
-      std::cout << "GRBException - Error code: " << e.getErrorCode() << std::endl
-                << e.getMessage() << std::endl;
-      std::cout << "name: " << pVar->name() << "  range: " << pVar->range() << std::endl;
-    throw;
-  }
-
-  return _MIPvar.insert( std::make_pair( pVar, var ) );
-}
+//template <typename T>
+//inline typename MIPSLV_GUROBI<T>::t_MIPCtr
+//MIPSLV_GUROBI<T>::dummy_constraint
+//()
+//{
+//  GRBConstr ctr;
+//  return ctr;
+//}
 
 template <typename T>
 inline void
@@ -618,40 +517,6 @@ MIPSLV_GUROBI<T>::_add_cut
                 << e.getMessage() << std::endl;
     throw;
   }
-}
-
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::Options::display
-( std::ostream&out ) const
-{
-  // Display MIP options
-  out << std::left << std::scientific << std::setprecision(1)
-      << std::setw(15) << "  ALGO"        << ALGO        << std::endl
-      << std::setw(15) << "  PRESOLVE"    << PRESOLVE    << std::endl
-      << std::setw(15) << "  DUALRED"     << DUALRED     << std::endl
-      << std::setw(15) << "  NONCONVEX"   << NONCONVEX   << std::endl
-      << std::setw(15) << "  FEASTOL"     << FEASTOL     << std::endl
-      << std::setw(15) << "  OPTIMTOL"    << OPTIMTOL    << std::endl
-      << std::setw(15) << "  MIPRELGAP"   << MIPRELGAP   << std::endl
-      << std::setw(15) << "  MIPABSGAP"   << MIPABSGAP   << std::endl
-      << std::setw(15) << "  MIPABSGAP"   << MIPABSGAP   << std::endl
-      << std::setw(15) << "  HEURISTICS"  << HEURISTICS  << std::endl
-      << std::setw(15) << "  PRESOS1BIGM" << PRESOS1BIGM << std::endl
-      << std::setw(15) << "  PRESOS2BIGM" << PRESOS2BIGM << std::endl
-      << std::setw(15) << "  TIMELIMIT"   << TIMELIMIT   << std::endl
-      << std::setw(15) << "  DISPLEVEL"   << DISPLEVEL   << std::endl
-      << std::setw(15) << "  OUTPUTFILE"  << OUTPUTFILE  << std::endl;
-}
-
-template <typename T>
-inline std::string
-MIPSLV_GUROBI<T>::Options::pwl
-() const
-{
-  std::ostringstream oline;
-  oline << "FuncPieces=-2, FuncPieceError=" << PWLRELGAP;
-  return oline.str();
 }
 
 } // end namespace mc
