@@ -112,6 +112,7 @@ Other options can be modified to tailor the relaxations, tune the MIP solver, se
 
 #include "base_nlp.hpp"
 #include "mipslv_gurobi.hpp"
+#include "gamswriter.hpp"
 
 //#undef MC__MINLPBND_DEBUG
 //#define MC__MINLPBND_DEBUG_LIFT
@@ -578,7 +579,8 @@ public:
   //! @brief Setup and solve polyhedral relaxation of optimization model in the variable subdomain <a>X</a>, for the incumbent value <a>Finc</a> at point <a>Xinc</a>, and applying <a>nref</a> breakpoint refinements
   int relax
     ( T const* X=nullptr, double const* Finc=nullptr, double const* Xinc=nullptr,
-      unsigned const nref=0, bool const resetbnd=true, bool const reinit=true );
+      unsigned const nref=0, bool const resetbnd=true, bool const reinit=true,
+      std::string const gmsfile="" );
 
   //! @brief Setup and solve bound reduction problems using polyhedral relaxations of optimization model, starting with variable subdomain <a>X</a>, for the incumbent value <a>Finc</a>, and using the options specified in <a>MINLPBND::Options::OBBTMAX</a> and <a>MINLPBND::Options::OBBTTHRES</a> -- returns updated variable bounds <a>X</a>, and number of iterative refinements <a>nred</a>
   int reduce
@@ -1396,7 +1398,7 @@ template <typename T, typename MIP>
 inline int
 MINLPBND<T,MIP>::relax
 ( T const* X, double const* Finc, double const* Xinc, const unsigned nref,
-  const bool resetbnd, bool const reinit )
+  const bool resetbnd, bool const reinit, std::string const gmsfile )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
   _tstart = stats.start();
@@ -1412,6 +1414,17 @@ MINLPBND<T,MIP>::relax
 #ifdef MC__MINLPBND_DEBUG
   std::cout << _POLenv;
 #endif
+
+  // Write relaxed model to GAMS file
+  if( !gmsfile.empty() ){
+    GAMSWRITER<T> GMS;
+    GMS.set_cuts( &_POLenv, true );
+    for( unsigned i=0; i<_nX0; i++ )
+      GMS.set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr );
+    GMS.set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
+    GMS.write( gmsfile );
+    return MIP::OTHER;
+  }
 
   // Set-up variable initial guess and branch priority
   for( unsigned i=0; i<_nX0; i++ )

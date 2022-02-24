@@ -348,7 +348,7 @@ inline void
 MIPSLV_GUROBI<T>::solve
 ()
 {
-  //_GRBexcpt = false;
+  _GRBexcpt = false;
 
   try{
     _set_options();
@@ -360,10 +360,9 @@ MIPSLV_GUROBI<T>::solve
   }
 
   catch( GRBException& e ){
-    //if( options.DISPLEVEL )
-      std::cout << "GRBException - Error code: " << e.getErrorCode() << std::endl
-                << e.getMessage() << std::endl;
-    //_GRBexcpt = true;
+    std::cout << "GRBException - Error code: " << e.getErrorCode() << std::endl
+              << e.getMessage() << std::endl;
+    _GRBexcpt = true;
     throw;
   }
 
@@ -745,67 +744,81 @@ MIPSLV_GUROBI<T>::_add_cut
         if( _cutvar.size() < 2 || _cutvar.size() > 3 )
           throw std::runtime_error("MIPSLV_GUROBI - Error: Incorrect number of variables in nonlinear cut");
         switch( pCut->op()->type ){
-          case FFOp::IPOW:
+          case FFOp::IPOW:{
+            unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
+            std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
+            break;}
+
           case FFOp::DPOW:{
             double const& dExp = pCut->op()->pops[1]->num().val();
             if( dExp < 0 ) throw std::runtime_error("MIPSLV_GUROBI - Error: Nonlinear cut not yet implemented");
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], dExp, "", options.pwl() );
             break;}
-          //case FFOp::DPOW:{
-            //unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
-            //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            //_GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
-            //break;}
+
           case FFOp::CHEB:{
             unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
             std::vector<double>&& coef = chebcoef( ncoef-1 );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
+
           case FFOp::SQR:{
-            _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 2, "", options.pwl() );
-            //unsigned const ncoef = 3;
-            //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            //_GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
+            //_GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 2, "", options.pwl() );
+            unsigned const ncoef = 3;
+            std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
+
           case FFOp::SQRT:{
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 0.5, "", options.pwl() );
             //const unsigned ncoef = 3;
             //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
             //_GRBmodel->addGenConstrPoly( _cutvar[0], _cutvar[1], ncoef, coef.data(), "", options.pwl() );
             break;}
+
           case FFOp::EXP:
             _GRBmodel->addGenConstrExp( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
+
           case FFOp::LOG:
             _GRBmodel->addGenConstrLog( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
+
           case FFOp::COS:
             _GRBmodel->addGenConstrCos( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
+
           case FFOp::SIN:
             _GRBmodel->addGenConstrSin( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
+
           case FFOp::TAN:
             _GRBmodel->addGenConstrTan( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
+
           case FFOp::ACOS:
             _GRBmodel->addGenConstrCos( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
+
           case FFOp::ASIN:
             _GRBmodel->addGenConstrSin( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
+
           case FFOp::ATAN:
             _GRBmodel->addGenConstrTan( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
+
           case FFOp::FABS:
             _GRBmodel->addGenConstrAbs( _cutvar[0], _cutvar[1] );
             break;
+
           case FFOp::MINF:
             if( pCut->nvar() > 2 )
               _GRBmodel->addGenConstrMin( _cutvar[0], _cutvar.data()+1, pCut->nvar()-1 );
             else
               _GRBmodel->addGenConstrMin( _cutvar[0], _cutvar.data()+1, pCut->nvar()-1, pCut->rhs() );
             break;
+
           case FFOp::MAXF:
             if( pCut->nvar() > 2 )
               _GRBmodel->addGenConstrMax( _cutvar[0], _cutvar.data()+1, pCut->nvar()-1 );

@@ -90,6 +90,7 @@ The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a
 #ifndef MC__MINLGO_HPP
 #define MC__MINLGO_HPP
 
+#include <filesystem>
 #include <boost/program_options.hpp> 
 namespace opt = boost::program_options; 
 
@@ -898,8 +899,10 @@ MINLGO<T,NLP,MIP>::_solve_relax
   
   // Solve master MIP problem - do NOT reset bounds, otherwise reinitializing lifted variable bounds
   auto tMIP = stats.start();
+  std::string extfile = std::filesystem::path(_MINLPBND.options.MIPSLV.OUTPUTFILE).extension();
+  std::string gmsfile = extfile==".gms"? _MINLPBND.options.MIPSLV.OUTPUTFILE: "";
   int flag = _MINLPBND.relax( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
-                              _incumbent.x.data(), 0, false, _iter>1? false: true );
+                              _incumbent.x.data(), 0, false, _iter>1? false: true, gmsfile );
   stats.walltime_slvrel += stats.walltime( tMIP );
 
   return flag;

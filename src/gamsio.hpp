@@ -758,6 +758,12 @@ GAMSIO::_parse
             res = log( stack.back() ) * ( 1e0 / std::log(2e0) ); stack.pop_back();
             def = true;
             break;
+            
+          case fnentropy:
+            debugout << "entropy" << std::endl;
+            res = -xlog( stack.back() ); stack.pop_back();
+            def = true;
+            break;
 
           case fnsqrt:
             debugout << "sqrt" << std::endl;
@@ -831,6 +837,16 @@ GAMSIO::_parse
             def = true;
             break;
 
+          case fnarctan2:
+          {
+            debugout << "atan2" << std::endl;
+            FFVar term1 = stack.back(); stack.pop_back();
+            FFVar term2 = stack.back(); stack.pop_back();
+            res = atan( term2 / term1 );
+            def = true;
+            break;
+          }
+          
           case fnpower:  // x ^ y
           case fnrpower: // x ^ y
           case fncvpower: // constant ^ x
@@ -905,7 +921,7 @@ GAMSIO::_parse
 //               case fnunfmi /* uniform random number */:
 //               case fnncpf /* fischer: sqrt(x1^2+x2^2+2*x3) */:
 //               case fnncpcm /* chen-mangasarian: x1-x3*ln(1+exp((x1-x2)/x3))*/:
-//               case fnentropy /* x*ln(x) */: case fnsigmoid /* 1/(1+exp(-x)) */:
+//               case fnentropy /* -x*ln(x) */: case fnsigmoid /* 1/(1+exp(-x)) */:
 //               case fnboolnot: case fnbooland:
 //               case fnboolor: case fnboolxor: case fnboolimp:
 //               case fnbooleqv: case fnrelopeq: case fnrelopgt:
