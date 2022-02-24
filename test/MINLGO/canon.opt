@@ -99,7 +99,7 @@ MIPPWLRELGAP     = 1e-3
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
-MIPNUMERIC       = 3
+MIPNUMERIC       = 0
 # Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling
 MIPSCALE         = -1
 # Display level of MIP solver during main iteration - 0: no display; >0: display
@@ -122,13 +122,13 @@ MONMIG           = 1e-10
 # Monomial basis in sparse quadratic form - 0: power; 1: Chebyshev
 MONBASIS         = 0
 # Monomial processing order in sparse quadratic form - 0: increasing order; 1: decreasing order
-MONORDER         = 0
+MONORDER         = 1
 # Monomial scaling in sparse quadratic form
 MONSCALE         = 0
 # Add reduced RLT cuts
 RRLTCUTS         = 0
 # Add redundant cuts within quadratisation
-REDQUADCUTS      = 1
+REDQUADCUTS      = 0
 # Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
 PSDQUADCUTS      = 1
 # Add DC cuts within quadratisation
@@ -149,7 +149,7 @@ SANDWICHMAX      = 5
 [MINLPSLV]
 
 # Maximal number of outer-approximation iterations by local MINLP solver
-MAXITER          = 10
+MAXITER          = 20
 # Maximum rounds of constraint propagation during presolve of local MINLP solver
 CPMAX            = 10
 # Threshold for constraint propagation repeats during presolve of local MINLP solver - minimum relative reduction in any variable

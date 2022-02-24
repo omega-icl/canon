@@ -1423,6 +1423,8 @@ MINLPBND<T,MIP>::relax
       GMS.set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr );
     GMS.set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
     GMS.write( gmsfile );
+    if( options. MIPSLV.DISPLEVEL > 0 )
+      std::cout << std::endl << "# WRITING MIP MODEL TO FILE " << gmsfile << std::endl;
     return MIP::OTHER;
   }
 

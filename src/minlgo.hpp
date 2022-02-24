@@ -1103,7 +1103,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.CMODPROP               = MINLPBND.CMODPROP               = 15;
   MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR      = 1e-10;
   MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::MONOM;
-  MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER            = SQuad::Options::INC;
+  MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER            = SQuad::Options::DEC;
   MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
   MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS               = 0;
   MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC            = 0;

@@ -139,7 +139,7 @@ int main
       return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
     }
   }
-      
+
   ////////////////////////////////////////////////////////////
   // READ AND OPTIMIZE GAMS MODEL
   if( !MINLP.read( GAMSFILE, map_main.count( "gams-verbose" ) ) ){
@@ -147,6 +147,23 @@ int main
     return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
   }
   
+  ////////////////////////////////////////////////////////////
+  std::cout << "# USING INTERVAL LIBRARY: "; 
+#ifdef MC__USE_PROFIL
+  std::cout << "PROFIL/BIAS " << std::endl << std::endl;
+#else
+ #ifdef MC__USE_FILIB
+  std::cout << "FILIB++" << std::endl << std::endl;
+ #else
+  #ifdef MC__USE_BOOST
+  std::cout << "BOOST" << std::endl << std::endl;
+  #else
+  std::cout << "MC++ (NON-VERIFIED)" << std::endl << std::endl;
+  #endif
+ #endif
+#endif
+
+  ////////////////////////////////////////////////////////////
   MINLP.setup();
   std::ostream& os = logfile.is_open()? logfile: std::cout;
   int flag = MINLP.presolve( nullptr, nullptr, os ); 
@@ -171,7 +188,8 @@ int main
     default:
       break;
   }
-    
+
+  ////////////////////////////////////////////////////////////
   flag = MINLP.optimize( os ); 
   if( MINLP.options.DISPLEVEL >= 1 )
     MINLP.stats.display();
