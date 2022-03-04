@@ -45,6 +45,8 @@ PREOBBTBKOFF     = 1e-7
 PREOBBTMIG       = 1e-6
 # Presolve level of MIP solver during presolve - -1: automatic; 0: none; 1: presolve; 2: aggressive
 PREMIPPRESOLVE   = -1
+# Use of warm start information for LP optimization during presolve - 0: none; 1: unpresolved; 2: presolved
+PREMIPWARMSTART  = 2
 # Convergence relative tolerance of MIP solver during presolve
 PREMIPRELGAP     = 1e-3
 # Convergence absolute tolerance of MIP solver during presolve

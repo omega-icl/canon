@@ -1113,6 +1113,8 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.NCOADIFF               = MINLPBND.NCOADIFF               = MINLPBND.ASA;
   MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 1;
   MINLPPRE.MIPSLV.PRESOLVE        = MINLPBND.MIPSLV.PRESOLVE        = -1;
+  MINLPBND.MIPSLV.LPWARMSTART                                       = 1;
+  MINLPPRE.MIPSLV.LPWARMSTART                                       = 2;
   MINLPPRE.MIPSLV.MIPRELGAP       = MINLPBND.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.MIPABSGAP       = MINLPBND.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-3;
@@ -1135,6 +1137,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPSLV.NLPSLV.DISPLEVEL       = 0;
   MINLPSLV.NLPSLV.MAXTHREAD       = 0;
   MINLPSLV.MIPSLV.PRESOLVE        = -1;
+  MINLPSLV.MIPSLV.LPWARMSTART     = 1;
   MINLPSLV.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPSLV.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPSLV.MIPSLV.HEURISTICS      = 5e-2;
@@ -1168,6 +1171,7 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ( "MINLPBND.PRERELAXMONOM",    opt::value<int>(&MINLPPRE.POLIMG.RELAX_MONOM),        "linearize monomial terms during presolve" )
     ( "MINLPBND.PRERELAXNLIN",     opt::value<bool>(&MINLPPRE.POLIMG.RELAX_NLIN),        "linearize nonlinear terms during presolve" )
     ( "MINLPBND.PREMIPPRESOLVE",   opt::value<int>(&MINLPPRE.MIPSLV.PRESOLVE),           "presolve level in MIP solver during presolve" )
+    ( "MINLPBND.PREMIPWARMSTART",  opt::value<int>(&MINLPPRE.MIPSLV.LPWARMSTART),        "use of warm start information for LP optimization during presolve" )
     ( "MINLPBND.PREMIPRELGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPABSGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPHEURISTICS", opt::value<double>(&MINLPPRE.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics during presolve" )

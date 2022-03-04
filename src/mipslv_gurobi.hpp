@@ -87,10 +87,11 @@ public:
   {
     //! @brief Constructor
     Options():
-      ALGO( -1 ), PRESOLVE( -1 ), CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
+      ALGO( -1 ), PRESOLVE( -1 ), LPWARMSTART( 1 ), 
+      CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
       FEASTOL( 1e-7 ), OPTIMTOL( 1e-7 ), MIPRELGAP( 1e-5 ), MIPABSGAP( 1e-5 ),
       NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), HEURISTICS( 0.05 ),
-      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
+       PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
       PWLRELGAP( 1e-3 ), TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
       LOGFILE(), OUTPUTFILE()
       {}
@@ -98,6 +99,7 @@ public:
     Options& operator= ( Options const& options ){
         ALGO         = options.ALGO;
         PRESOLVE     = options.PRESOLVE;
+        LPWARMSTART  = options.LPWARMSTART;        
         CONTRELAX    = options.CONTRELAX;
         DUALRED      = options.DUALRED;
         NONCONVEX    = options.NONCONVEX;
@@ -122,6 +124,8 @@ public:
     int ALGO;
     //! @brief Controls the presolve level. A value of -1 corresponds to an automatic setting. Other options are off (0), conservative (1), or aggressive (2). More aggressive application of presolve takes more time, but can sometimes lead to a significantly tighter model.
     int PRESOLVE;
+    //! @brief Controls whether and how Gurobi uses warm start information for an LP optimization. A value of 0 ignores any start information and solves the model from scratch. Setting it to 1 (the default) uses the provided warm start information to solve the original, unpresolved problem, regardless of whether presolve is enabled. Setting it to 2 uses the start information to solve the presolved problem, assuming that presolve is enabled.
+    int LPWARMSTART;
     //! @brief Determines whether to relax binary/integer variables as continuous variables during solve.
     bool CONTRELAX;
     //! @brief Determines whether dual reductions are performed in presolve. The default value of 1 enables these redutions. You can set the parameter to 0 to disable these reductions if you received an optimization status of INF_OR_UNBD and would like a more definitive conclusion. 
@@ -397,6 +401,7 @@ MIPSLV_GUROBI<T>::_set_options
   _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
   _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
   _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
+  _GRBmodel->getEnv().set( GRB_IntParam_LPWarmStart,       options.LPWARMSTART );
   _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS1BigM,    options.PRESOS1BIGM );
   _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS2BigM,    options.PRESOS2BIGM );
   _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );
