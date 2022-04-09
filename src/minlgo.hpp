@@ -488,14 +488,6 @@ MINLGO<T,NLP,MIP>::setup
     case MIN: _objscal =  1e0; break;
     case MAX: _objscal = -1e0; break;
   }
-  
-#ifdef MC__MINLGO_SETUP_DEBUG
-  std::cout << "MINLPSLV set-up" << std::endl;
-#endif
-  _MINLPSLV.options = options.MINLPSLV;
-  _MINLPSLV.set( *this );
-  _MINLPSLV.setup();
-  _incumbent.reset();
 
 #ifdef MC__MINLGO_SETUP_DEBUG
   std::cout << "MINLPBND set-up" << std::endl;
@@ -505,6 +497,14 @@ MINLGO<T,NLP,MIP>::setup
   _MINLPBND.setup();
   _Xbnd.clear();
   _Xbndi.clear();
+  
+#ifdef MC__MINLGO_SETUP_DEBUG
+  std::cout << "MINLPSLV set-up" << std::endl;
+#endif
+  _MINLPSLV.options = options.MINLPSLV;
+  _MINLPSLV.set( *this );
+  _MINLPSLV.setup();
+  _incumbent.reset();
 
   _issetup = true;
 

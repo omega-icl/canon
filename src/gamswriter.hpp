@@ -49,28 +49,28 @@ protected:
   std::string _VarObj;
 
   //! @brief Continuous variable declaration
-  std::ostringstream _CVarDec;
+  std::stringstream _CVarDec;
 
   //! @brief Binary variable declaration
-  std::ostringstream _BVarDec;
+  std::stringstream _BVarDec;
 
   //! @brief Integer variable declaration
-  std::ostringstream _IVarDec;
+  std::stringstream _IVarDec;
 
   //! @brief Variable bounds
-  std::ostringstream _VarBnd;
+  std::stringstream _VarBnd;
 
   //! @brief Variable Fixings
-  std::ostringstream _VarFix;
+  std::stringstream _VarFix;
 
   //! @brief Variable levels
-  std::ostringstream _VarIni;
+  std::stringstream _VarIni;
 
   //! @brief Equation declaration
-  std::ostringstream _EqnDec;
+  std::stringstream _EqnDec;
 
   //! @brief Equation definition
-  std::ostringstream _EqnDef;
+  std::stringstream _EqnDef;
 
   //! @brief Equation counter
   unsigned long _EqnCnt;
@@ -126,6 +126,10 @@ protected:
   //! @brief Append constraint to MIP model
   std::string _lhs_cut
     ( PolCut<T> const* pCut );
+    
+  //! @brief Write long line with breaks 
+  std::string _write_line
+    ( std::stringstream& line, unsigned const maxlen=10 );
 };
 
 template <typename T>
@@ -139,7 +143,7 @@ GAMSWRITER<T>::reset
   _BVarDec.clear(); _BVarDec.str("");
   _IVarDec.clear(); _IVarDec.str("");
   _EqnDec.clear();  _EqnDec.str("");
-  _EqnDef.clear();  _EqnDef.str("");
+  _EqnDef.clear();  _EqnDef.str(""); _EqnDef << std::setprecision(16);
   _VarBnd.clear();  _VarBnd.str(""); _VarBnd << std::setprecision(16);
   _VarFix.clear();  _VarFix.str(""); _VarFix << std::setprecision(16);
   _VarIni.clear();  _VarIni.str(""); _VarIni << std::setprecision(16);
@@ -159,26 +163,32 @@ GAMSWRITER<T>::write
     return false;
   }
 
-  // Write GAMS model to file
-  GAMSmodel << "VARIABLE " << _VarObj << ";" << std::endl;
-  if( _CVarDec.tellp() > 0 )
-    GAMSmodel << "VARIABLES " << _CVarDec.str() << ";" << std::endl << std::endl;
-  if( _BVarDec.tellp() > 0 )
-    GAMSmodel << "BINARY VARIABLES " << _BVarDec.str() << ";" << std::endl << std::endl;
-  if( _IVarDec.tellp() > 0 )
-    GAMSmodel << "INTEGER VARIABLES " << _IVarDec.str() << ";" << std::endl << std::endl;
-  GAMSmodel << "EQUATIONS " << _EqnDec.str() << ";" << std::endl << std::endl;
-  GAMSmodel << _EqnDef.str() << std::endl << std::endl;
-  GAMSmodel << _VarBnd.str() << std::endl << std::endl;
-  GAMSmodel << _VarIni.str() << std::endl << std::endl;
-  GAMSmodel << _VarFix.str() << std::endl << std::endl;
-  GAMSmodel << "MODEL canon / ALL /;" << std::endl;
-  GAMSmodel << "SOLVE canon USING ";
+  // Determine GAMS model type
+  std::string type;
   switch( _type ){
-    case LIN  : GAMSmodel << (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MIP"  : "LP") ; break;
-    case QUAD : GAMSmodel << (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MIQCP": "QCP"); break;
-    case NLIN : GAMSmodel << (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MINLP": "NLP"); break;
+    case LIN  : type = (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MIP"  : "LP") ; break;
+    case QUAD : type = (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MIQCP": "QCP"); break;
+    case NLIN : type = (_BVarDec.tellp()>0||_IVarDec.tellp()>0? "MINLP": "NLP"); break;
   };
+
+  // Write GAMS model to file
+  GAMSmodel << "VARIABLE " << _VarObj << ";" << std::endl << std::endl;
+  if( _CVarDec.tellp() > 0 )
+    GAMSmodel << "VARIABLES " << _write_line( _CVarDec ) << ";" << std::endl << std::endl;
+  if( _BVarDec.tellp() > 0 )
+    GAMSmodel << "BINARY VARIABLES " << _write_line( _BVarDec ) << ";" << std::endl << std::endl;
+  if( _IVarDec.tellp() > 0 )
+    GAMSmodel << "INTEGER VARIABLES " << _write_line( _IVarDec ) << ";" << std::endl << std::endl;
+  GAMSmodel << "EQUATIONS " << _write_line( _EqnDec ) << ";" << std::endl << std::endl;
+  GAMSmodel << _EqnDef.str() << std::endl;
+  if( _VarBnd.tellp() > 0 )
+    GAMSmodel << _VarBnd.str() << std::endl;
+  if( _VarIni.tellp() > 0 )
+    GAMSmodel << _VarIni.str() << std::endl;
+  if( _VarFix.tellp() > 0 )
+    GAMSmodel << _VarFix.str() << std::endl;
+  GAMSmodel << "MODEL canon / ALL /;" << std::endl;
+  GAMSmodel << "SOLVE canon USING " << type;
   switch( _DirObj ){
     case MIN  : GAMSmodel << " MINIMIZING "; break;
     case MAX  : GAMSmodel << " MAXIMIZING "; break;
@@ -188,6 +198,21 @@ GAMSWRITER<T>::write
   // Close GAMS file
   GAMSmodel.close();
   return true;
+}
+
+template <typename T>
+inline std::string
+GAMSWRITER<T>::_write_line
+( std::stringstream& line, unsigned const maxlen )
+{
+  std::stringstream linewithbreaks;
+  unsigned pos = 1;
+  for( std::string term; std::getline( line, term, ',' ); ++pos ){
+    if( pos > 1 )       linewithbreaks << ",";
+    if( !(pos%maxlen) ) linewithbreaks << std::endl << "  ";
+    linewithbreaks << term;
+  }
+  return linewithbreaks.str();
 }
 
 template <typename T>
@@ -258,9 +283,9 @@ GAMSWRITER<T>::_add_var
 template <typename T>
 inline std::string
 GAMSWRITER<T>::_lhs_cut
-( PolCut<T> const* pCut )//, std::ostringstream& oss )
+( PolCut<T> const* pCut )
 {
-  std::ostringstream lhs;
+  std::stringstream lhs;
 
   // Add linear terms to lhs
   for( unsigned k=0; k<pCut->nvar(); k++ ){

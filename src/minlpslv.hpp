@@ -133,8 +133,9 @@ public:
       CPMAX(10), CPTHRES(0.), 
       PENSOFT(1e3), MSLOC(8), TIMELIMIT(6e2), DISPLEVEL(1),
       NLPSLV(), POLIMG(), MIPSLV()
-      { NLPSLV.DISPLEVEL  =  MIPSLV.DISPLEVEL  = 0;
-        NLPSLV.TIMELIMIT  =  MIPSLV.TIMELIMIT  = TIMELIMIT; }
+      { NLPSLV.DISPLEVEL = MIPSLV.DISPLEVEL = 0;
+        NLPSLV.TIMELIMIT = MIPSLV.TIMELIMIT = TIMELIMIT;
+        NLPSLV.GRADMETH  = NLP::Options::BAD; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
         LINMETH       = options.LINMETH;
@@ -1149,6 +1150,10 @@ MINLPSLV<T,NLP,MIP>::_propagate_bounds
                         Xbnd, _IINF, options.CPMAX, options.CPTHRES );
     //flag = _dag->reval( _CPbnd, _Flin, _Fvar.data(), _Fbnd.data(), _nX, _Xvar.data(),
     //                    Xbnd, _IINF, options.CPMAX, options.CPTHRES );
+
+    // Round binary and integer variables accordingly
+    for( unsigned ix=0; ix<_nX; ++ix )
+      if( _Xtyp[ix] > 0 ) Xbnd[ix] = T( std::ceil( Op<T>::l(Xbnd[ix]) ), std::floor( Op<T>::u(Xbnd[ix]) ) );
   }
   catch(...){ std::cout << "Exception caught\n"; }
 #ifdef MC__MINLPSLV_DEBUG

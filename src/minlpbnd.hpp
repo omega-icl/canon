@@ -890,12 +890,14 @@ MINLPBND<T,MIP>::setup
   if( options.RRLTCUTS ) _search_reduction_constraints();
 
   if( options.DISPLEVEL )
-    os << "#              |  VARIABLES      FUNCTIONS" << std::endl << std::right
+    os << "#" << std::endl
+       << "#              |  VARIABLES      FUNCTIONS" << std::endl << std::right
        << "# -------------+---------------------------" << std::endl
        << "#  LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
        << "#  QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
        << "#  POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
-       << "#  GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl;
+       << "#  GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl
+       << "#" << std::endl;
 
   // setup [-1,1] scaled variables for Chebyshev model arithmetic
   // do not downsize to avoid adding more variables into DAG
@@ -905,6 +907,9 @@ MINLPBND<T,MIP>::setup
   }
 
   // setup for objective and constraints evaluation
+  if( options.DISPLEVEL )
+    os << "# GENERATING EXPRESSION TREES..." << std::endl;
+
   _Xobj.set( _dag );
   _Fops.clear();
   for( auto && Fj : _Fvar )
@@ -1391,6 +1396,11 @@ MINLPBND<T,MIP>::_propagate_bounds
   for( auto && bnd : _CPbnd )
     std::cout << "WK[" << i++ << "] = " << bnd << std::endl;
 #endif
+
+  // Round binary and integer variables accordingly
+  for( unsigned ix=0; ix<_nX; ++ix )
+    if( _Xtyp[ix] > 0 ) _Xbnd[ix] = T( std::ceil( Op<T>::l(_Xbnd[ix]) ), std::floor( Op<T>::u(_Xbnd[ix]) ) );
+
   return flag;
 }
 

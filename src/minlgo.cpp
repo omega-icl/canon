@@ -139,13 +139,6 @@ int main
       return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
     }
   }
-
-  ////////////////////////////////////////////////////////////
-  // READ AND OPTIMIZE GAMS MODEL
-  if( !MINLP.read( GAMSFILE, map_main.count( "gams-verbose" ) ) ){
-    std::cerr << "# Exit: Error reading GAMS file" << std::endl;
-    return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
-  }
   
   ////////////////////////////////////////////////////////////
   std::cout << "# USING INTERVAL LIBRARY: "; 
@@ -164,8 +157,19 @@ int main
 #endif
 
   ////////////////////////////////////////////////////////////
+  // READ GAMS MODEL
+  std::cout << "# READING GAMS MODEL..." << std::endl;
+  if( !MINLP.read( GAMSFILE, map_main.count( "gams-verbose" ) ) ){
+    std::cerr << "# Exit: Error reading GAMS file" << std::endl;
+    return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
+  }
+
+  ////////////////////////////////////////////////////////////
+  // SET-UP AND PRESOLVE GAMS MODEL
+  std::cout << "# SETTING UP MODEL IN CANON..." << std::endl;
   MINLP.setup();
   std::ostream& os = logfile.is_open()? logfile: std::cout;
+  std::cout << "# PRESOLVING MODEL IN CANON..." << std::endl;
   int flag = MINLP.presolve( nullptr, nullptr, os ); 
   switch( flag ){
 //    case mc::MINLGO<I,NLP,MIP>::STATUS::INFEASIBLE:
@@ -190,6 +194,7 @@ int main
   }
 
   ////////////////////////////////////////////////////////////
+  // OPTIMIZE GAMS MODEL
   flag = MINLP.optimize( os ); 
   if( MINLP.options.DISPLEVEL >= 1 )
     MINLP.stats.display();
