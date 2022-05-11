@@ -6,7 +6,12 @@ INC_CANON = -I$(PATH_CANON)/include
 
 include $(PATH_CANON)/src/makeoptions.mk
 
+LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
+
 #####
+
+doxydoc : doxydoc.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 test% : test%.o
 	$(CPP) $< $(LIB_CANON) $(LIB_DEP) -o $@
@@ -17,5 +22,5 @@ test% : test%.o
 #####
 
 clean:
-	rm -f test? test?b *.o *.out *.dat *.eps *.dot *.svg *~
+	rm -f doxydoc test? test?b *.o *.out *.dat *.eps *.dot *.svg *~
 

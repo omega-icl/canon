@@ -20,7 +20,7 @@ where \f$f, g_1, \ldots, g_m\f$ are factorable, potentially nonlinear, real-valu
 
 \section sec_MINLGO_setup How do I setup my optimization model?
 
-Consider the following NLP:
+Consider the following NLP model:
 \f{align*}
   \max_{\bf p}\ & p_1\,p_4\,(p_1+p_2+p_3)+p_3 \\
   \text{s.t.} \ & p_1\,p_2\,p_3\,p_4 \geq 25 \\
@@ -28,13 +28,13 @@ Consider the following NLP:
   & 1 \leq p_1,p_2,p_3,p_4 \leq 5\,.
 \f}
 
-We start by instantiating an mc::MINLGO class object, which is defined in the header file <tt>minlgo.hpp</tt>:
+Start by instantiating an mc::MINLGO class object, which is defined in the header file <tt>minlgo.hpp</tt>:
 
 \code
   mc::MINLGO MINLP;
 \endcode
 
-Next, we set the variables and objective/constraint functions by creating a DAG of the problem: 
+Next, set the variables and objective/constraint functions after creating a DAG of the model: 
 
 \code
   mc::FFGraph DAG;
@@ -48,44 +48,57 @@ Next, we set the variables and objective/constraint functions by creating a DAG 
   MINLP.add_ctr( mc::BASE_NLP::EQ,  sqr(P[0])+sqr(P[1])+sqr(P[2])+sqr(P[3])-40 );
 \endcode
 
-The MINLP model is solved using default options as:
+Finally, set up the NLP model, presolve the model, then solve it using:
 
 \code
+  MINLP.options.MINLPBND.MIPSLV.DISPLEVEL   = 0;
   MINLP.setup();
   MINLP.presolve();
   MINLP.optimize();
+  MINLP.stats.display();
 \endcode
 
-The return value of mc::MINLGO is per the enumeration mc::MINLGO::STATUS. The following result is displayed (with the option mc::MINLGO::Options::DISPLEVEL defaulting to 1):
+The options can be modified through the public member mc::MINLPBND::options. The return value of mc::MINLGO is per the enumeration mc::MINLGO::STATUS. A computational breakdown may be obtained from the internal class <a>mc::MINLGO::Stats</a> or displayed using the method <a>mc::MINLGO::Stats::display</a>. The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a> using the method <a>mc::MINLGO::incumbent</a>. In this instance, the following result is displayed:
 
 \verbatim
-#  CONTINUOUS / DISCRETE VARIABLES:  4 / 0
-#  LINEAR / NONLINEAR FUNCTIONS:     0 / 3
+#              |  VARIABLES      FUNCTIONS
+# -------------+---------------------------
+#  LINEAR      |         0              0
+#  QUADRATIC   |         0              1
+#  POLYNOMIAL  |         4              2
+#  GENERAL     |         0              0
+#
+# GENERATING EXPRESSION TREES...
 
 #  ITERATION     INCUMBENT    BEST BOUND    TIME
         0 r*  1.701402e+01  1.701402e+01      0s
 
-#  TERMINATION AFTER 0 ITERATIONS: 0.008299 SEC
+#  TERMINATION AFTER 0 ITERATIONS: 0.008918 SEC
 #  INCUMBENT VALUE:  1.701402e+01
 #  INCUMBENT POINT:  1.000000e+00  4.743001e+00  3.821149e+00  1.379408e+00
 
 #  ITERATION      INCUMBENT    BEST BOUND    TIME
-        0  P*  1.701402e+01  1.633734e+01      0s
-        1   *  1.701402e+01  1.700345e+01      0s
+        0  P*  1.701402e+01 -1.000000e+30      0s
+        1   *  1.701402e+01  1.701401e+01      0s
 
-#  TERMINATION AFTER 0 REFINEMENTS: 0.059628 SEC
+#  TERMINATION AFTER 0 REFINEMENTS: 0.044984 SEC
 #  INCUMBENT VALUE:  1.701402e+01
-#  INCUMBENT POINT:  1.000000e+00  4.743000e+00  3.821150e+00  1.379408e+00
-#  OPTIMALITY GAP:   1.06e-02 (ABS)
-                     6.21e-04 (REL)
-\endverbatim
+#  INCUMBENT POINT:  1.000000e+00  4.743001e+00  3.821149e+00  1.379408e+00
+#  OPTIMALITY GAP:   2.60e-06 (ABS)
+                     1.53e-07 (REL)
 
-The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a> using the method <a>mc::MINLGO::incumbent</a>. A computational breakdown may be obtained from the internal class <a>mc::MINLGO::Stats</a>. And the (many) options of the algorithm can be modified using the internal class mc::MINLGO::Options.
+
+# WALL-CLOCK TIMES
+# SETUP:              0.00 SEC
+# PREPROCESSOR:       0.01 SEC
+# LOCAL SOLVER:       0.01 SEC
+# MIP SOLVER:         0.02 SEC
+# TOTAL:              0.04 SEC
+\endverbatim
 */
 
 //TODO: 
 //- Detect the class of problems to determine the need for refinements/iterations
-//- Debug quadratisation in Chebyshev basis during preprocessing
 
 #ifndef MC__MINLGO_HPP
 #define MC__MINLGO_HPP

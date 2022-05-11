@@ -29,13 +29,13 @@ Consider the following MINLP model:
   & 1 \leq y \leq 20,\ y\in\mathbb{Z}
 \f}
 
-We start by instantiating an mc::MINLPBND class object, which is defined in the header file <tt>minlpbnd.hpp</tt>:
+Start by instantiating an mc::MINLPBND class object, which is defined in the header file <tt>minlpbnd.hpp</tt>:
 
 \code
   mc::MINLPBND MINLP;
 \endcode
 
-Next, we set the variables and objective/constraint functions by creating a DAG of the problem: 
+Next, set the variables and objective/constraint functions after creating a DAG of the problem: 
 
 \code
   mc::FFGraph DAG;
@@ -51,7 +51,7 @@ Next, we set the variables and objective/constraint functions by creating a DAG 
   MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
 \endcode
 
-The MINLP model is solved using:
+Finally, set up the MINLP model relaxation and solve it using:
 
 \code
   MINLP.setup();
@@ -325,6 +325,7 @@ public:
         SPARSEEXPR.LIFTIPOW    = false;
         SQUAD.BASIS            = SQuad::Options::MONOM;
         SQUAD.ORDER            = SQuad::Options::INC;
+        SQUAD.REDUC            = false;
         RLTRED.METHOD          = RLTRed::Options::ILP;
         RLTRED.LEVEL           = RLTRed::Options::PRIMSIM;
         RLTRED.TIMELIMIT       = TIMELIMIT; }
@@ -1419,6 +1420,7 @@ MINLPBND<T,MIP>::relax
   if( cpred < 0 ) return MIP::INFEASIBLE;
 
   // Reset polyhedral image, LP variables and cuts
+  _MIPSLV->options = options.MIPSLV;
   if( reinit ) init_polrelax(); // <<== COULD PASS Xinc HERE TOO??
   update_polrelax( 2, false, reinit? false: true );
 #ifdef MC__MINLPBND_DEBUG
@@ -1446,7 +1448,6 @@ MINLPBND<T,MIP>::relax
     // Set-up relaxed objective, options, and solve polyhedral relaxation
     auto tMIP = stats.start();
     _MIPSLV->set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
-    _MIPSLV->options = options.MIPSLV;
     _MIPSLV->options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
     _MIPSLV->solve();
     stats.walltime_slvmip += stats.walltime( tMIP );
@@ -1481,7 +1482,6 @@ MINLPBND<T,MIP>::_reduce
   // Set-up lower/upper bound objective, options, and solve polyhedral relaxation
   auto tMIP = stats.start();
   _MIPSLV->set_objective( _POLXvar[ix], (uplo? BASE_OPT::MAX: BASE_OPT::MIN) );
-  _MIPSLV->options = options.MIPSLV;
   _MIPSLV->options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
   _MIPSLV->solve();
   stats.walltime_slvmip += stats.walltime( tMIP );
@@ -1609,6 +1609,7 @@ MINLPBND<T,MIP>::reduce
   }
 
   // Reset polyhedral image, LP variables and cuts
+  _MIPSLV->options = options.MIPSLV;
   if( reinit ) init_polrelax();
 #ifdef MC__MINLPBND_DEBUG
   std::cout << _POLenv;

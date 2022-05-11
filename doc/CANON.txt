@@ -3,22 +3,23 @@
 @mainpage CANON (version 1.0): Complete search Algorithms for Nonlinear OptimizatioN
 
 @author Benoit C. Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt> and Tanuj Karia <tt>(tanuj.karia17@imperial.ac.uk)</tt>
-@date 2020
+@date 2022
 
-<TABLE BORDER=0>
+<CENTER><TABLE border="1">
 <TR>
-<TD>\image html CANON.png width=20%</TD>
-<TD>CANON is a C++ library for global optimization of nonlinear models using complete search algorithms.</TD>
+<TD><CENTER><TABLE BORDER=0>
+  <TR>
+  <TD>CANON is a C++ library for global optimization of nonlinear models using complete search algorithms</TD>
+  </TR>
+  </TABLE></CENTER></TD>
 </TR>
-</TABLE>
+</TABLE></CENTER> 
 
-The main workflow in <a>CANON</a> for global optimization of mixed-integer nonlinear programs (MINLP) entails:
-- reading the MINLP model, for instance in <a>GAMS</a> format
-- preprocessing the MINLP model by applying local search and bound-tightening techniques
-- reformulating the MINLP model as an equivalent mixed-integer quadratically constrained program (MIQCP), possibly with redundant constraints
-- solving the MIQCP, possibly within a refinement of piecewise relaxations for nonlinear intrinsic functions
+The complete-search algorithms current implemented in <a>CANON</a> are:
+- Reformulation of the MINLP model as an equivalent mixed-integer quadratically-constrained program (MIQCP), followed by MIQCP global optimization using the solver <A href="http://www.gurobi.com/">GUROBI</A>. Various preprocessing strategies can be used, including local search and bounds tightening, prior to the MIQCP reformulation. The exact reformulation of polynomial subexpressions into quadratic form relies on the introduction of auxiliary variables and constraints. A number of nonlinear terms cam also be handled by <A href="http://www.gurobi.com/">GUROBI</A> via their approximation as piecewise linear expressions; or, alternatively, they can be enclosed by polynomial models within <a>CANON</a>.
+- Piecewise linearization of the MINLP model by progressively adding break-points to a MIP relaxation, thereby creating a convergent sequence of relaxations. The MIP relaxations are solved using  <A href="http://www.gurobi.com/">GUROBI</A>. Various preprocessing strategies can be used, including local search and bounds tightening, prior to the MIP relaxation hierarchy.
 .
-The final solution step exploits the capability of the optimization solver <a>GUROBI</a> for globally optimizing nonconvex MIQCPs. The MIPOP preprocessing step relies on <a>MC++</a> to perform constraint propagation (FBBT) and to construct the polyhedral (LP) relaxations of the MIPOP for OBBT, which are solved using <a>GUROBI</a>. <a>CANON</a> also implements its own outer-approximation algorithm with feasibility pump for local MINLP search as part of preprocessing, using <a>GUROBI</a> to solve the master (MIP) subproblems and <a>SNOPT</a> to solve the primal (NLP) subproblems. \textsf{CANON} builds on the library \textsf{MC++} for the construction and manipulation of expression trees and their evaluation in various computer algebra, including the decomposition of multivariate polynomials into quadratic forms as well as the generation of redundant quadratic constraints.
+<a>CANON</a> can be used by compiling the libraries as an executable, by passing a GAMS model and an option file (optional). Alternatively, <a>CANON</a> may be called from a C++ program by defining the optimization problem using built-in expression trees (from the library <A href="https://projects.coin-or.org/MCpp">MC++</A>.
 
 
 \section sec_CANON_install What do I need to run CANON?
@@ -27,16 +28,16 @@ CANON is released as open source code under the <A href="http://www.eclipse.org/
 
 CANON depends on the following third-party libraries:
 - <A href="https://projects.coin-or.org/MCpp">MC++</A> (version 2.1) for construction, manipulation and bounding of factorable functions
-- <A href="https://web.stanford.edu/group/SOL/snopt.htm">SNOPT</A> or <A href="https://projects.coin-or.org/Ipopt">IPOPT</A> for local solution of NLP problems
-- <A href="http://www.gurobi.com/">Gurobi</A> for solution of LP/QP/MILP/MIQP/MIQCQP problems
-- <A href="https://www.boost.org/">Boost</A> for managing the commandline and option files as well as random sampling
+- <A href="https://web.stanford.edu/group/SOL/snopt.htm">SNOPT</A> (version 7.7) for local solution of NLP problems
+- <A href="http://www.gurobi.com/">GUROBI</A> (version 9.5) for solution of LP/QP/MILP/MIQP/MIQCQP problems
+- <A href="https://www.boost.org/">BOOST</A> for managing the commandline and option files as well as random sampling and interval arithmetic
 - <A href="hhttps://www.gams.com/">GAMS</A> for importing model files written in the GAMS language
 .
 
-On distribution, the main directory should contain the files <TT>AUTHORS</TT>, <TT>INSTALL</TT>, <TT>LICENSE</TT> and <TT>README</TT>, as well as 3 subdirectories:
-- <tt>src</tt> contains the source code of CANON, which consists of header files only; that is, there is no need to build or link a library.
-- <tt>doc</tt> contains the Doxygen documentation for CANON, which can be accessed by opening the file <tt>doc/html/index.html</tt> with your favorite browser.
-- <tt>test</tt> contains simple examples that should help you understand how to use the types of CANON.
+On distribution, the main directory should contain three subdirectories:
+- <tt>src</tt> contains the source code of CANON, which consists of header files only and needs linking to third-party libraries.
+- <tt>doc</tt> contains the Doxygen documentation for CANON, which needs to be compiled using the file <tt>CANON.dox</tt> and can then be accessed by opening the file <tt>doc/html/index.html</tt> with any browser.
+- <tt>test</tt> contains simple examples that should help you understand how to use different components of CANON, such as local search, relaxations, and global search.
 .
 
 <CENTER><TABLE border="1">

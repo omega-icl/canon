@@ -1,18 +1,6 @@
-// Copyright (C) 2020 Benoit Chachuat, Imperial College London.
+// Copyright (C) 2022 Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
-
-/*!
-\page page_GAMSIO GAMS File Reader for CANON
-\author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
-\version 1.0
-\date 2020
-\bug No known bugs.
-
-*/
-
-//TODO: 
-//- documentation
 
 #ifndef MC__GAMSIO_HPP
 #define MC__GAMSIO_HPP

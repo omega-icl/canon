@@ -10,9 +10,6 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-main : main.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
-	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@ $(LDFLAGS)
-
 doxydoc : doxydoc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 

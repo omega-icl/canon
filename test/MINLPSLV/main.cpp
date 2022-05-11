@@ -87,11 +87,11 @@ int main()
 //#endif
 
 #ifdef READ_GAMS
-//  MINLP.read( "doxydoc.gms" );
+  MINLP.read( "doxydoc.gms" );
 //  MINLP.read( "ex1221.gms" );
 //  MINLP.read( "ex1222.gms" );
 //  MINLP.read( "ex1252a.gms" );
-  MINLP.read( "transswitch0009r.gms" );
+//  MINLP.read( "transswitch0009r.gms" );
 
 #else
   mc::FFGraph DAG;

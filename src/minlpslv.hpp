@@ -1,4 +1,4 @@
-// Copyright (C) 2021- Benoit Chachuat, Imperial College London.
+// Copyright (C) 2021 Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
@@ -30,13 +30,13 @@ Consider the following MINLP model:
   & 1 \leq y \leq 20,\ y\in\mathbb{Z}
 \f}
 
-We start by instantiating an mc::MINLPSLV class object, which is defined in the header file <tt>minlpslv.hpp</tt>:
+Start by instantiating an mc::MINLPSLV class object, which is defined in the header file <tt>minlpslv.hpp</tt>:
 
 \code
   mc::MINLPSLV MINLP;
 \endcode
 
-Next, we set the variables and objective/constraint functions by creating a DAG of the problem: 
+Next, set the variables and objective/constraint functions after creating a DAG of the problem: 
 
 \code
   mc::FFGraph DAG;
@@ -52,20 +52,24 @@ Next, we set the variables and objective/constraint functions by creating a DAG 
   MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
 \endcode
 
-The MINLP model is solved using:
+Possibly set options using the class member NLPSLV_SNOPT::options:
 
 \code
-  MINLP.options.CVRTOL = MINLP.options.CVATOL = 1e-5;
+  MINLP.options.CVRTOL = 1e-5;
+  MINLP.options.CVATOL = 1e-5;
+  MINLP.options.DISPLEVEL = 1;
+\endcode
+
+Finally, set up the MINLP model and solve it using:
+
+\code
   MINLP.setup();
   MINLP.optimize();
 \endcode
 
-The return value of mc::MINLPSLV is per the enumeration mc::MINLPSLV::STATUS. The following result is displayed (with the option mc::MINLPSLV::Options::DISPLEVEL defaulting to 1):
+The following display is obtained:
 
 \verbatim
-#  CONTINUOUS / INTEGER VARIABLES:   1 / 1
-#  LINEAR / NONLINEAR FUNCTIONS:     2 / 2
-
 #  ITERATION     INCUMBENT    BEST BOUND    TIME
         0  r  1.000000e+20 -5.698551e+01      0s
         1  * -3.951361e+01 -5.698551e+01      0s
@@ -79,7 +83,7 @@ The return value of mc::MINLPSLV is per the enumeration mc::MINLPSLV::STATUS. Th
 #  INCUMBENT POINT:  7.663529e+00  1.100000e+01
 \endverbatim
 
-The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a> using the method <a>mc::MINLPSLV::incumbent</a>. A computational breakdown may be obtained from the internal class <a>mc::MINLPSLV::Stats</a>. And the options of the algorithm can be modified using the internal class mc::MINLPSLV::Options.
+The return value of mc::MINLPSLV::optimize is per the enumeration mc::MINLPSLV::STATUS. The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a> using the method <a>mc::MINLPSLV::incumbent</a>. A computational breakdown may be obtained from the internal class <a>mc::MINLPSLV::Stats</a>.
 */
 
 #ifndef MC__MINLPSLV_HPP

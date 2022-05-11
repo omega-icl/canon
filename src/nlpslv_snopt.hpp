@@ -27,46 +27,49 @@ Consider the following NLP:
   & 0 \leq p_2 \leq 4\,.
 \f}
 
-We start by defining an mc::NLPSLV_SNOPT class object as below:
+Start by instantiating an mc::NLPSLV_SNOPT class object, which is defined in the header file <tt>nlpslv_snopt.hpp</tt>:
 
 \code
-  #include "nlpslv_snopt.hpp"
-  
   mc::NLPSLV_SNOPT NLP;
 \endcode
 
-Next, we set the variables and objective/constraint functions by creating a DAG of the problem: 
+Next, set the variables and objective/constraint functions after creating a DAG of the problem: 
 
 \code
   mc::FFGraph DAG;
   const unsigned NP = 2; mc::FFVar P[NP];
   for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
-  NLP.set_dag( &DAG );                       // DAG
-  NLP.set_var( NP, P );                      // decision variables
-  NLP.set_obj( BASE_NLP::MAX, P[0]+P[1] );   // objective
-  NLP.add_ctr( BASE_NLP::LE, P[0]*P[1]-4. ); // constraints
+
+  NLP.set_dag( &DAG );                           // DAG
+  NLP.add_var( P[0], 0, 6 );                     // decision variables and bounds
+  NLP.add_var( P[1], 0, 4 );
+  NLP.set_obj( mc::BASE_NLP::MAX, P[0]+P[1] );   // objective function
+  NLP.add_ctr( mc::BASE_NLP::LE, P[0]*P[1]-4. ); // constraints
+\endcode
+
+Possibly set options using the class member NLPSLV_SNOPT::options:
+
+\code
+  NLP.options.DISPLEVEL = 0;
+  NLP.options.FEASTOL   = 1e-8;
+  NLP.options.OPTIMTOL  = 1e-8;
+\endcode
+
+Finally, set up the NLP problem and solve it from a specified initial point:
+
+\code
   NLP.setup();
-\endcode
-
-Given initial bounds \f$P\f$ and initial guesses \f$p_0\f$ on the decision variables, the NLP model is solved as:
-
-\code
-  #include "interval.hpp"
-
-  typedef mc::interval I;
-  I P[NP] = { I(0.,6.), I(0.,4.) };
   double p0[NP] = { 5., 1. };
-
-  auto status = NLP.solve( p0, P );
+  NLP.solve( p0 );
 \endcode
 
-The possible return values are listed on page 19 of the <A href="https://web.stanford.edu/group/SOL/guides/sndoc7.pdf">snOpt 7 Reference Manual</A>. Moreover, the optimization results can be retrieved as an instance of mc::SOLUTION_OPT using the method <a>solution</a> or simply displayed as follows:
+The optimization results can be retrieved or displayed as an instance of mc::SOLUTION_OPT using the method <a>NLPSLV_SNOPT::solution</a>:
 
 \code
-  std::cout << "NLP LOCAL SOLUTION:\n" << NLP->solution();
+  std::cout << NLP.solution();
 \endcode
 
-The following result is displayed here:
+producing the following display:
 
 \verbatim
   STATUS: 1
@@ -75,8 +78,6 @@ The following result is displayed here:
   F[0]:  LEVEL =  6.666667e+00  MARGINAL =  0.000000e+00
   F[1]:  LEVEL =  8.881784e-16  MARGINAL =  1.666667e-01
 \endverbatim
-
-Regarding options, the output level, maximum number of iterations, tolerance, maximum CPU time, etc can all be modified through the public member mc::NLPSLV_SNOPT::options. 
 */
 
 #ifndef MC__NLPSLV_SNOPT_HPP
@@ -647,9 +648,7 @@ private:
   SOLUTION_OPT        _solution;
 
 public:
-  /** @defgroup NLPSLV_SNOPT Local (Continuous) Optimization using SNOPT and MC++
-   *  @{
-   */
+
   //! @brief Constructor
   NLPSLV_SNOPT()
     : _nP(0), _nX(0), _nF(0), _iStart(COLD),
@@ -817,7 +816,6 @@ public:
       else if( _solution.stat < 80 ) return INTERRUPTED;
       else                           return ABORTED;
     }
-  /** @} */
 
 protected:
 

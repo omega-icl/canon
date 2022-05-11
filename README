@@ -6,5 +6,6 @@
 This directory contains the C++ implementation of the library CANON
 implementing complete search algorithms for nonlinear optimization models.
 
-For more information, see: doc/html/index.html
+For more information, compile the Doxygen documentation (file doc/CANON.dox)
+and check doc/html/index.html
 

@@ -54,9 +54,7 @@ protected:
   PolImg<T>* _POLenv;
 
 public:
-  /** @defgroup MIPSLV_GUROBI MIP optimization using GUROBI
-   *  @{
-   */
+
   //! @brief Constructor
   MIPSLV_GUROBI
     ()
@@ -91,8 +89,8 @@ public:
       CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
       FEASTOL( 1e-7 ), OPTIMTOL( 1e-7 ), MIPRELGAP( 1e-5 ), MIPABSGAP( 1e-5 ),
       NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), HEURISTICS( 0.05 ),
-       PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ),
-      PWLRELGAP( 1e-3 ), TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
+      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), PWLRELGAP( 1e-5 ), FUNCMAXVAL( 1e6 ),
+      TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
       LOGFILE(), OUTPUTFILE()
       {}
     //! @brief Assignment operator
@@ -113,6 +111,7 @@ public:
         PRESOS1BIGM  = options.PRESOS1BIGM;
         PRESOS2BIGM  = options.PRESOS2BIGM;
         PWLRELGAP    = options.PWLRELGAP;
+        FUNCMAXVAL   = options.FUNCMAXVAL;
         TIMELIMIT    = options.TIMELIMIT;
         THREADS      = options.THREADS;
         DISPLEVEL    = options.DISPLEVEL;
@@ -152,6 +151,8 @@ public:
     double PRESOS2BIGM;
     //! @brief Sets the maximum relative error in the piecewise-linear approximations of the nonlinear functions. Gurobi will choose pieces, typically of different sizes, to achieve that error bound. Note that the number of pieces required may be quite large when setting a tight error tolerance. The default value of 0.05 specifies a 5% maximal relative error gap.  
     double PWLRELGAP;
+    //! @brief Sets the maximum allowed value for x and y variables in function constraints. Very large values in piecewise-linear approximations can cause numerical errors. The default value is 1e+6. This parameter limits the bounds on the variables that participate in function constraints - any bound larger than this limit will be truncated.
+    double FUNCMAXVAL;
     //! @brief Limits the total time expended (in seconds). Optimization returns with a TIMELIMIT status if the limit is exceeded.
     double TIMELIMIT;
     //! @brief Limits the number of threads used by the MIP solver. The default value of 0 allows to use all available threads.
@@ -170,6 +171,10 @@ public:
     std::string pwl
       ()
       const;
+    //! @brief Piecewise-linear approximation range check
+    void check_pwl
+      ( GRBVar const& x, GRBVar const& y )
+      const; 
   };
   //! @brief MIP options
   Options options;
@@ -309,7 +314,6 @@ public:
   void terminate
     ()
     { if( _GRBmodel ) _GRBmodel->terminate(); }
-  /** @} */
 
 protected:
 
@@ -404,6 +408,7 @@ MIPSLV_GUROBI<T>::_set_options
   _GRBmodel->getEnv().set( GRB_IntParam_LPWarmStart,       options.LPWARMSTART );
   _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS1BigM,    options.PRESOS1BIGM );
   _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS2BigM,    options.PRESOS2BIGM );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_FuncMaxVal,     options.FUNCMAXVAL );
   _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );
   _GRBmodel->getEnv().set( GRB_IntParam_NonConvex,         options.NONCONVEX );
   _GRBmodel->getEnv().set( GRB_IntParam_Threads,           options.THREADS );
@@ -748,22 +753,26 @@ MIPSLV_GUROBI<T>::_add_cut
       case PolCut<T>::NLIN:
         if( _cutvar.size() < 2 || _cutvar.size() > 3 )
           throw std::runtime_error("MIPSLV_GUROBI - Error: Incorrect number of variables in nonlinear cut");
+
         switch( pCut->op()->type ){
           case FFOp::IPOW:{
             unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
             std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
           case FFOp::DPOW:{
             double const& dExp = pCut->op()->pops[1]->num().val();
             if( dExp < 0 ) throw std::runtime_error("MIPSLV_GUROBI - Error: Nonlinear cut not yet implemented");
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], dExp, "", options.pwl() );
             break;}
 
           case FFOp::CHEB:{
             unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
             std::vector<double>&& coef = chebcoef( ncoef-1 );
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
@@ -771,10 +780,12 @@ MIPSLV_GUROBI<T>::_add_cut
             //_GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 2, "", options.pwl() );
             unsigned const ncoef = 3;
             std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
           case FFOp::SQRT:{
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 0.5, "", options.pwl() );
             //const unsigned ncoef = 3;
             //std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
@@ -782,34 +793,42 @@ MIPSLV_GUROBI<T>::_add_cut
             break;}
 
           case FFOp::EXP:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrExp( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::LOG:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrLog( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::COS:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrCos( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::SIN:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrSin( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::TAN:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrTan( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::ACOS:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrCos( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
 
           case FFOp::ASIN:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrSin( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
 
           case FFOp::ATAN:
+            options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrTan( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
 
@@ -877,6 +896,16 @@ MIPSLV_GUROBI<T>::Options::pwl
   std::ostringstream oline;
   oline << "FuncPieces=-2, FuncPieceError=" << PWLRELGAP;
   return oline.str();
+}
+
+template <typename T>
+inline void
+MIPSLV_GUROBI<T>::Options::check_pwl
+( GRBVar const& x, GRBVar const& y ) const
+{
+  if( x.get(GRB_DoubleAttr_LB) < -FUNCMAXVAL || x.get(GRB_DoubleAttr_UB) > FUNCMAXVAL
+   || y.get(GRB_DoubleAttr_LB) < -FUNCMAXVAL || y.get(GRB_DoubleAttr_UB) > FUNCMAXVAL )
+    throw std::runtime_error("MIPSLV_GUROBI - Error: Parameter FuncMaxVal too small for piecewise-linear approximation of function constraints");
 }
 
 } // end namespace mc
