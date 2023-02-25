@@ -15,14 +15,30 @@ namespace mc
 //! mc::BASE_NLP is a C++ base class for definition of the variables,
 //! objective and constraints participating in nonlinear programs.
 ////////////////////////////////////////////////////////////////////////
+template < typename DAG >
 class BASE_NLP:
   public virtual BASE_OPT,
-  public virtual BASE_AE
+  public virtual BASE_AE< DAG >
 {
+protected:
+  using BASE_AE<DAG>::_dag;
+  using BASE_AE<DAG>::_var;
+  using BASE_AE<DAG>::_varlb;
+  using BASE_AE<DAG>::_varlm;
+  using BASE_AE<DAG>::_varub;
+  using BASE_AE<DAG>::_varum;
+  using BASE_AE<DAG>::_dep;
+  using BASE_AE<DAG>::_deplb;
+  using BASE_AE<DAG>::_deplm;
+  using BASE_AE<DAG>::_depub;
+  using BASE_AE<DAG>::_depum;
+  using BASE_AE<DAG>::_sys;
+  using BASE_AE<DAG>::_sysm;
+
 public:
   //! @brief Class constructor
   BASE_NLP()
-    : BASE_OPT(), BASE_AE()
+    : BASE_OPT(), BASE_AE<DAG>()
     {}
 
   //! @brief Class destructor
@@ -64,7 +80,8 @@ public:
   //! @brief Copy equations
   void set
     ( BASE_NLP const& nlp )
-    { BASE_AE::set(nlp); _ctr = nlp._ctr; _obj = nlp._obj; }
+    { BASE_AE<DAG>::set( nlp );
+      _ctr = nlp._ctr; _obj = nlp._obj; }
 
 protected:
   //! @brief constraints (types, constraint variables, constraint multipliers)
@@ -92,12 +109,13 @@ protected:
     ( unsigned const* tvar=nullptr, bool const BADIFF=true );
 
   //! @brief Private methods to block default compiler methods
-  BASE_NLP( BASE_NLP const& );
-  BASE_NLP& operator=( BASE_NLP const& );
+  BASE_NLP( BASE_NLP<DAG> const& );
+  BASE_NLP<DAG>& operator=( BASE_NLP<DAG> const& );
 };
 
+template < typename DAG >
 inline bool
-BASE_NLP::set_nco
+BASE_NLP<DAG>::set_nco
 ( const unsigned*tvar, bool const BADIFF )
 {
   reset_nco();

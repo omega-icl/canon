@@ -1,12 +1,12 @@
-// Copyright (C) 2020 Benoit Chachuat, Imperial College London.
+// Copyright (C) Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
 /*!
 \page page_MINLPBND Bounding of Factorable Mixed-Integer Nonlinear Programs using MC++
 \author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
-\version 1.0
-\date 2020
+\version 2.0
+\date 2023
 \bug No known bugs.
 
 Consider a nonlinear optimization problem in the form:
@@ -93,7 +93,6 @@ MINLP relaxation bound: -63.9709
 Other options can be modified to tailor the relaxations, tune the MIP solver, set a maximum CPU time, etc. These options can be modified through the public member mc::MINLPBND::options.
 */
 
-//TODO: 
 //- Enable RLT cuts in addition to quadratization
 //- SEPARATE VARIOUS RELAXATION CLASSES AND INHERIT IN MINLPBND?
 
@@ -103,20 +102,22 @@ Other options can be modified to tailor the relaxations, tune the MIP solver, se
 #include <stdexcept>
 #include <chrono>
 
-#include "rltred.hpp"
-#include "sparseexpr.hpp"
 #include "polimage.hpp"
 #include "squad.hpp"
 #include "scmodel.hpp"
 #include "ismodel.hpp"
+#include "selim.hpp"
+#include "rltred.hpp"
 
 #include "base_nlp.hpp"
 #include "mipslv_gurobi.hpp"
 #include "gamswriter.hpp"
+#include "gamsio.hpp"
 
 //#undef MC__MINLPBND_DEBUG
 //#define MC__MINLPBND_DEBUG_LIFT
 //#define MC__MINLPBND_SHOW_REDUC
+//#define MC__MINLPBND_DEBUG_ISM
 
 namespace mc
 {
@@ -126,25 +127,97 @@ namespace mc
 //! mc::MINLPBND is a C++ class for global bounding of factorable MINLP
 //! using MC++
 ////////////////////////////////////////////////////////////////////////
-template < typename T,
+template < typename DAG,
+           typename T,
            typename MIP=MIPSLV_GUROBI<T> >
-class MINLPBND:
-  public virtual BASE_NLP
+class MINLPBND
+#if defined (MC__WITH_GAMS)
+: protected virtual GAMSIO<DAG>,
+  public virtual BASE_NLP<DAG>
+#else
+: public virtual BASE_NLP<DAG>
+#endif
 {
   // Typedef's
-  typedef std::map< SPolyMon, double, lt_SPolyMon > t_coefmon;
-  typedef std::set< FFVar*, lt_FFVar > set_FFVar;
-  typedef std::pair< SPolyMon const*, SPolyMon const* > SPolyProdMon;
+  typedef SMon< unsigned, std::less<unsigned> > t_mon;
+  typedef lt_SMon< std::less<unsigned> > lt_mon;
+  
+  typedef SPoly< unsigned, std::less<unsigned> > t_poly;
+  typedef std::map< t_mon, double, lt_mon > map_poly;
+  typedef std::pair< t_mon const*, t_mon const* > t_prodmon;
+
+  typedef SQuad< unsigned, std::less<unsigned> > t_quad;
+  typedef lt_SQuad< std::less<unsigned> > lt_quad;
+
+  typedef SLiftEnv<DAG> t_lift;
+  typedef SElimEnv<DAG> t_elim;
+
+public:
+
+  using BASE_AE<DAG>::set;
+  using BASE_AE<DAG>::dag;
+  using BASE_AE<DAG>::set_dag;
+  using BASE_AE<DAG>::par;
+  using BASE_AE<DAG>::set_par;
+  using BASE_AE<DAG>::add_par;
+  using BASE_AE<DAG>::reset_par;
+  using BASE_AE<DAG>::var;
+  using BASE_AE<DAG>::set_var;
+  using BASE_AE<DAG>::add_var;
+  using BASE_AE<DAG>::reset_var;
+  using BASE_AE<DAG>::update_vartyp;
+  using BASE_AE<DAG>::dep;
+  using BASE_AE<DAG>::set_dep;
+  using BASE_AE<DAG>::add_dep;
+  using BASE_AE<DAG>::reset_dep;
+  using BASE_AE<DAG>::sys;
+  using BASE_AE<DAG>::add_sys;
+  using BASE_AE<DAG>::reset_sys;
+
+  using BASE_NLP<DAG>::set_obj;
+  using BASE_NLP<DAG>::add_ctr;
+
+
+#if defined (MC__WITH_GAMS)
+  using GAMSIO<DAG>::read;
+#endif
 
 protected:
 
-  //! @brief local copy of DAG (overides BASE_NLP::_dag)
-  FFGraph*                  _dag;
+  // Do not use BASE_AE<DAG>::_dag since redefined locally
+  using BASE_AE<DAG>::_var;
+  using BASE_AE<DAG>::_vartyp;
+  using BASE_AE<DAG>::_varlb;
+  using BASE_AE<DAG>::_varlm;
+  using BASE_AE<DAG>::_varub;
+  using BASE_AE<DAG>::_varum;
+  using BASE_AE<DAG>::_dep;
+  using BASE_AE<DAG>::_deplb;
+  using BASE_AE<DAG>::_deplm;
+  using BASE_AE<DAG>::_depub;
+  using BASE_AE<DAG>::_depum;
+  using BASE_AE<DAG>::_sys;
+  using BASE_AE<DAG>::_sysm;
+  using BASE_AE<DAG>::_par;
 
-  //! @brief sparse expression environment for reformulations
-  SparseEnv                 _SEenv;
-  //! @brief sparse quadratic form environment
-  SQuad                     _SQenv;
+  using BASE_NLP<DAG>::_obj;
+  using BASE_NLP<DAG>::_ctr;
+  using BASE_NLP<DAG>::_nco;
+  using BASE_NLP<DAG>::set_nco;
+
+protected:
+
+  //! @brief local copy of DAG (overides BASE_AE<DAG>::_dag)
+  DAG*                      _dag;
+
+  //! @brief environment for expression elimination
+  t_elim                    _SEenv;
+  //! @brief environment for expression lift
+  t_lift                    _SLenv;
+  //! @brief environment for sparse quadratic form
+  t_quad                    _SQenv;
+  //! @brief environment for sparse quadratic form
+  t_quad                    _SCQenv;
   
   //! @brief number of parameters in model
   unsigned                  _nP;
@@ -175,10 +248,12 @@ protected:
   std::set<unsigned>        _Xpol;
   //! @brief subset of variables in general expressions
   std::set<unsigned>        _Xgal;
-  //! @brief vector of [-1,1] scaled variables
-  std::vector<FFVar>        _Xscal;
-  //! @brief Chebyshev basis map
-  std::map< SPolyMon, FFVar, lt_SPolyMon > _Xmon;
+//   //! @brief vector of [-1,1] scaled variables
+//   std::vector<FFVar>        _Xscal;
+  //! @brief vector of auxiliary variables
+  std::vector< FFVar >      _Xaux;
+  //! @brief Map of participating monomials
+  std::map< t_mon, FFVar, lt_mon > _Xmon;
   //! @brief objective variable
   FFVar                     _Xobj;
   //! @brief Map of dependent expressions in terms of original variables
@@ -199,15 +274,15 @@ protected:
   //! @brief all function subgraphs
   FFSubgraph                _Fallops;
   //! @brief subset of linear functions
-  std::set<unsigned>         _Flin;
+  std::set<unsigned>        _Flin;
   //! @brief subset of quadratic functions
-  std::set<unsigned>         _Fquad;
+  std::set<unsigned>        _Fquad;
   //! @brief subset of polynomial functions
-  std::set<unsigned>         _Fpol;
+  std::set<unsigned>        _Fpol;
   //! @brief subset of general functions
-  std::set<unsigned>         _Fgal;
+  std::set<unsigned>        _Fgal;
   //! @brief subset of equality-constrained functions
-  std::set<unsigned>         _Fctreq;
+  std::set<unsigned>        _Fctreq;
 
   //! @brief Interval representation of 'unbounded' variables
   T                         _IINF;
@@ -216,53 +291,33 @@ protected:
   //! @brief Storage vector for interval arithmetic
   std::vector<T>            _Iwk;
 
-//  //! @brief pointer to subset of dependent variables showing improvement using implicit contractors
-//  std::set<unsigned> _ndxdep;
-//  //! @brief pointer to subset of dependent variables showing improvement using implicit interval contractor
-//  std::set<unsigned> _Indxdep;
-//  //! @brief pointer to subset of dependent variables showing improvement using implicit polynomial model contractor
-//  std::set<unsigned> _CMndxdep;
-//  //! @brief boolean flag to ignore the dependents in the relaxations
-//  bool _ignore_deps;
-
   //! @brief Polyhedral image environment
   PolImg<T>                 _POLenv;
   //! @brief Polyhedral image decision variables
   std::vector< PolVar<T> >  _POLXvar;
-  //! @brief Polyhedral image scaled variables
-  std::vector< PolVar<T> >  _POLXscal;
+//   //! @brief Polyhedral image scaled variables
+//   std::vector< PolVar<T> >  _POLXscal;
+  //! @brief Polyhedral image auxiliary variables
+  std::vector< PolVar<T> >  _POLXaux;
   //! @brief Map of monomials in polyhedral image
-  std::map< SPolyMon, PolVar<T>, lt_SPolyMon > _POLXmon;
+  std::map< t_mon, PolVar<T>, lt_mon > _POLXmon;
   //! @brief Map of monomial products in polyhedral image
-  std::map< SPolyProdMon, PolVar<T>, lt_SQuad > _POLXprodmon;
+  std::map< t_prodmon, PolVar<T>, lt_quad > _POLXprodmon;
   //! @brief Polyhedral image function variables
   std::vector< PolVar<T> >  _POLFvar;
   //! @brief Storage vector for function evaluation in polyhedral relaxation arithmetic
   std::vector< PolVar<T> >  _POLwk;
 
   //! @brief Chebyshev model environment
-  SCModel<T>* _CMenv;
+  SCModel<T>* _SCMenv;
   //! @brief Chebyshev variables
-  std::vector< SCVar<T> >   _CMXvar;
+  std::vector< SCVar<T> >   _SCMXvar;
   //! @brief Chebyshev constraint variables
-  std::vector< SCVar<T> >   _CMFvar;
+  std::vector< SCVar<T> >   _SCMFvar;
   //! @brief Storage vector for function evaluation in Chebyshev arithmetic
-  std::vector< SCVar<T> >   _CMwk;
+  std::vector< SCVar<T> >   _SCMwk;
   //! @brief Chebyshev basis map
-  std::map< SPolyMon, FFVar, lt_SPolyMon > _CMXmon;
-
-//  //! @brief Chebyshev reduced-space [-1,1] scaled model environment
-//  SCModel<T>* _CMrenv;
-//  //! @brief Chebyshev reduced-space [-1,1] scaled variables
-//  std::vector< SCVar<T> > _CMrbas;
-//  //! @brief Chebyshev reduced-space variables
-//  std::vector< SCVar<T> > _CMrvar;
-//  //! @brief Chebyshev reduced-space dependents
-//  std::vector< SCVar<T> > _CMrdep;
-//  //! @brief Interval reduced-space variables
-//  std::vector<T> _Irvar;
-//  //! @brief Interval reduced-space dependents
-//  std::vector<T> _Irdep;
+  std::map< t_mon, FFVar, lt_mon > _SCMXmon;
 
   //! @brief Interval superposition model environment
   ISModel<T>*               _ISMenv;
@@ -289,7 +344,7 @@ public:
   //! @brief Constructor
   MINLPBND
     ()
-    : _dag(0), _nX(0), _nX0(0), _nX1(0), _nF(0), _CMenv(0), _ISMenv(0), _issetup(false)
+    : _dag(nullptr), _nX(0), _nX0(0), _nX1(0), _nF(0), _SCMenv(nullptr), _ISMenv(nullptr), _issetup(false)
     { _MIPSLV = new MIP; }
 
   //! @brief Destructor
@@ -298,7 +353,7 @@ public:
     {
       delete _MIPSLV;
       delete _ISMenv;
-      delete _CMenv;
+      delete _SCMenv;
       delete _dag;
     }
 
@@ -307,25 +362,30 @@ public:
   {
     //! @brief Constructor
     Options():
-      REFORMMETH({NPOL,QUAD}), RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), BCHPRIM(0),
+      REFORMMETH({NPOL,QUAD}), RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCQ(0), SUBSETISM(0),
       OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(true),
-      CPMAX(10), CPTHRES(0.), ISMDIV(10), ISMMIPREL(true),
-      CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF), MONSCALE(false),
-      RRLTCUTS(false), PSDQUADCUTS(0), DCQUADCUTS(false), NCOCUTS(false), NCOADIFF(ASA),
-      LINCTRSEP(false), TIMELIMIT(6e2), DISPLEVEL(2),
-      POLIMG(), MIPSLV(), SPARSEEXPR(), SQUAD(), RLTRED()
+      CPMAX(10), CPTHRES(0.), ISMODEL(), ISMDIV(10), ISMCONT(true),
+      CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF), MONSCALE(true),
+      RRLTCUTS(false), MIPQUADCUTS(false), PSDQUADCUTS(0), DCQUADCUTS(false),
+      NCOCUTS(false), NCOADIFF(ASA), LINCTRSEP(false), BCHPRIM(0),TIMELIMIT(6e2), DISPLEVEL(2),
+      POLIMG(), MIPSLV(), SELIM(), SLIFT(), SQUAD(), SCQUAD(), RLTRED()
       { CMODEL.MIXED_IA        = true;
-        CMODEL.MIN_FACTOR      = 1e-13; // compatibility with GUROBI
+        CMODEL.MIG_ATOL        = 1e-13; // compatibility with GUROBI
         POLIMG.BREAKPOINT_TYPE = PolImg<T>::Options::BIN;
         MIPSLV.DISPLEVEL       = 0;
         MIPSLV.DUALRED         = 0;
         //MIPSLV.PRESOLVE        = 1;
         MIPSLV.TIMELIMIT       = TIMELIMIT;
-        SPARSEEXPR.LIFTDIV     = true;
-        SPARSEEXPR.LIFTIPOW    = false;
-        SQUAD.BASIS            = SQuad::Options::MONOM;
-        SQUAD.ORDER            = SQuad::Options::INC;
+        SLIFT.LIFTDIV          = true;
+        SLIFT.LIFTIPOW         = false;
+        SELIM.MIPDISPLEVEL     = 0;
+        SELIM.MIPTIMELIMIT     = TIMELIMIT;
+        SQUAD.BASIS            = t_quad::Options::MONOM;
+        SQUAD.ORDER            = t_quad::Options::INC;
         SQUAD.REDUC            = false;
+        SCQUAD.BASIS            = t_quad::Options::CHEB;
+        SCQUAD.ORDER            = t_quad::Options::INC;
+        SCQUAD.REDUC            = false;
         RLTRED.METHOD          = RLTRed::Options::ILP;
         RLTRED.LEVEL           = RLTRed::Options::PRIMSIM;
         RLTRED.TIMELIMIT       = TIMELIMIT; }
@@ -335,7 +395,7 @@ public:
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
         SUBSETSCQ     = options.SUBSETSCQ;
-        BCHPRIM       = options.BCHPRIM;
+        SUBSETISM     = options.SUBSETISM;
         OBBTMIG       = options.OBBTMIG;
         OBBTMAX       = options.OBBTMAX;
         OBBTTHRES     = options.OBBTTHRES;
@@ -344,24 +404,28 @@ public:
         OBBTCONT      = options.OBBTCONT;
         CPMAX         = options.CPMAX;
         CPTHRES       = options.CPTHRES;
+	ISMODEL       = options.ISMODEL;
         ISMDIV        = options.ISMDIV;
-        ISMMIPREL     = options.ISMMIPREL;
+        ISMCONT       = options.ISMCONT;
         CMODEL        = options.CMODEL;
         CMODPROP      = options.CMODPROP;
         CMODCUTS      = options.CMODCUTS;
         CMODDMAX      = options.CMODDMAX;
         MONSCALE      = options.MONSCALE;
         RRLTCUTS      = options.RRLTCUTS;
+	MIPQUADCUTS   = options.MIPQUADCUTS;
         PSDQUADCUTS   = options.PSDQUADCUTS;
         DCQUADCUTS    = options.DCQUADCUTS;
         NCOCUTS       = options.NCOCUTS;
         NCOADIFF      = options.NCOADIFF;
         LINCTRSEP     = options.LINCTRSEP;
+        BCHPRIM       = options.BCHPRIM;
         TIMELIMIT     = options.TIMELIMIT;
         DISPLEVEL     = options.DISPLEVEL;
         POLIMG        = options.POLIMG;
         MIPSLV        = options.MIPSLV;
-        SPARSEEXPR    = options.SPARSEEXPR;
+        SELIM         = options.SELIM;
+        SLIFT         = options.SLIFT;
         SQUAD         = options.SQUAD;
         RLTRED        = options.RLTRED;
         return *this ;
@@ -371,12 +435,13 @@ public:
       DRL=0,  //!< Standard decomposition-relaxation-linearization based on convex relaxations (Tawarmalani & Sahinidis)
       SCDRL,  //!< Decomposition-relaxation-linearization based on sparse Chebyshev relaxations, controlled by parameters CMODPROP and CMODCUT
       SCQ,    //!< Quadratisation of sparse Chebyshev models, controlled by parameters CMODPROP and CMODCUT
-      ISM     //!< Interval superposition model relaxations, controlled by parameters ISMDIV
+      ISM     //!< Interval superposition model relaxations, controlled by parameters ISMDIV and ISMCONT
     };
     //! @brief Reformulation strategy
     enum REFORM{
-      NPOL=0,  //!< Reformulate non-polynomial expressions as polynomial subexpressions and transcendental terms using mc::SparseExpr
-      QUAD     //!< Flatten linear/quadratic/polynomial expressions and lift polynomial into quadratic expressions
+      ELIM=0,  //!< Eliminate variables using invertible equality constraints with mc::SElimEnv 
+      NPOL,    //!< Lift polynomial subexpressions and transcendental terms using auxiliary variables with mc::SLiftEnv
+      QUAD     //!< Lift polynomial subexpressions into quadratic form using mc::SQuad
     };
     //! @brief Reduced-space strategy
     //enum REDUC{
@@ -396,8 +461,8 @@ public:
     unsigned SUBSETDRL;
     //! @brief Exclusion from quadratization: 0: none; 1: non-polynomial functions; 2: polynomial functions
     unsigned SUBSETSCQ;
-    //! @brief Set higher branch priority to primary variables (e.g. over auxiliary variables in quadratization)
-    unsigned BCHPRIM;
+    //! @brief Exclusion from interval superposition: 0: none; 1: non-polynomial functions; 2: polynomial functions
+    unsigned SUBSETISM;
     //! @brief Minimum variable range for application of bounds tighteneting
     double OBBTMIG;
     //! @brief Maximum rounds of optimization-based bounds tighteneting
@@ -414,10 +479,12 @@ public:
     unsigned CPMAX;
     //! @brief Threshold for repeating constraint propagation (minimum relative reduction in any variable)
     double CPTHRES;
+    //! @brief ISModel options
+    typename ISModel<T>::Options ISMODEL;
     //! @brief Number of partition subdivisions in interval superposition model
     unsigned ISMDIV;
-    //! @brief Whether to generate a MIP relaxation of ISM (true) or LP relaxation (false)
-    bool ISMMIPREL;
+    //! @brief Whether to generate a continuous relaxation of ISM (true) or MIP relaxation (false)
+    bool ISMCONT;
     //! @brief CModel options
     typename SCModel<T>::Options CMODEL;
     //! @brief Chebyhev model propagation order (0: no propag.)
@@ -430,6 +497,8 @@ public:
     bool MONSCALE;
     //! @brief Whether to add reduced RLT cuts
     bool RRLTCUTS;
+    //! @brief Whether to minimize the number of auxiliary variables in quadratisation using MIP
+    bool MIPQUADCUTS;
     //! @brief Whether to add PSD cuts within quadratisation (0: none; 1: 2-by-2; >1: 3-by-3)
     unsigned PSDQUADCUTS;
     //! @brief Whether to add DC cuts within quadratisation
@@ -440,6 +509,8 @@ public:
     unsigned NCOADIFF;
     //! @brief Whether to separate linear constraints prior to relaxation
     bool LINCTRSEP;
+    //! @brief Set higher branch priority to primary variables (e.g. over auxiliary variables in quadratization)
+    unsigned BCHPRIM;
     //! @brief Maximum run time (seconds)
     double TIMELIMIT;
     //! @brief Display level for solver
@@ -448,10 +519,14 @@ public:
     typename PolImg<T>::Options POLIMG;
     //! @brief MIPSLV_GUROBI (mixed-integer optimization) options
     typename MIP::Options MIPSLV;
-    //! @brief SparseExpr (sparse reformulation/lifting) options
-    typename SparseEnv::Options SPARSEEXPR;
-    //! @brief SQuad (sparse quadratisation of Chebyshev models) options
-    typename SQuad::Options SQUAD;
+    //! @brief SElimEnv options for variable elimination
+    typename t_elim::Options SELIM;
+    //! @brief SLiftEnv options for expression lifting
+    typename t_lift::Options SLIFT;
+    //! @brief SQuad options for quadratization of sparse polynomial expressions
+    typename t_quad::Options SQUAD;
+    //! @brief SQuad options for quadratization of sparse Chebyshev models
+    typename t_quad::Options SCQUAD;
     //! @brief RLTRed (reduced RLT search) options
     typename RLTRed::Options RLTRED;
     //! @brief Display
@@ -500,27 +575,6 @@ public:
       { return t.count() * 1e-6; }
   } stats;
 
-//  //! @brief MINLPBND computational statistics
-//  struct Stats{
-//    void reset()
-//      { tCPROP = tPOLIMG = tMIPSOL = tMIPSET = 0.;
-//        nCPROP = nMIPSOL = 0; }
-//    void display
-//      ( std::ostream&os=std::cout )
-//      { os << std::fixed << std::setprecision(2);
-//        if( nCPROP  ) os << "#  CPROP:  " << tCPROP << " CPU SEC  (" << nCPROP << ")" << std::endl;
-//        os << "#  POLIMG: " << tPOLIMG << " CPU SEC" << std::endl
-//           << "#  MIPSET: " << tMIPSET << " CPU SEC" << std::endl;
-//        if( nMIPSOL ) os << "#  MIPSOL: " << tMIPSOL << " CPU SEC  (" << nMIPSOL << ")" << std::endl; 
-//        os << std::endl; }
-//    double tCPROP;
-//    unsigned nCPROP;
-//    double tPOLIMG;
-//    double tMIPSOL;
-//    unsigned nMIPSOL;
-//    double tMIPSET;
-//  } stats;
-
   //! @brief MINLPBND exceptions
   class Exceptions
   {
@@ -553,17 +607,10 @@ public:
   //! @brief Setup optimization model before bounding
   void setup
     ( std::ostream& os=std::cout );
-    //( unsigned const* Xtyp=nullptr, std::ostream& os=std::cout );
 
   //! @brief Update variable and function bounds before tightening / relaxation
   bool update_bounds
     ( T const* X=nullptr, double const* Finc=nullptr, bool const resetbnd=true );
-
-//  //! @brief Tighten bounds using constraint propagation
-//  int tighten
-//    ( T const* X=nullptr, double const* Finc=nullptr )
-//    { if( !update( X, Finc ) ) return -1;
-//      return _propagate_bounds(); }
 
   //! @brief Set polyhedral relaxation
   void init_polrelax
@@ -576,6 +623,11 @@ public:
   //! @brief Refine polyhedral relaxation by adding breakpoints
   void refine_polrelax
     ( double const* Xinc=nullptr, bool const resetcuts=true );
+
+  //! @brief export reformulated optimization model to GAMS file
+  int write
+    ( std::string const gmsfile, T const* X=nullptr, double const* Finc=nullptr,
+      double const* Xinc=nullptr, const bool resetbnd=true );
 
   //! @brief Setup and solve polyhedral relaxation of optimization model in the variable subdomain <a>X</a>, for the incumbent value <a>Finc</a> at point <a>Xinc</a>, and applying <a>nref</a> breakpoint refinements
   int relax
@@ -633,13 +685,17 @@ private:
   void _set_function_class
     ();
 
+  //! @brief Eliminate non-essential variables using invertible equality constraints
+  void _elim_variable
+    ();
+
   //! @brief Lift nonpolynomial functions
   void _lift_nonpolynomial
     ();
 
   //! @brief Lift semi-algebraic functions
   void _lift_semialgebraic
-    ( bool const add2dag=true );
+    ();
 
   //! @brief Search for reduced RLT cuts
   void _search_reduction_constraints
@@ -663,33 +719,22 @@ private:
   //! @brief Set model linear cuts
   void _set_cuts_LIN
    ();
-  //! @brief Set model polyhedral McCormick-derived cuts
+
+  //! @brief Set model McCormick-derived cuts
   void _set_cuts_DRL
     ();
-  //! @brief Set model polyhedral Chebyshev-derived cuts
-  void _set_cuts_SCDRL
-    ();
-  //! @brief Set model quadratic Chebyshev-derived cuts
-  void _set_cuts_SCQ
-    ();
-  //! @brief Set model polyhedral superposition-derived cuts
+
+  //! @brief Set model Chebyshev-derived cuts
+  void _set_cuts_SCM
+    ( bool const DRLcuts );
+
+  //! @brief Set model ISM-derived cuts
   void _set_cuts_ISM
     ();
 
-  //! @brief Create DAG variable for given quadratic form
-  FFVar _var_pol
-    ( SQuad::t_SQuad const& quad, std::map< SPolyMon, FFVar, lt_SPolyMon >& mapmon )
-    const;
-
-  //! @brief Create DAG variable for given Chebyshev basis function 
-  FFVar _var_cheb
-    ( FFVar const& x, const unsigned n )
-    const;
-    
-  //! @brief Create DAG variable and auxiliary for given high-order monomial 
-  std::pair< FFVar const*, FFVar const* > _var_mon
-    ( SPolyMon const& mon )
-    const;
+  //! @brief Append cuts for ISM in polynomial image
+  void _set_cuts_ISM
+    ( std::set<unsigned> const& ndxF );
 
   //! @brief Compute bound for given Chebyshev basis function 
   T _bnd_cheb
@@ -698,44 +743,58 @@ private:
 
   //! @brief Compute bound of (unscaled) monomial <a>mon</a>
   T _bnd_mon
-    ( SPolyMon const& mon )
+    ( t_mon const& mon, int const BASIS )
     const;
 
-  // Set monomial vector from quadratic form in polyhedral image
-  void _set_mon_SCQ
-    ();
-
-  // Set monomial vector from quadratic form in polyhedral image
+  //! @brief Set monomials from quadratic forms in polyhedral image
   void _set_mon_SQ
-    ();
+    ( t_quad const& SQenv, int const BASIS, bool const SCALED,
+      bool const DAGINSERT );
 
-  // Append cuts for quadratic form in polynomial image
+  //! @brief Append cuts for quadratic form in polynomial image
   void _set_cuts_SQ
-    ( std::set<unsigned> ndxF, bool const chkrem );
+    ( t_quad& SQenv, std::set<unsigned> const& ndxF, bool const chkrem );
+
+  //! @brief Set monomials from Chebyshev models in polyhedral image
+  void _set_mon_SCDRL
+    ( std::set<unsigned> const& ndxF, int const BASIS, bool const SCALED,
+      bool const DAGINSERT );
+
+  //! @brief Append cuts for Chebyshev models in polynomial image
+  void _set_cuts_SCDRL
+    ( std::set<unsigned> const& ndxF );
+
+  //! @brief Set cuts for monomials in polyhedral image
+  void _set_mon_DRL
+    ( t_mon const& mon, int const BASIS, bool const SCALED, bool const DAGINSERT );
+
+  //! @brief Add cuts for monomials in polyhedral image
+  void _add_mon_DRL
+    ();
 
   //! @brief Get monomial <a>mon</a> from DAG monomial map <a>_Xmon</a> or add it to the map if absent
   FFVar const& _get_mon
-    ( SPolyMon const& mon );
+    ( t_mon const& mon, int const BASIS, bool const DAGINSERT );
 
   //! @brief Get range for quadratic terms from <a>mat</a>
   T _get_range
-    ( SQuad::t_SQuad const& mat );
+    ( t_quad::map_SQuad const& mat );
 
   //! @brief Append cuts for DC factorization in polyhedral image
   PolVar<T> _append_cuts_dcdec
-    ( SQuad::t_SPolyMonCoef const& eigterm );
+    ( t_quad::map_SPoly const& eigterm );
 
   //! @brief Append cuts for monomial product in polyhedral image
   PolVar<T> _append_cuts_monprod
-    ( SQuad::key_SQuad const& ijmon );
+    ( t_quad::key_SQuad const& ijmon );
 
   //! @brief Append quadratic terms from <a>mat</a> to cuts
   void _add_to_cuts
-    ( SQuad::t_SQuad const& mat, PolCut<T>* cut1=nullptr, PolCut<T>* cut2=nullptr );
+    ( t_quad::map_SQuad const& mat, PolCut<T>* cut1=nullptr, PolCut<T>* cut2=nullptr );
 
   //! @brief Append quadratic terms from <a>mat</a> to cuts with or without DC factorization
   void _add_to_cuts
-    ( SQuad const& quad, SQuad::t_SQuad const& mat, PolCut<T>* cut1=nullptr,
+    ( t_quad const& SQenv, t_quad::map_SQuad const& mat, PolCut<T>* cut1=nullptr,
       PolCut<T>* cut2=nullptr );
 
   //! @brief Function computing Hausdorff distance between intervals
@@ -751,13 +810,13 @@ private:
   //! @brief Private methods to block default compiler methods
   MINLPBND
     ( const MINLPBND& );
-  MINLPBND& operator=
+  MINLPBND<DAG,T,MIP>& operator=
     ( const MINLPBND& );
 };
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::setup
+MINLPBND<DAG,T,MIP>::setup
 ( std::ostream& os )
 {
   _issetup = false;
@@ -802,9 +861,9 @@ MINLPBND<T,MIP>::setup
   for( unsigned i=0; i<std::get<0>(_ctr).size(); i++ ){
     Fvar.push_back( std::get<1>(_ctr)[i] );
     switch( std::get<0>(_ctr)[i] ){
-      case EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
-      case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );            break;
-      case GE: _Flow.push_back( 0. );             _Fupp.push_back( BASE_OPT::INF ); break;
+      case BASE_OPT::EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
+      case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );            break;
+      case BASE_OPT::GE: _Flow.push_back( 0. );             _Fupp.push_back( BASE_OPT::INF ); break;
     }
   }
 
@@ -828,9 +887,9 @@ MINLPBND<T,MIP>::setup
       Xvar.push_back( std::get<1>(_ctr)[i] );
       _Xtyp.push_back( 0 ); // all constraint multipliers are continuous variables
       switch( std::get<0>(_ctr)[i] ){
-        case LE:
-        case GE: _Flow.push_back(  0. ); _Fupp.push_back( 1. ); break;
-        case EQ: _Flow.push_back( -1. ); _Fupp.push_back( 1. ); break;
+        case BASE_OPT::LE:
+        case BASE_OPT::GE: _Flow.push_back(  0. ); _Fupp.push_back( 1. ); break;
+        case BASE_OPT::EQ: _Flow.push_back( -1. ); _Fupp.push_back( 1. ); break;
       }
     }
     //Xvar.insert( Xvar.end(), std::get<2>(_ctr).begin(), std::get<2>(_ctr).end() );
@@ -858,25 +917,28 @@ MINLPBND<T,MIP>::setup
     for( unsigned i=0; i<std::get<0>(_nco).size(); ++i ){
       Fvar.push_back( std::get<1>(_nco)[i] );
 #ifdef MC__MINLPBND_DEBUG_NCOCUTS
-      BASE_NLP::_dag->output( BASE_NLP::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
+      BASE_NLP<DAG>::_dag->output( BASE_NLP<DAG>::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
 #endif      
       switch( std::get<0>(_nco)[i] ){
-        case EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
-        case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );            break;
-        case GE: _Flow.push_back( 0. );             _Fupp.push_back( BASE_OPT::INF ); break;
+        case BASE_OPT::EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
+        case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );            break;
+        case BASE_OPT::GE: _Flow.push_back( 0. );             _Fupp.push_back( BASE_OPT::INF ); break;
       }
     }
   }
   
   // local DAG copy
   if( _dag ) delete _dag;
-  _dag = new FFGraph;
+  _dag = new DAG;
   _nP = Pvar.size(); _Pvar.resize( _nP );
-  _dag->insert( BASE_NLP::_dag, _nP, Pvar.data(), _Pvar.data() );
+  _dag->insert( BASE_NLP<DAG>::_dag, _nP, Pvar.data(), _Pvar.data() );
   _nX = _nX1 = Xvar.size(); _Xvar.resize( _nX );
-  _dag->insert( BASE_NLP::_dag, _nX, Xvar.data(), _Xvar.data() );
+  _dag->insert( BASE_NLP<DAG>::_dag, _nX, Xvar.data(), _Xvar.data() );
   _nF = Fvar.size(); _Fvar.resize( _nF );
-  _dag->insert( BASE_NLP::_dag, _nF, Fvar.data(), _Fvar.data() );
+  _dag->insert( BASE_NLP<DAG>::_dag, _nF, Fvar.data(), _Fvar.data() );
+#ifdef MC__MINLPBND_DEBUG  
+  _dag->output( _dag->subgraph( 1, _Fvar.data() ), " objective" );
+#endif
 
   // Identify variable and function types
   _set_variable_class();
@@ -884,28 +946,22 @@ MINLPBND<T,MIP>::setup
 
   // reformulate nonpolynomial functions
   _Xlift.clear();
+  if( options.REFORMMETH.count( Options::ELIM ) ) _elim_variable();
   if( options.REFORMMETH.count( Options::NPOL ) ) _lift_nonpolynomial();
-  if( options.REFORMMETH.count( Options::QUAD ) ) _lift_semialgebraic( false );
+  if( options.REFORMMETH.count( Options::QUAD ) ) _lift_semialgebraic();
 
   // search for reduced RLT cuts
   if( options.RRLTCUTS ) _search_reduction_constraints();
 
   if( options.DISPLEVEL )
-    os << "#" << std::endl
+    os << std::endl
        << "#              |  VARIABLES      FUNCTIONS" << std::endl << std::right
        << "# -------------+---------------------------" << std::endl
        << "#  LINEAR      | " << std::setw(9) << _Xlin.size()  << std::setw(15) << _Flin.size()  << std::endl
        << "#  QUADRATIC   | " << std::setw(9) << _Xquad.size() << std::setw(15) << _Fquad.size() << std::endl
        << "#  POLYNOMIAL  | " << std::setw(9) << _Xpol.size()  << std::setw(15) << _Fpol.size()  << std::endl
        << "#  GENERAL     | " << std::setw(9) << _Xgal.size()  << std::setw(15) << _Fgal.size()  << std::endl
-       << "#" << std::endl;
-
-  // setup [-1,1] scaled variables for Chebyshev model arithmetic
-  // do not downsize to avoid adding more variables into DAG
-  for( unsigned i=_Xscal.size(); i<_nX; i++ ){
-    _Xscal.push_back( FFVar() );
-    _Xscal.back().set( _dag );
-  }
+       << std::endl;
 
   // setup for objective and constraints evaluation
   if( options.DISPLEVEL )
@@ -919,7 +975,7 @@ MINLPBND<T,MIP>::setup
     _Fops.push_back( _dag->subgraph( 1, &Fi ) );
   _Fallops = _dag->subgraph( _nF, _Fvar.data() );
 #ifdef MC__MINLPBND_DEBUG  
-  _dag->output( _Fallops ), " FOR ALL FUNCTIONS" );    
+  _dag->output( _Fallops, " FOR ALL FUNCTIONS" );    
 #endif
 
   stats.reset();
@@ -927,9 +983,9 @@ MINLPBND<T,MIP>::setup
   return;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_search_reduction_constraints
+MINLPBND<DAG,T,MIP>::_search_reduction_constraints
 ()
 {
   if( _Fctreq.empty() ) return;
@@ -957,10 +1013,10 @@ MINLPBND<T,MIP>::_search_reduction_constraints
   _set_function_class();    
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_lift_semialgebraic
-( bool const add2dag )
+MINLPBND<DAG,T,MIP>::_lift_semialgebraic
+()
 {
   auto Fsalg = _Flin;
   Fsalg.insert( _Fquad.cbegin(), _Fquad.cend() );
@@ -968,9 +1024,10 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   if( Fsalg.empty() ) return;
 
   // Create vector of all semi-algebraic expressions
-  SPolyExpr::options.BASIS = SPolyExpr::Options::MONOM;
-  std::vector<SPolyExpr> SPXvar, SPFvar( _nF );
-  for( auto const& var: _Xvar ) SPXvar.push_back( SPolyExpr( var ) );
+  t_poly::options.BASIS = t_poly::Options::MONOM;
+  std::vector<typename t_lift::t_poly> SPXvar( _nX ), SPFvar( _nF );
+  for( unsigned ix=0; ix<_nX; ix++ ) SPXvar[ix].var( &_Xvar[ix] );
+  //for( auto const& var: _Xvar ) SPXvar.push_back( t_poly( var ) );
   _dag->eval( Fsalg, _Fvar.data(), SPFvar.data(), _nX, _Xvar.data(), SPXvar.data() );
 #ifdef MC__MINLPBND_DEBUG_LIFT
   for( auto i : Fsalg ) std::cout << SPFvar[i];
@@ -979,14 +1036,14 @@ MINLPBND<T,MIP>::_lift_semialgebraic
 
   // Substitute linear and quadratic expressions in DAG
   for( auto i : _Flin ){
-    _Fvar[i] = SPFvar[i].insert( _dag );
+    _Fvar[i] = _SLenv.insert_dag( SPFvar[i] );
 #ifdef MC__MINLPBND_DEBUG_LIFT
     std::ostringstream ostr; ostr << " of flattened linear expression F[" << i << "]";
     _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
 #endif
   }
   for( auto i : _Fquad ){
-    _Fvar[i] = SPFvar[i].insert( _dag );
+    _Fvar[i] = _SLenv.insert_dag( SPFvar[i] );
 #ifdef MC__MINLPBND_DEBUG_LIFT
     std::ostringstream ostr; ostr << " of flattened quadratic expression F[" << i << "]";
     _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
@@ -999,11 +1056,11 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   for( auto const& var : _Xvar ) FFmatch[&var] = ivar++;
   unsigned ifun = 0;
   auto Ftpol = _Fpol; Ftpol.insert( _Fquad.cbegin(), _Fquad.cend() );
-  std::vector<SQuad::t_SPolyMonCoef> SPol( Ftpol.size() );
+  std::vector<t_poly> SPol( Ftpol.size() );
   for( auto i : Ftpol ){
     for( auto const& [FFmon,coef] : SPFvar[i].mapmon() ){
-      SPolyMon mon( FFmon.tord, FFmon.expr, FFmatch ); 
-      SPol[ifun].insert( std::make_pair( mon, coef ) );
+      t_mon mon( FFmon.tord, FFmon.expr, FFmatch ); 
+      SPol[ifun] += std::make_pair( mon, coef );
     }
     ++ifun;
   }
@@ -1011,198 +1068,32 @@ MINLPBND<T,MIP>::_lift_semialgebraic
   // Apply quadratisation to polynomial expressions
   _SQenv.reset();
   _SQenv.options = options.SQUAD;
-#ifndef MC__MINLPBND_DEBUG_LIFT
-  _SQenv.process( SPol.size(), SPol.data(), SQuad::Options::MONOM );
-#else
-  double viol = _SQenv.process( SPol.size(), SPol.data(), SQuad::Options::MONOM, true );
-  std::cout << "violation: " << viol << _SQenv << std::endl;
+  _SQenv.process( SPol.size(), SPol.data(), &t_poly::mapmon, t_quad::Options::MONOM );
+  if( options.MIPQUADCUTS ) _SQenv.optimize( true );
+#ifdef MC__MINLPBND_DEBUG_LIFT
+  double viol = _SQenv.check( SPol.size(), SPol.data(), &t_poly::mapmon, t_quad::Options::MONOM, true );
+  std::cout << "violation: " << viol << std::endl << _SQenv << std::endl;
   {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
-  if( !add2dag ) return;
-
-  // Add higher-order monomials in basis to DAG
-  std::map< SPolyMon, FFVar, lt_SPolyMon > mapmon; 
-  for( auto const& mon : _SQenv.SetMon() ){
-    if( mon.tord == 1 ) mapmon[mon] = _Xvar[mon.expr.cbegin()->first];
-    if( mon.tord <= 1 ) continue;
-    auto [pAux,pVar] = _var_mon( mon );
-    _Xlift[_Xvar.size()] = *pAux; // <- stores monomial DAG expression
-    _Xvar.push_back( *pVar );
-    _Xlow.push_back( -BASE_OPT::INF );
-    _Xupp.push_back(  BASE_OPT::INF );
-    _Xtyp.push_back( 0 );
-    mapmon[mon] = *pVar;
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::cout << "Lifted monomial " << *pVar << " := " << mon.display(options.SQUAD.BASIS) << std::endl;
-    _dag->output( _dag->subgraph( 1, pAux ) );
-#endif
-  }
-
-  // Substitute lifted quadratic expressions
-  unsigned iquad = 0;
-  for( auto i : Ftpol ){
-    _Fvar[i] = _var_pol( _SQenv.MatFct()[iquad++], mapmon );
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of lifted quadratic expression F[" << i << "]";
-    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
-#endif
-  }
-  
-  // Append reduction quadratic cuts
-  for( auto const& red : _SQenv.MatRed() ){
-    _Fvar.push_back( _var_pol( red, mapmon ) );
-    _Flow.push_back( 0. );
-    _Fupp.push_back( 0. );
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of reduction quadratic cut";
-    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
-#endif
-  }
-
-  // Append positive semi-definite cuts
-  _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
-  for( auto const& psd : _SQenv.MatPSD() ){
-    _Fvar.push_back( _var_pol( psd, mapmon ) );
-    _Flow.push_back( 0. );
-    _Fupp.push_back( BASE_OPT::INF );
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of semi-definite quadratic cut >=0";
-    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
-#endif
-  }
-
-  // update variable and function size and type
-  _nX = _Xvar.size();
-  _nF = _Fvar.size();
-  _set_variable_class();    
-  _set_function_class();
-#ifdef MC__MINLPBND_DEBUG_LIFT
-  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }  
-#endif
 }
 
-template <typename T, typename MIP>
-inline FFVar
-MINLPBND<T,MIP>::_var_pol
-( SQuad::t_SQuad const& quad, std::map< SPolyMon, FFVar, lt_SPolyMon >& mapmon )
-const
-{
-  FFVar varpol = 0.;
-  for( auto const& [ijmon,coef] : quad ){
-    if( !ijmon.first->tord && !ijmon.second->tord )
-      varpol += coef;
-    else if( !ijmon.first->tord ){
-#ifdef MC__MINLPBND_DEBUG_LIFT
-      assert( mapmon.count( *ijmon.second ) );
-#endif
-      varpol += coef * mapmon[*ijmon.second];
-    }
-    else if( ijmon.first == ijmon.second ){
-#ifdef MC__MINLPBND_DEBUG_LIFT
-      assert( mapmon.count( *ijmon.first ) );
-#endif
-      varpol += coef * sqr( mapmon[*ijmon.second] );
-    }
-    else{
-#ifdef MC__MINLPBND_DEBUG_LIFT
-      assert( mapmon.count( *ijmon.first ) && mapmon.count( *ijmon.second ) );
-#endif
-      varpol += coef * ( mapmon[*ijmon.first] * mapmon[*ijmon.second] );
-    }
-  }
-  return varpol;
-}
-
-template <typename T, typename MIP>
-inline FFVar
-MINLPBND<T,MIP>::_var_cheb
-( FFVar const& x, const unsigned n )
-const
-{
-  switch( n ){
-    case 0:  return 1.;
-    case 1:  return x;
-    case 2:  return 2.*sqr(x)-1.;
-    default: return n%2? 2.*_var_cheb(x,n/2)*_var_cheb(x,n/2+1)-x:
-                         2.*sqr(_var_cheb(x,n/2))-1.;
-    //default: return 2.*x*_var_cheb(x,n-1)-_var_cheb(x,n-2);
-  }
-}
-
-template <typename T, typename MIP>
-inline T
-MINLPBND<T,MIP>::_bnd_cheb
-( T const& x, const unsigned n )
-const
-{
-  switch( n ){
-    case 0:  return 1.;
-    case 1:  return x;
-    case 2:  return 2.*Op<T>::sqr(x)-1.;
-    default: return n%2? 2.*_bnd_cheb(x,n/2)*_bnd_cheb(x,n/2+1)-x:
-                         2.*Op<T>::sqr(_bnd_cheb(x,n/2))-1.;
-    //default: return 2.*x*_bnd_cheb(x,n-1)-_bnd_cheb(x,n-2);
-  }
-}
-
-template <typename T, typename MIP>
-inline std::pair< FFVar const*, FFVar const* >
-MINLPBND<T,MIP>::_var_mon
-( SPolyMon const& mon )
-const
-{
-  // define power monomial expression
-  FFVar Xlift( 1e0 );
-  for( auto const& [ivar,iord] : mon.expr ){
-    switch( options.SQUAD.BASIS ){
-     // Monomial basis
-     case SQuad::Options::MONOM:
-      Xlift *= pow( _Xvar[ivar], (int)iord );
-      break;
-     // Chebyshev basis
-     case SQuad::Options::CHEB:
-      Xlift *= _var_cheb( _Xvar[ivar], iord );
-      break;
-    }
-  }
-  auto itXlift = _dag->Vars().find( &Xlift );
-
-  // define power monomial variable
-  FFVar Xmon( _dag );
-  auto itXmon = _dag->Vars().find( &Xmon );
-
-  return std::make_pair( *itXlift, *itXmon );
-}
-
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_lift_nonpolynomial
+MINLPBND<DAG,T,MIP>::_lift_nonpolynomial
 ()
 {
   if( _Fgal.empty() ) return;
 
-  _SEenv.set( _dag );
-  _SEenv.options = options.SPARSEEXPR;
-  _SEenv.process( _Fgal, _Fvar.data(), true );
+  _SLenv.set( _dag );
+  _SLenv.options = options.SLIFT;
+  _SLenv.process( _Fgal, _Fvar.data(), true );
 #ifdef MC__MINLPBND_DEBUG_LIFT
-  std::cout << std::endl << _SEenv.Var().size() << " participating variables: ";
-  for( auto&& var : _SEenv.Var() ) std::cout << var << " ";
-  std::cout << std::endl;
-  std::cout << std::endl << _SEenv.Aux().size() << " auxiliary variables: ";
-  for( auto&& aux : _SEenv.Aux() ) std::cout << *aux.first << "->" << *aux.second << " ";
-  std::cout << std::endl;
-  std::cout << std::endl << _SEenv.Poly().size() << " polynomial constraints: " << std::endl;
-  for( auto&& expr : _SEenv.Poly() ) _dag->output( _dag->subgraph( 1, &expr ) );
-  //std::cout << std::endl;
-  std::cout << std::endl << _SEenv.Trans().size() << " transcendental constraints: " << std::endl;
-  for( auto&& expr : _SEenv.Trans() ) _dag->output( _dag->subgraph( 1, &expr ) );
-  //std::cout << _SEenv;
-  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
+  { std::cout << _SLenv << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
 
   // append auxiliary variables
   std::set<unsigned> Fred;
-  for( auto&& [pAux,pVar] : _SEenv.Aux() ){
+  for( auto const& [pAux,pVar] : _SLenv.Aux() ){
     bool is_dep = false;
     unsigned i = 0;
     for( auto it=_Fgal.begin(); it!=_Fgal.end(); ++it ){
@@ -1224,9 +1115,6 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
       continue;
     }
     Fred.insert( i ); 
-    //auto itFvar = _Fvar.begin(); std::advance( itFvar, i ); _Fvar.erase( itFvar );
-    //auto itFlow = _Flow.begin(); std::advance( itFlow, i ); _Flow.erase( itFlow );
-    //auto itFupp = _Fupp.begin(); std::advance( itFupp, i ); _Fupp.erase( itFupp );
   }
   for( auto it=Fred.rbegin(); it!=Fred.rend(); ++it ){
     unsigned i = *it;
@@ -1236,14 +1124,14 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
   }
   
   // append lifted polynomial expressions
-  for( auto const& poly : _SEenv.Poly() ){
+  for( auto const& poly : _SLenv.Poly() ){
     _Fvar.push_back( poly );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
   }
 
   // append lifted transcendental expressions
-  for( auto const& trans : _SEenv.Trans() ){
+  for( auto const& trans : _SLenv.Trans() ){
     _Fvar.push_back( trans );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
@@ -1256,9 +1144,94 @@ MINLPBND<T,MIP>::_lift_nonpolynomial
   _set_function_class();    
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_variable_class
+MINLPBND<DAG,T,MIP>::_elim_variable
+()
+{
+  if( _Fgal.empty() ) return;
+
+  _SEenv.set( _dag );
+  _SEenv.options = options.SELIM;
+  _SEenv.process( _Fctreq, _Fvar.data() );//, true );
+//#ifdef MC__MINLPBND_DEBUG_ELIM
+  { std::cout << _SEenv << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
+//#endif
+  auto const& [vVar,vCtr,vAux] = _SEenv.VarElim();
+
+  // iterate over set of eliminated variables
+  std::set<unsigned> Fremain;
+  std::map<unsigned,unsigned> ndxElim;
+  for( unsigned j=0; j<_nF; ++j ) Fremain.insert( j );
+  for( auto itvar=vVar.rbegin(), itctr=vCtr.rbegin(), itaux=vAux.rbegin();
+       itvar!=vVar.rend(); ++itvar, ++itctr, ++itaux ){
+
+    // track inverted constraint in _Fvar
+    auto ite = _Fctreq.cbegin();
+    for( ; ite != _Fctreq.cend(); ++ite )
+      if( itctr->id().second == _Fvar[*ite].id().second ) break;
+    assert( ite != _Fctreq.cend() );
+    unsigned const& j = *ite;
+    
+    // track eliminated variable in _Xvar
+    unsigned i = 0;
+    for( ; i<_nX; ++i )
+      if( itvar->id().second == _Xvar[i].id().second ) break;
+    ndxElim[i] = j;
+
+    // compose other constraints with *itaux instead of *itvar
+    Fremain.erase( j ); // Drop j temporarilly
+    const mc::FFVar* Fcomp = _dag->compose( Fremain, _Fvar.data(), 1, &*itvar, &*itaux );
+    for( unsigned const& j : Fremain ){
+#ifdef MC__MINLPBND_DEBUG_ELIM
+      std::ostringstream ostr;
+      ostr << " OF FUNCTION " << _Fvar[j] << " COMPOSED WITH ELIMINATED VARIABLE " << *itvar;
+      _dag->output( _dag->subgraph( 1, &Fcomp[j] ), ostr.str() );
+#endif
+      _Fvar[j] = Fcomp[j];
+    }
+    delete[] Fcomp;
+    
+    // substitute equality constraint with inverted expression and corresponding bounds
+    if( _Xlow[i] > -0.999*BASE_OPT::INF || _Xupp[i] < 0.999*BASE_OPT::INF ){
+      _Fvar[j] = *itaux - *itvar;
+      _Flow[j] = _Fupp[j] = 0;
+      Fremain.insert( j ); // Reinsert j
+//#ifdef MC__MINLPBND_DEBUG_ELIM
+      std::ostringstream ostr;
+      ostr << " OF ELIMINATED VARIABLE " << *itvar << " IN [" << _Xlow[i] << "," << _Xupp[i] << "]";
+      _dag->output( _dag->subgraph( 1, &*itaux ), ostr.str() );
+//#endif
+    }
+  }
+
+  // erase unused constraints and corresponding bounds
+  auto itFvar = _Fvar.begin();
+  auto itFlow = _Flow.begin();
+  auto itFupp = _Fupp.begin();
+  for( unsigned j=0; j<_nF; ++j ){
+    if( !Fremain.count( j ) ){
+//#ifdef MC__MINLPBND_DEBUG_ELIM
+      std::cout << "REMOVING CONSTRAINT " << *itFvar << std::endl;
+//#endif
+      itFvar = _Fvar.erase( itFvar ); 
+      itFlow = _Flow.erase( itFlow ); 
+      itFupp = _Fupp.erase( itFupp );
+      continue;
+    }
+    ++itFvar; ++itFlow; ++itFupp;
+  }
+
+  // update variable and function size and type
+  _nX = _Xvar.size();
+  _nF = _Fvar.size();
+  _set_variable_class();    
+  _set_function_class();    
+}
+
+template <typename DAG, typename T, typename MIP>
+inline void
+MINLPBND<DAG,T,MIP>::_set_variable_class
 ()
 {
   FFDep Fworst( 0. );
@@ -1287,9 +1260,9 @@ MINLPBND<T,MIP>::_set_variable_class
   }
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_function_class
+MINLPBND<DAG,T,MIP>::_set_function_class
 ()
 {
   _Flin.clear();
@@ -1309,13 +1282,13 @@ MINLPBND<T,MIP>::_set_function_class
      case FFDep::N: _Fgal.insert( j );  break;
     }
     if( _pbclass < depworst ) _pbclass = depworst;
-    if( _Flow[j] == 0. && _Fupp[j] == 0. ) _Fctreq.insert( j );
+    if( j && _Flow[j] == 0. && _Fupp[j] == 0. ) _Fctreq.insert( j );
   }
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline bool
-MINLPBND<T,MIP>::bounded_domain
+MINLPBND<DAG,T,MIP>::bounded_domain
 ( double const& maxdiam, FFDep::TYPE const type )
 const
 {
@@ -1329,9 +1302,9 @@ const
   return true;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline bool
-MINLPBND<T,MIP>::update_bounds
+MINLPBND<DAG,T,MIP>::update_bounds
 ( T const* X, double const* Finc, bool const resetbnd )
 {
   // Variable bounds
@@ -1376,9 +1349,9 @@ MINLPBND<T,MIP>::update_bounds
   return true;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline int
-MINLPBND<T,MIP>::_propagate_bounds
+MINLPBND<DAG,T,MIP>::_propagate_bounds
 ()
 {
 #ifdef MC__MINLPBND_DEBUG_CP
@@ -1405,9 +1378,42 @@ MINLPBND<T,MIP>::_propagate_bounds
   return flag;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline int
-MINLPBND<T,MIP>::relax
+MINLPBND<DAG,T,MIP>::write
+( std::string const gmsfile, T const* X, double const* Finc, double const* Xinc,
+  const bool resetbnd )
+{
+  if( gmsfile.empty() ) return MIP::OTHER;
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+
+  // Update variable bounds
+  if( !update_bounds( X, Finc, resetbnd ) ){
+    std::cout << std::endl << "# REFORMULATED MODEL FOUND INFEASIBLE" << std::endl;
+    return MIP::INFEASIBLE;
+  }
+
+  int cpred = _propagate_bounds();
+  if( cpred < 0 ){
+    std::cout << std::endl << "# REFORMULATED MODEL FOUND INFEASIBLE (ROUND " << -cpred << ")" << std::endl;
+    return MIP::INFEASIBLE;
+  }
+
+  // Write relaxed model to GAMS file
+  if( options.DISPLEVEL > 0 )
+    std::cout << std::endl << "# WRITING REFORMULATED MODEL TO FILE " << gmsfile << std::endl;
+  GAMSWRITER<DAG,T> GMS;
+  GMS.add_variables( _nX, _Xvar.data(), _Xtyp.data(), _Xbnd.data(), Xinc );
+  GMS.set_functions( _dag, _nF, _Fvar.data(), _nX, _Xvar.data() );
+  GMS.set_objective( 0, _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
+  GMS.set_constraints( 0, _nF, _Fbnd.data() );
+  GMS.write( gmsfile );
+  return MIP::OTHER;
+}
+
+template <typename DAG, typename T, typename MIP>
+inline int
+MINLPBND<DAG,T,MIP>::relax
 ( T const* X, double const* Finc, double const* Xinc, const unsigned nref,
   const bool resetbnd, bool const reinit, std::string const gmsfile )
 {
@@ -1423,19 +1429,19 @@ MINLPBND<T,MIP>::relax
   _MIPSLV->options = options.MIPSLV;
   if( reinit ) init_polrelax(); // <<== COULD PASS Xinc HERE TOO??
   update_polrelax( 2, false, reinit? false: true );
-#ifdef MC__MINLPBND_DEBUG
+//#ifdef MC__MINLPBND_DEBUG
   std::cout << _POLenv;
-#endif
+//#endif
 
   // Write relaxed model to GAMS file
   if( !gmsfile.empty() ){
-    GAMSWRITER<T> GMS;
+    GAMSWRITER<DAG,T> GMS;
     GMS.set_cuts( &_POLenv, true );
     for( unsigned i=0; i<_nX0; i++ )
       GMS.set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr );
     GMS.set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
     GMS.write( gmsfile );
-    if( options. MIPSLV.DISPLEVEL > 0 )
+    if( options.MIPSLV.DISPLEVEL > 0 )
       std::cout << std::endl << "# WRITING MIP MODEL TO FILE " << gmsfile << std::endl;
     return MIP::OTHER;
   }
@@ -1470,9 +1476,9 @@ MINLPBND<T,MIP>::relax
   return _MIPSLV->get_status();
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline int
-MINLPBND<T,MIP>::_reduce
+MINLPBND<DAG,T,MIP>::_reduce
 ( unsigned const ix, bool const uplo )
 {
 #ifdef MC__MINLPBND_DEBUG
@@ -1490,9 +1496,9 @@ MINLPBND<T,MIP>::_reduce
   return _MIPSLV->get_status();
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline bool
-MINLPBND<T,MIP>::_tight
+MINLPBND<DAG,T,MIP>::_tight
 ()
 {
   // test if current bounds are tight
@@ -1501,9 +1507,9 @@ MINLPBND<T,MIP>::_tight
   return true;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline int
-MINLPBND<T,MIP>::_reduce
+MINLPBND<DAG,T,MIP>::_reduce
 ()
 {
   // solve reduction subproblems from closest to farthest from bounds
@@ -1590,9 +1596,9 @@ MINLPBND<T,MIP>::_reduce
   return _MIPSLV->get_status();
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline int
-MINLPBND<T,MIP>::reduce
+MINLPBND<DAG,T,MIP>::reduce
 ( unsigned& nred, T* X, double const* Finc, const bool resetbnd,
   bool const reinit )
 {
@@ -1700,9 +1706,9 @@ MINLPBND<T,MIP>::reduce
   return flag;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline int
-MINLPBND<T,MIP>::propagate
+MINLPBND<DAG,T,MIP>::propagate
 ( T* X, double const* Finc, const bool resetbnd )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1726,9 +1732,9 @@ MINLPBND<T,MIP>::propagate
   return MIP::OPTIMAL;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::init_polrelax
+MINLPBND<DAG,T,MIP>::init_polrelax
 ()
 {
   auto tstart = stats.start();
@@ -1749,7 +1755,7 @@ MINLPBND<T,MIP>::init_polrelax
   for( unsigned i=0; itX!=_Xvar.end(); ++itX, i++ )
     _POLXvar.push_back( PolVar<T>( &_POLenv, *itX, _Xbnd[i], (_Xtyp[i]? false: true) ) );
 
-  // Set nonlinear cuts
+  // Initialize relevant environments to construct relaxations
   for( auto const& meth : options.RELAXMETH ){
     switch( meth ){
     
@@ -1763,23 +1769,25 @@ MINLPBND<T,MIP>::init_polrelax
        // Reset Chebyshev basis map in DAG
        _Xmon.clear();
 
-       // Reset scaled variables in polyhedral image
-       _POLXscal.clear();
-       for( auto&& X : _Xscal )
-         _POLXscal.push_back( PolVar<T>( &_POLenv, X, T(-1e0,1e0), true ) );
+       // Resize auxiliary variables in DAG and polyhedral image
+       _Xaux.reserve( _nX );
+       _POLXaux.reserve( _nX );
+//        _POLXscal.clear();
+//        for( auto&& X : _Xscal )
+//          _POLXscal.push_back( PolVar<T>( &_POLenv, X, T(-1e0,1e0), true ) );
        // **no break** to continue into SCQ
        
      case Options::SCQ:
        // Chebyshev model environment reset
-       if( _CMenv && (_CMenv->maxvar() != _nX || _CMenv->maxord() != options.CMODPROP) ){
-         _CMXvar.clear();
-         delete _CMenv; _CMenv = 0;   
+       if( _SCMenv && (_SCMenv->setvar().size() != _nX || _SCMenv->maxord() != options.CMODPROP) ){
+         _SCMXvar.clear();
+         delete _SCMenv; _SCMenv = 0;   
        }
-       if( !_CMenv ){
+       if( !_SCMenv ){
          // Set Chebyshev model
-         _CMenv = new SCModel<T>( options.CMODPROP, _nX );
-         _CMenv->options = options.CMODEL;
-         _CMXvar.resize( _nX );
+         _SCMenv = new SCModel<T>( options.CMODPROP );
+         _SCMenv->options = options.CMODEL;
+         _SCMXvar.resize( _nX );
        }
        break;
 
@@ -1792,7 +1800,7 @@ MINLPBND<T,MIP>::init_polrelax
        if( !_ISMenv ){
          // Set interval superposition model
          _ISMenv = new ISModel<T>( _nX, options.ISMDIV );
-         //_ISMenv->options = options.ISMODEL;
+         _ISMenv->options = options.ISMODEL;
          _ISMXvar.resize( _nX );
        }
        break;
@@ -1802,9 +1810,9 @@ MINLPBND<T,MIP>::init_polrelax
   stats.walltime_polimg += stats.walltime( tstart );
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::update_polrelax
+MINLPBND<DAG,T,MIP>::update_polrelax
 ( unsigned const addcuts, bool const contcuts, bool const resetcuts )
 {
   auto tstart = stats.start();
@@ -1816,7 +1824,7 @@ MINLPBND<T,MIP>::update_polrelax
   _POLXmon.clear();
   _POLXprodmon.clear();
 
-  // Update polyhedral main variables
+  // Update polyhedral main variables AND DEPENDENT BOUNDS???
   auto itX = _POLXvar.begin();
   for( unsigned i=0; itX!=_POLXvar.end(); ++itX, i++ )
     itX->update( _Xbnd[i] );
@@ -1838,21 +1846,17 @@ MINLPBND<T,MIP>::update_polrelax
       // Add Chebyshev-derived polyhedral cuts
       case Options::SCDRL:
         // Add polyhedral cuts
-        _set_cuts_SCDRL();
+        _set_cuts_SCM( true );
         break;
 
       // Add Chebyshev-derived polyhedral cuts
       case Options::SCQ:
         // Add quadratic cuts
-        _set_cuts_SCQ();
+        _set_cuts_SCM( false );
         break;
 
       // Add Interval superposition-derived polyhedral cuts
       case Options::ISM:
-        // Update ISM variables
-        for( unsigned i=0; i<_nX; i++ )
-          _ISMXvar[i].set( _ISMenv, i, _Xbnd[i] );
-
         // Add polyhedral cuts
         _set_cuts_ISM();
         break;
@@ -1877,9 +1881,9 @@ MINLPBND<T,MIP>::update_polrelax
   _MIPSLV->options.CONTRELAX = CONTRELAX;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::refine_polrelax
+MINLPBND<DAG,T,MIP>::refine_polrelax
 ( double const* Xinc, bool const resetcuts )
 {
   auto tstart = stats.start();
@@ -1918,9 +1922,9 @@ MINLPBND<T,MIP>::refine_polrelax
   stats.walltime_polimg += stats.walltime( tstart );
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_cuts_LIN
+MINLPBND<DAG,T,MIP>::_set_cuts_LIN
 ()
 {
  // Add polyhedral cuts for each linear function
@@ -1948,9 +1952,119 @@ MINLPBND<T,MIP>::_set_cuts_LIN
 #endif
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_cuts_DRL
+MINLPBND<DAG,T,MIP>::_set_cuts_ISM
+()
+{
+  // Subset of functions to be relaxed
+  std::set<unsigned> ndxF;
+  for( unsigned j=0; j<_nF; j++ ){
+    if( ( options.LINCTRSEP      && _Flin.find( j ) != _Flin.end() )   // exclude cut of linear function
+     || ( options.SUBSETISM == 1 && _Fgal.find( j ) != _Fgal.end() )   // exclude cut of non-polynomial function
+     || ( options.SUBSETISM == 2 && _Fgal.find( j ) == _Fgal.end() ) ) // exclude cut of polynomial function
+      continue;
+    ndxF.insert( j );
+  }
+  if( ndxF.empty() ) return;
+
+  // Update ISM variables
+  for( unsigned i=0; i<_nX; i++ )
+    _ISMXvar[i].set( _ISMenv, i, _Xbnd[i] );
+
+  // Compute ISM bounds for each nonlinear function
+  _ISMFvar.assign( _nF, 0. );
+  for( auto itF=ndxF.begin(); itF!=ndxF.end(); ){
+    unsigned const j = *itF;
+
+    try{
+      _dag->eval( _Fops[j], _ISMwk, 1, &_Fvar[j], &_ISMFvar[j], _nX, _Xvar.data(), _ISMXvar.data() );
+#ifdef MC__MINLPBND_DEBUG_ISM
+      std::cout << "Interval superposition model for function F[" << j << "]: " << _ISMFvar[j];
+#endif
+    }
+    
+    catch(...){
+#ifdef MC__MINLPBND_DEBUG_ISM
+      std::cout << "Superposition model for function F[" << j << "]: failed" << std::endl;
+#endif
+      // No cut added for constraint #j in case evaluation failed
+      //_ISMFvar[j] = _IINF;
+      itF = ndxF.erase( itF ); // Exclude polynomial from quadratization and cuts
+      continue;
+    }
+
+    ++itF; // Increment only if current index wasn't erased from ndxF already
+  }
+
+  // Add cuts for ISM into polynomial image
+  _set_cuts_ISM( ndxF );
+
+#ifdef MC__MINLPBND_DEBUG_ISM
+  std::cout << _POLenv;
+#endif
+}
+
+template <typename DAG, typename T, typename MIP>
+inline void
+MINLPBND<DAG,T,MIP>::_set_cuts_ISM
+( std::set<unsigned> const& ndxF )
+{
+  // Auxiliary variables in polyhedral image are defined locally 
+  std::vector<std::vector<PolVar<T>>> POL_ISMaux( _nX );
+  std::vector<double> DL_ISMaux( _ISMenv->ndiv() );
+  std::vector<double> DU_ISMaux( _ISMenv->ndiv() );
+
+  // Compute ISM bounds for each nonlinear function
+  for( unsigned j : ndxF ){
+    _POLFvar[j].set( &_POLenv, _Fvar[j], _ISMFvar[j].B(), true );
+
+    // Polyhedral cut generation
+    double rhs = ( _ISMFvar[j].ndep()? 0.: -_ISMFvar[j].cst() );
+    auto cutF1 = *_POLenv.add_cut( PolCut<T>::LE, rhs, _POLFvar[j], -1. );
+    auto cutF2 = *_POLenv.add_cut( PolCut<T>::GE, rhs, _POLFvar[j], -1. );
+    for( unsigned i=0; i<_nX; ++i ){
+      auto&& ISMFji = _ISMFvar[j].C()[i];
+      if( ISMFji.empty() ) continue;
+      if( POL_ISMaux[i].empty() ){
+        POL_ISMaux[i].resize( _ISMenv->ndiv() );
+        for( unsigned k=0; k<_ISMenv->ndiv(); ++k )
+          POL_ISMaux[i][k].set( &_POLenv, Op<T>::zeroone(), options.ISMCONT );
+      }
+      for( unsigned k=0; k<_ISMenv->ndiv(); ++k ){
+        DL_ISMaux[k] = Op<T>::l( ISMFji[k] );
+        DU_ISMaux[k] = Op<T>::u( ISMFji[k] );
+      }
+      cutF1->append( _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data() );
+      cutF2->append( _ISMenv->ndiv(), POL_ISMaux[i].data(), DU_ISMaux.data() );
+    }
+  }
+ 
+  // Add polyhedral cuts for ISM-participating variables
+  for( unsigned i=0; i<_nX; i++ ){
+    if( POL_ISMaux[i].empty() ) continue;
+    // Auxiliaries add up to 1
+    for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ )
+      DL_ISMaux[jsub] = 1.;
+    _POLenv.add_cut( PolCut<T>::EQ, 1., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data() );
+    // Relationship between variables and auxiliaries
+    PolVar<T> POLvarL( 0. ), POLvarU( 0. );
+    auto&& ISMXi = _ISMXvar[i].C()[i];
+#ifdef MC__MINLPBND_DEBUG_ISM
+    assert( !ISMXi.empty() );
+#endif
+    for( unsigned k=0; k<_ISMenv->ndiv(); k++ ){
+      DL_ISMaux[k] = Op<T>::l(ISMXi[k]);
+      DU_ISMaux[k] = Op<T>::u(ISMXi[k]);
+    }
+    _POLenv.add_cut( PolCut<T>::LE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data(), _POLXvar[i], -1. );
+    _POLenv.add_cut( PolCut<T>::GE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DU_ISMaux.data(), _POLXvar[i], -1. );
+  }
+}
+
+template <typename DAG, typename T, typename MIP>
+inline void
+MINLPBND<DAG,T,MIP>::_set_cuts_DRL
 ()
 {
   // Subset of functions to be relaxed
@@ -1967,17 +2081,19 @@ MINLPBND<T,MIP>::_set_cuts_DRL
 
   // Add polyhedral cuts for selected functions
   for( unsigned j : Frel ){
-  //for( unsigned j=0; j<_nF; j++ ){
     try{
       _dag->eval( _Fops[j], _POLwk, 1, &_Fvar[j], &_POLFvar[j], _nX, _Xvar.data(), _POLXvar.data() );
+
       // Update bounds of intermediate factors from constraint propagation results
       if( options.CPMAX ){
         _dag->wkextract( _Fops[j], _Iwk, _Fallops, _CPbnd );
         for( unsigned i=0; i<_Iwk.size(); i++ ) _POLwk[i].update( _Iwk[i] );
       }
+
       // Generate cuts
       _POLenv.generate_cuts( 1, &_POLFvar[j], false );
     }
+    
     catch(...){
       // No cut added for function #j in case DAG evaluation failed
       continue;
@@ -1986,10 +2102,12 @@ MINLPBND<T,MIP>::_set_cuts_DRL
 
   // Add polyhedral cuts for quadratised polynomial functions
   if( options.REFORMMETH.count( Options::QUAD ) && !Fsalg.empty() ){
+
     // Set monomial vector from quadratic form into polyhedral image
-    _set_mon_SQ();
+    _set_mon_SQ( _SQenv, t_quad::Options::MONOM, false, false );
+
     // Add cuts for quadratic form into polynomial image
-    _set_cuts_SQ( Fsalg, false );
+    _set_cuts_SQ( _SQenv, Fsalg, false );
   }
 
 #ifdef MC__MINLPBND_DEBUG_DRL
@@ -1998,10 +2116,10 @@ MINLPBND<T,MIP>::_set_cuts_DRL
 #endif
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_cuts_SCQ
-()
+MINLPBND<DAG,T,MIP>::_set_cuts_SCM
+( bool const DRLcuts )
 {
   // Subset of functions to be relaxed
   std::set<unsigned> ndxF;
@@ -2016,246 +2134,315 @@ MINLPBND<T,MIP>::_set_cuts_SCQ
 
   // Update sparse Chebyshev variable bounds
   for( unsigned i=0; i<_nX; i++ ){
-    _CMXvar[i].set( _CMenv, i, _Xbnd[i] );
-    if( _CMenv->scalvar()[i] <= options.CMODEL.MIN_FACTOR )
-      _CMXvar[i] = _Xbnd[i];
+    _SCMXvar[i].set( _SCMenv, i, _Xbnd[i] );
+    if( _SCMenv->scalvar().at(i) <= options.CMODEL.MIG_ATOL )
+      _SCMXvar[i] = _Xbnd[i];
   }
 
   // Compute sparse Chebyshev model for each nonlinear function
   const unsigned MAXORD = (!options.CMODCUTS || options.CMODCUTS>options.CMODPROP)?
                           options.CMODPROP: options.CMODCUTS;
 
-  _CMFvar.assign( _nF, 0. );
-  for( unsigned j : ndxF ){
+  _SCMFvar.assign( _nF, 0. );
+  for( auto itF=ndxF.begin(); itF!=ndxF.end(); ){
+    unsigned const j = *itF;
     try{
-      _dag->eval( _Fops[j], _CMwk, 1, &_Fvar[j], &_CMFvar[j], _nX, _Xvar.data(), _CMXvar.data() );
-#ifdef MC__MINLPBND_DEBUG_SCQ
-      std::cout << "Chebyshev model for function F[" << j << "]: " << _CMFvar[j];
+      _dag->eval( _Fops[j], _SCMwk, 1, &_Fvar[j], &_SCMFvar[j], _nX, _Xvar.data(), _SCMXvar.data() );
+#ifdef MC__MINLPBND_DEBUG_SCM
+      std::cout << "Chebyshev model for function F[" << j << "]: " << _SCMFvar[j];
 #endif
       // Test for too large Chebyshev bounds or NaN
-      if( !(Op<SCVar<T>>::diam(_CMFvar[j]) <= options.CMODDMAX) ) throw(0);
+      if( !(Op<SCVar<T>>::diam(_SCMFvar[j]) <= options.CMODDMAX) ) throw(0);
 
-      // Simplify sparse Chebyshev model
-      _CMFvar[j].simplify( options.CMODEL.MIN_FACTOR, MAXORD );
+      // Convert and simplify sparse Chebyshev model
+      switch( options.SCQUAD.BASIS ){
+       case t_quad::Options::MONOM:
+       {
+        auto&& [coefmon,bndrem] = _SCMFvar[j].to_monomial( options.MONSCALE, options.CMODEL.MIG_ATOL, options.CMODEL.MIG_RTOL, MAXORD );
+        _SCMFvar[j].set( coefmon );
+        _SCMFvar[j].R() += bndrem;
+        break;
+       }
+       case t_quad::Options::CHEB:
+        _SCMFvar[j].simplify( options.CMODEL.MIG_ATOL, options.CMODEL.MIG_RTOL, MAXORD );
+        break;
+      }
     }
+
     catch( int ecode ){
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCM
       std::cout << "Chebyshev model bound too weak!\n";
 #endif
       T IFvarj;
-      Op<T>::inter( IFvarj, _IINF, _CMFvar[j].B() );
-      _CMFvar[j] = IFvarj;
+      Op<T>::inter( IFvarj, _IINF, _SCMFvar[j].B() );
+      _SCMFvar[j] = IFvarj;
+      itF = ndxF.erase( itF ); // Exclude polynomial from quadratization and cuts
+      continue;
     }
+
     catch(...){
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCM
       std::cout << "Chebyshev model for function F[" << j << "]: failed" << std::endl;
 #endif
       // No cut added for constraint #j in case evaluation failed
-      _CMFvar[j] = _IINF;
+      _SCMFvar[j] = _IINF;
+      itF = ndxF.erase( itF ); // Exclude polynomial from quadratization and cuts
       continue;
     }
+
+    ++itF; // Increment only if current index wasn't erased from ndxF already
   }
  
-  // Perform quadratisation of polynomial part of sparse Chebyshev models
-  _SQenv.reset();
-  _SQenv.options = options.SQUAD;
-  SQuad::t_SPolyMonCoef coefmon;
-  
-  for( unsigned j : ndxF ){
-    if( !(Op<SCVar<T>>::diam(_CMFvar[j]) < Op<T>::diam(_IINF)) )         // exclude unbounded constraints
-      continue;
-    switch( options.SQUAD.BASIS ){
-     case SQuad::Options::MONOM:
-     {
-      auto scvmon = _CMFvar[j].to_monomial( options.MONSCALE, options.CMODEL.MIN_FACTOR, MAXORD );
-      coefmon = scvmon.first;
-      _CMFvar[j].R() += scvmon.second;
-      break;
-     }
-     case SQuad::Options::CHEB:
-      coefmon = _CMFvar[j].coefmon(); // already simplified earlier
-      break;
-    }
-#ifndef MC__MINLPBND_DEBUG_SCQ
-    _SQenv.process( coefmon, options.SQUAD.BASIS );
-#else
-    double viol = _SQenv.process( coefmon, options.SQUAD.BASIS, true );
-    if( viol > 1e-15 ){
-      std::cout << _CMFvar[j].display( coefmon, options.SQUAD.BASIS );
-      std::cout << "violation: " << viol << std::endl;
-      int dum; std::cout << "PAUSED --"; std::cin >> dum;
-    }
-#endif
+  // Apply decomposition-linearization-relaxation to Chebyshev-derived cuts
+  if( DRLcuts ){
+    // Set monomial vector from Chebyshev model into polyhedral image
+    _set_mon_SCDRL( ndxF, options.SCQUAD.BASIS, options.MONSCALE, true );
+
+    // Add Chebyshev-derived cuts to polynomial image
+    _set_cuts_SCDRL( ndxF );
   }
-#ifdef MC__MINLPBND_DEBUG_SCQ
-  std::cout << _SQenv;
- { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+ 
+  // Apply quadratisation to Chebyshev-derived cuts
+  else{
+    // Perform quadratisation of polynomial part of sparse Chebyshev models
+    _SCQenv.reset();
+    _SCQenv.options = options.SCQUAD;
+    _SCQenv.process( ndxF, _SCMFvar.data(), &SCVar<T>::coefmon, options.SQUAD.BASIS );
+#ifdef MC__MINLPBND_DEBUG_SCM
+    double viol = _SCQenv.check( ndxF, _SCMFvar.data(), &SCVar<T>::coefmon, options.SQUAD.BASIS );
+    std::cout << "violation: " << viol << std::endl << _SCQenv << std::endl;
+    {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
 
-  // Set monomial vector from quadratic form into polyhedral image
-  _set_mon_SCQ();
+    // Set monomial vector from quadratic forms into polyhedral image
+    _set_mon_SQ( _SCQenv, options.SCQUAD.BASIS, options.MONSCALE, false );
 
-  // Add cuts for quadratic form into polynomial image
-  _set_cuts_SQ( ndxF, true );
+    // Add quadratic cuts into polynomial image
+    _set_cuts_SQ( _SCQenv, ndxF, true );
+  }
 
-#ifdef MC__MINLPBND_DEBUG_SCQ
+#ifdef MC__MINLPBND_DEBUG_SCM
  std::cout << _POLenv;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_mon_SQ
-()
+MINLPBND<DAG,T,MIP>::_set_cuts_SCDRL
+( std::set<unsigned> const& ndxF )
 {
-  // Add monomial vector of quadratic from to polyhedral image
-  for( auto const& mon : _SQenv.SetMon() ){
-    if( !mon.tord ) continue;
-    
-    // Insert monomial as auxiliary variable in polyhedral image
-#ifdef MC__MINLPBND_DEBUG_SQ
-    std::cout << "Current monomial: " << mon.display(options.SQUAD.BASIS) << std::endl;
-#endif
-    assert( _POLXmon.find( mon ) == _POLXmon.end() );
-
-    // First-order monomials correspond to existing variables
-    if( mon.tord == 1 ){
-      auto ivar = mon.expr.cbegin()->first;
-      _Xmon[mon]    = _Xvar[ivar];
-      _POLXmon[mon] = _POLXvar[ivar];
-#ifdef MC__MINLPBND_DEBUG_SQ
-      std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
-                << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
-#endif
-    }
-      
-    // Add higher-order monomials to polyhedral image
-    else{
-      _POLXmon[mon].set( &_POLenv, _get_mon(mon), _bnd_mon(mon), true );
-#ifdef MC__MINLPBND_DEBUG_SQ
-      std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
-                << _POLXmon[mon].range() << std::endl;
-#endif
-    }
+  // Add Chebyshev-derived cuts for selected expressions
+  for( unsigned j : ndxF ){
+    T Rj = _SCMFvar[j].R();
+    double aj0 = _SCMFvar[j].constant( true ); // get constant coefficient and remove it from model
+    _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rj)-aj0, _POLXmon, _SCMFvar[j].coefmon(), _POLFvar[j],  -1. );
+    _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Rj)-aj0, _POLXmon, _SCMFvar[j].coefmon(), _POLFvar[j],  -1. );
   }
 
-#ifdef MC__MINLPBND_DEBUG_SQ
+#ifdef MC__MINLPBND_DEBUG_SCDRL
+  std::cout << _POLenv;
+  { int dum; std::cin >> dum; }
+#endif
+}
+
+template <typename DAG, typename T, typename MIP>
+inline void
+MINLPBND<DAG,T,MIP>::_set_mon_SQ
+( t_quad const& SQenv, int const BASIS, bool const SCALED,
+  bool const DAGINSERT )
+{
+  // Add all monomials in quadratic forms to polyhedral image
+  for( auto const& mon : SQenv.SetMon() ){
+    if( !mon.tord ) continue;
+#ifdef MC__MINLPBND_DEBUG_MONSQ
+    std::cout << "Current monomial: " << mon.display(BASIS) << std::endl;
+#endif
+    assert( _POLXmon.find( mon ) == _POLXmon.end() );
+    _set_mon_DRL( mon, BASIS, SCALED, DAGINSERT );
+  }
+
+#ifdef MC__MINLPBND_DEBUG_MONSQ
   std::cout << "Monomial map:" << std::endl;
   for( auto const& [mon,polvar] : _POLXmon )
-    std::cout << " " << mon.display(options.SQUAD.BASIS) << " == " << polvar
+    std::cout << " " << mon.display(BASIS) << " == " << polvar
+              << " (DAG: " << polvar.var() << ")" << std::endl;
+  std::cout << _POLenv;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+  if( !DAGINSERT ) return;
+
+  // Add DRL cuts for participating monomials
+  _add_mon_DRL();
+#ifdef MC__MINLPBND_DEBUG_MONSCDRL
+  std::cout << "Monomial map:" << std::endl;
+  for( auto const& [mon,polvar] : _POLXmon )
+    std::cout << " " << mon.display(BASIS) << " == " << polvar
               << " (DAG: " << polvar.var() << ")" << std::endl;
   std::cout << _POLenv;
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_mon_SCQ
+MINLPBND<DAG,T,MIP>::_set_mon_SCDRL
+( std::set<unsigned> const& ndxF, int const BASIS, bool const SCALED,
+  bool const DAGINSERT )
+{
+  // Add all monomials in sparse Chebyshev models to polyhedral image
+  for( unsigned j : ndxF ){
+    for( auto const& [mon,coef] : _SCMFvar[j].coefmon() ){
+#ifdef MC__MINLPBND_DEBUG_MONSCDRL
+      std::cout << "Current monomial: " << mon.display(BASIS) << std::endl;
+#endif
+      _set_mon_DRL( mon, BASIS, SCALED, DAGINSERT );
+    }
+  }
+
+#ifdef MC__MINLPBND_DEBUG_MONSCDRL
+  std::cout << "Monomial map:" << std::endl;
+  for( auto const& [mon,polvar] : _POLXmon )
+    std::cout << " " << mon.display(BASIS) << " == " << polvar
+              << " (DAG: " << polvar.var() << ")" << std::endl;
+  std::cout << _POLenv;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+  if( !DAGINSERT ) return;
+
+  // Add DRL cuts for participating monomials
+  _add_mon_DRL();
+#ifdef MC__MINLPBND_DEBUG_MONSCDRL
+  std::cout << "Monomial map:" << std::endl;
+  for( auto const& [mon,polvar] : _POLXmon )
+    std::cout << " " << mon.display(BASIS) << " == " << polvar
+              << " (DAG: " << polvar.var() << ")" << std::endl;
+  std::cout << _POLenv;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+}
+
+
+template <typename DAG, typename T, typename MIP>
+inline void
+MINLPBND<DAG,T,MIP>::_add_mon_DRL
 ()
 {
-  // Add monomial vector of quadratic from to polyhedral image
-  for( auto const& mon : _SQenv.SetMon() ){
-    if( !mon.tord ) continue;
-    
-    // Insert monomial as auxiliary variable in polyhedral image
-#ifdef MC__MINLPBND_DEBUG_SCQ
-    std::cout << "Current monomial: " << mon.display(options.SQUAD.BASIS) << std::endl;
+  // Gather DAG variables participating in monomials
+  auto first_Xaux = _Xmon.lower_bound( t_mon( 1, t_mon::t_expr() ) );
+  auto last_Xaux  = _Xmon.lower_bound( t_mon( 2, t_mon::t_expr() ) );
+  _Xaux.clear();
+  for( auto it = first_Xaux; it != last_Xaux; ++it )
+    _Xaux.push_back( it->second );
+
+  // Gather POL variables participating in monomials
+  auto first_POLXaux = _POLXmon.lower_bound( t_mon( 1, t_mon::t_expr() ) );
+  auto last_POLXaux  = _POLXmon.lower_bound( t_mon( 2, t_mon::t_expr() ) );
+  _POLXaux.clear();
+  for( auto it = first_POLXaux; it != last_POLXaux; ++it )
+    _POLXaux.push_back( it->second );
+
+  // Add DRL cuts for participating monomials
+  assert( _Xaux.size() == _POLXaux.size() );
+  std::map< t_mon, PolVar<T>, lt_mon > POLXauxmon;
+  _dag->eval( _POLwk, _Xmon, _POLXmon, _Xaux.size(), _Xaux.data(), _POLXaux.data() );
+  _POLenv.generate_cuts( _POLXmon, false );
+
+#ifdef MC__MINLPBND_DEBUG_MONDRL
+  _dag->output( _dag->subgraph( _Xmon ) );
+  { int dum; std::cin >> dum; }
 #endif
-    assert( _POLXmon.find( mon ) == _POLXmon.end() );
-    switch( options.SQUAD.BASIS ){
+}
+
+template <typename DAG, typename T, typename MIP>
+inline void
+MINLPBND<DAG,T,MIP>::_set_mon_DRL
+( t_mon const& mon, int const BASIS, bool const SCALED, bool const DAGINSERT )
+{
+  if( !mon.tord || _POLXmon.find( mon ) != _POLXmon.end() ) return;
+
+  switch( BASIS ){
       
-     // Case of power monomials
-     case SQuad::Options::MONOM:
-      if( !options.MONSCALE ){
-        if( mon.tord == 1 ){
-          // non-scaled first-order monomials correspond to existing variables
-          auto const& ivar = mon.expr.begin()->first;
-          _Xmon[mon] = _Xvar[ivar];
-          _POLXmon[mon] = _POLXvar[ivar];
-#ifdef MC__MINLPBND_DEBUG_SCQ
-          std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
-                    << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
+   // Case of power monomials
+   case t_poly::Options::MONOM:
+    if( !SCALED ){
+      if( mon.tord == 1 ){
+        // non-scaled first-order monomials correspond to existing variables
+        auto const& ivar = mon.expr.begin()->first;
+        _Xmon[mon] = _Xvar[ivar];
+        _POLXmon[mon] = _POLXvar[ivar];
+#ifdef MC__MINLPBND_DEBUG_MONDRL
+        std::cout << " " << _POLXvar[ivar]  << " (DAG: " << _Xvar[ivar] << "): "
+                  << _POLXvar[ivar].range() << ", " << _Xbnd[ivar] << std::endl;
 #endif
-        }
-        else{
-          // add unscaled power monomial to polyhedral image
-          _POLXmon[mon].set( &_POLenv, _get_mon(mon), _bnd_mon(mon), true );
-#ifdef MC__MINLPBND_DEBUG_SCQ
-          std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                    << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
-                    << _POLXmon[mon].range() << std::endl;
-#endif
-        }
-        continue; // Loop to next monomial in _SQenv.SetMon()
       }
-
-      // add scaled power monomial to polyhedral image
-      _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), (mon.gcexp()%2? T(-1e0,1e0): T(0e0,1e0)), true );
-#ifdef MC__MINLPBND_DEBUG_SCQ
-      std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
-                << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
-                << _POLXmon[mon].range() << std::endl;
+      else{
+        // add unscaled power monomial to polyhedral image
+	FFVar const& Xmon = _get_mon( mon, BASIS, DAGINSERT );
+        _POLXmon[mon].set( &_POLenv, Xmon, _bnd_mon( mon, BASIS ), true );
+#ifdef MC__MINLPBND_DEBUG_MONDRL
+        std::cout << " (" << mon.display(BASIS) << ") = "
+                  << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+                  << _POLXmon[mon].range() << std::endl;
 #endif
-      break;
+      }
+      return;
+    }
 
-     // Case of Chebyshev monomials
-     case SQuad::Options::CHEB:
+    // add scaled power monomial to polyhedral image
+    _POLXmon[mon].set( &_POLenv, _get_mon( mon, BASIS, DAGINSERT ), (mon.gcexp()%2? T(-1e0,1e0): T(0e0,1e0)), true );
+#ifdef MC__MINLPBND_DEBUG_MONDRL
+    std::cout << " (" << mon.display(BASIS) << ") = "
+              << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
+              << _POLXmon[mon].range() << std::endl;
+#endif
+    break;
+
+    // Case of Chebyshev monomials
+    case t_quad::Options::CHEB:
       // add Chebyshev monomial to polyhedral image
-      _POLXmon[mon] = PolVar<T>( &_POLenv, _get_mon(mon), T(-1e0,1e0), true );
-#ifdef MC__MINLPBND_DEBUG_SCQ
-      std::cout << " (" << mon.display(options.SQUAD.BASIS) << ") = "
+      _POLXmon[mon].set( &_POLenv, _get_mon( mon, BASIS, DAGINSERT ), T(-1e0,1e0), true );
+#ifdef MC__MINLPBND_DEBUG_MONDRL
+      std::cout << " (" << mon.display(BASIS) << ") = "
                 << _POLXmon[mon] << " (DAG: " << _POLXmon[mon].var() << "): "
                 << _POLXmon[mon].range() << std::endl;
 #endif
       break;
-    }
-
-    // Add linear cut between degree 1 monomial and actual (unscaled) decision variable
-    if( mon.tord == 1 ){
-      auto const& ivar = mon.expr.begin()->first;
-#ifndef MC__MINLPBND_DEBUG_SCQ
-      _POLenv.add_cut( PolCut<T>::EQ, _CMenv->refvar()[ivar], _POLXvar[ivar],  1.,
-                                      _POLXmon[mon], -_CMenv->scalvar()[ivar] );
-#else
-      auto cutX = _POLenv.add_cut( PolCut<T>::EQ, _CMenv->refvar()[ivar], _POLXvar[ivar],  1.,
-                                                  _POLXmon[mon], -_CMenv->scalvar()[ivar] );
-      std::cout << "Scaling cut for variable X[" << ivar << "]: " << **cutX << std::endl;
-#endif
-    }
   }
 
-#ifdef MC__MINLPBND_DEBUG_SCQ
-  std::cout << "Monomial map:" << std::endl;
-  for( auto const& [mon,polvar] : _POLXmon )
-    std::cout << " " << mon.display(options.SQUAD.BASIS) << " == " << polvar
-              << " (DAG: " << polvar.var() << ")" << std::endl;
-  std::cout << _POLenv;
-  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+  // Add linear cut between degree 1 monomial and actual (unscaled) decision variable
+  if( mon.tord == 1 ){
+    auto const& ivar = mon.expr.begin()->first;
+#ifndef MC__MINLPBND_DEBUG_MONDRL
+    _POLenv.add_cut( PolCut<T>::EQ, _SCMenv->refvar().at(ivar), _POLXvar[ivar],  1.,
+                     _POLXmon[mon], -_SCMenv->scalvar().at(ivar) );
+#else
+    auto cutX = _POLenv.add_cut( PolCut<T>::EQ, _SCMenv->refvar().at(ivar), _POLXvar[ivar],  1.,
+                                 _POLXmon[mon], -_SCMenv->scalvar().at(ivar) );
+    std::cout << "Scaling cut for variable X[" << ivar << "]: " << **cutX << std::endl;
 #endif
+  }
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_set_cuts_SQ
-( std::set<unsigned> ndxF, bool const chkrem )
+MINLPBND<DAG,T,MIP>::_set_cuts_SQ
+( t_quad& SQenv, std::set<unsigned> const& ndxF, bool const chkrem )
 {
   // Add cuts for entries in MatFct
-  auto itF = ndxF.begin();
-  for( auto const& mat : _SQenv.MatFct() ){
-    assert( itF != ndxF.end() );
+  auto itF = ndxF.cbegin();
+  for( auto const& mat : SQenv.MatFct() ){
+    assert( itF != ndxF.cend() );
     PolCut<T> *cutF1 = nullptr, *cutF2 = nullptr;
-    if( !chkrem || Op<T>::diam(_CMFvar[*itF].R()) == 0. ){
+    if( !chkrem || Op<T>::diam(_SCMFvar[*itF].R()) == 0. ){
       cutF1 = *_POLenv.add_cut( PolCut<T>::EQ, 0., _POLFvar[*itF], -1. );
     }
     else{
-      cutF1 = *_POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(_CMFvar[*itF].R()), _POLFvar[*itF], -1. );
-      cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(_CMFvar[*itF].R()), _POLFvar[*itF], -1. );
+      cutF1 = *_POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(_SCMFvar[*itF].R()), _POLFvar[*itF], -1. );
+      cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(_SCMFvar[*itF].R()), _POLFvar[*itF], -1. );
     }
     // Separate quadratic term
-    _add_to_cuts( _SQenv, mat, cutF1, cutF2 );
+    _add_to_cuts( SQenv, mat, cutF1, cutF2 );
 #ifdef MC__MINLPBND_DEBUG_SQ
     std::cout << "Main cuts for function F[" << *itF << "]: " << *cutF1 << std::endl;
     if( cutF2 )  std::cout << "                             " << *cutF2 << std::endl;
@@ -2267,10 +2454,10 @@ MINLPBND<T,MIP>::_set_cuts_SQ
 #ifdef MC__MINLPBND_DEBUG_SQ
   unsigned ired = 0;
 #endif
-  for( auto const& mat : _SQenv.MatRed() ){
+  for( auto const& mat : SQenv.MatRed() ){
     PolCut<T> *cutR = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
     //_add_to_cuts( mat, cutR );
-    _add_to_cuts( _SQenv, mat, cutR );
+    _add_to_cuts( SQenv, mat, cutR );
 #ifdef MC__MINLPBND_DEBUG_SQ
     std::cout << "Reduction cuts #" << ++ired << ": " << *cutR << std::endl;
 #endif
@@ -2281,8 +2468,8 @@ MINLPBND<T,MIP>::_set_cuts_SQ
 #ifdef MC__MINLPBND_DEBUG_SQ
     unsigned ipsd = 0;
 #endif
-    _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
-    for( auto const& mat : _SQenv.MatPSD() ){
+    SQenv.tighten( options.PSDQUADCUTS>1? true: false );
+    for( auto const& mat : SQenv.MatPSD() ){
       PolCut<T> *cutP = *_POLenv.add_cut( PolCut<T>::GE, 0. );
       _add_to_cuts( mat, cutP );
 #ifdef MC__MINLPBND_DEBUG_SQ
@@ -2292,22 +2479,38 @@ MINLPBND<T,MIP>::_set_cuts_SQ
   }
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline T
-MINLPBND<T,MIP>::_bnd_mon
-( SPolyMon const& mon )
+MINLPBND<DAG,T,MIP>::_bnd_cheb
+( T const& x, const unsigned n )
+const
+{
+  switch( n ){
+    case 0:  return 1.;
+    case 1:  return x;
+    case 2:  return 2.*Op<T>::sqr(x)-1.;
+    default: return n%2? 2.*_bnd_cheb(x,n/2)*_bnd_cheb(x,n/2+1)-x:
+                         2.*Op<T>::sqr(_bnd_cheb(x,n/2))-1.;
+    //default: return 2.*x*_bnd_cheb(x,n-1)-_bnd_cheb(x,n-2);
+  }
+}
+
+template <typename DAG, typename T, typename MIP>
+inline T
+MINLPBND<DAG,T,MIP>::_bnd_mon
+( t_mon const& mon, int const BASIS )
 const
 {
   // compute (unscaled) power monomial bound
   T bndmon( 1e0 );
   for( auto const& [ivar,iord] : mon.expr ){
-    switch( options.SQUAD.BASIS ){
+    switch( BASIS ){
      // Monomial basis
-     case SQuad::Options::MONOM:
+     case t_poly::Options::MONOM:
       bndmon *= Op<T>::pow( _POLXvar[ivar].range(), (int)iord );
       break;
      // Chebyshev basis
-     case SQuad::Options::CHEB:
+     case t_poly::Options::CHEB:
       bndmon *= _bnd_cheb( _POLXvar[ivar].range(), iord );
       break;
     }
@@ -2315,31 +2518,58 @@ const
   return bndmon;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline FFVar const&
-MINLPBND<T,MIP>::_get_mon
-( SPolyMon const& mon )
+MINLPBND<DAG,T,MIP>::_get_mon
+( t_mon const& mon, int const BASIS, bool const DAGINSERT )
 {
+  assert( mon.tord );
   auto itXmapmon = _Xmon.find( mon );
   if( itXmapmon != _Xmon.end() ) return itXmapmon->second;
 
-  FFVar Xmon( _dag );
+  if( mon.tord == 1 || !DAGINSERT ){
+    FFVar Xmon( _dag );
+    auto itXmon = _dag->Vars().find( &Xmon );
+    _Xmon[mon] = **itXmon;
+    return **itXmon;
+  }
+
+  _Xaux.resize( mon.expr.size() );
+  unsigned nvar = 0;
+  for( auto const& [ivar,ord] : mon.expr ){
+    // This assumes that variables are already available in _Xmon
+    FFVar const& var = _Xmon[t_mon(ivar)];
+    switch( BASIS ){
+      case t_poly::Options::MONOM: _Xaux[nvar++] = pow( var, (int)ord ); break;
+      case t_poly::Options::CHEB:  _Xaux[nvar++] = cheb(var, ord );      break;
+    }
+  }
+  FFVar Xmon;
+  switch( BASIS ){
+    case t_poly::Options::MONOM: Xmon = FFBase::prod( nvar, _Xaux.data() );    break;
+    case t_poly::Options::CHEB:  Xmon = Op<FFVar>::prod( nvar, _Xaux.data() ); break;
+  }
+#ifdef MC__MINLPBND_DEBUG_MONDRL
+  std::cout << "Subgraph of monomial " << mon.display(BASIS) << std::endl;
+  _dag->output( _dag->subgraph( 1, &Xmon ) );
+  { int dum; std::cin >> dum; }
+#endif
   auto itXmon = _dag->Vars().find( &Xmon );
   _Xmon[mon] = **itXmon;
   return **itXmon;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_add_to_cuts
-( SQuad const& _SQenv, SQuad::t_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
+MINLPBND<DAG,T,MIP>::_add_to_cuts
+( t_quad const& SQenv, t_quad::map_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   // DC decomposition not required
     if( !options.DCQUADCUTS )
       return _add_to_cuts( mat, cut1, cut2 );
 
   // DC decomposition required
-  for( auto const& matsep : _SQenv.separate( mat ) ){
+  for( auto const& matsep : SQenv.separate( mat ) ){
   
     // Append monomial if single term
     if( matsep.size() == 1 ){
@@ -2356,17 +2586,17 @@ MINLPBND<T,MIP>::_add_to_cuts
 
     // Introduce auxiliary cuts for DC factorization
     PolCut<T> *cutDC = *_POLenv.add_cut( PolCut<T>::EQ, 0., POLsep, -1. );
-    for( auto const& [eigval,eigterm] : _SQenv.factorize( matsep ) ){
+    for( auto const& [eigval,eigterm] : SQenv.factorize( matsep ) ){
       auto const& POLEVSQ = _append_cuts_dcdec( eigterm );
       cutDC->append( POLEVSQ, eigval );
     }
   }
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::_add_to_cuts
-( SQuad::t_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
+MINLPBND<DAG,T,MIP>::_add_to_cuts
+( t_quad::map_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   for( auto const& [ijmon,coef] : mat ){
     // Constant term
@@ -2396,10 +2626,10 @@ MINLPBND<T,MIP>::_add_to_cuts
   }
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline T
-MINLPBND<T,MIP>::_get_range
-( SQuad::t_SQuad const& mat )
+MINLPBND<DAG,T,MIP>::_get_range
+( t_quad::map_SQuad const& mat )
 {
   T range = 0.;
   for( auto const& [ijmon,coef] : mat ){
@@ -2418,10 +2648,10 @@ MINLPBND<T,MIP>::_get_range
   return range;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline PolVar<T>
-MINLPBND<T,MIP>::_append_cuts_dcdec
-( SQuad::t_SPolyMonCoef const& eigterm )
+MINLPBND<DAG,T,MIP>::_append_cuts_dcdec
+( t_quad::map_SPoly const& eigterm )
 {
   // New auxiliary variable and cut for linear combition of monomials
   PolCut<T> *cutEV = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
@@ -2445,10 +2675,10 @@ MINLPBND<T,MIP>::_append_cuts_dcdec
   return POLEVSQ;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline PolVar<T>
-MINLPBND<T,MIP>::_append_cuts_monprod
-( SQuad::key_SQuad const& ijmon )
+MINLPBND<DAG,T,MIP>::_append_cuts_monprod
+( t_quad::key_SQuad const& ijmon )
 {
   // Seach for pair ijmon in _POLXprodmon
   auto itijmon = _POLXprodmon.find( ijmon );
@@ -2481,406 +2711,20 @@ MINLPBND<T,MIP>::_append_cuts_monprod
   return itijmon->second;
 }
 
-template <typename T, typename MIP>
-inline void
-MINLPBND<T,MIP>::_set_cuts_SCDRL
-()
-{
-//  // reset bases maps
-//  const unsigned basisord = (!options.CMODCUTS || options.CMODCUTS>options.CMODPROP)?
-//                            options.CMODPROP: options.CMODCUTS;
-//  _Xmon.clear();
-//  _POLXmon.clear();
-
-//  // Add cuts for variable scaling and basis polynomials (up to order options.CMODCUT)
-//  // TEST FOR PARTICIPATING VARIABLES FIRST?!?
-//  // if( _var_lin.find( ip ) != _var_lin.end() ) continue; // only nonlinearly participating variables
-//  auto itv = _POLscalvar.begin();
-//  for( unsigned i=0; itv!=_POLscalvar.end(); ++itv, i++ ){
-//    if( _CMenv->scalvar()[i] > options.CMODEL.MIN_FACTOR )
-//      _POLenv.add_cut( PolCut<T>::EQ, _CMenv->refvar()[i], _POLvar[i], 1., *itv, -_CMenv->scalvar()[i] );
-//    //else{
-//    //  _POLenv.add_cut( PolCut<T>::GE, _CMenv->refvar()[i]-_CMenv->scalvar()[i], _POLvar[i], 1. );
-//    //  _POLenv.add_cut( PolCut<T>::LE, _CMenv->refvar()[i]+_CMenv->scalvar()[i], _POLvar[i], 1. );
-//    //}
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Variable #" << i << ": " << _CMvar[i];
-//#endif
-//  }
-
-//  // Evaluate Chebyshev model for (nonlinear) objective and keep track of participating monomials
-//  auto ito = std::get<0>(_obj).begin();
-//  for( unsigned j=0; ito!=std::get<0>(_obj).end() && j<1; ++ito, j++ ){
-//    if( feastest || _fct_lin.find(std::get<1>(_obj).data()) != _fct_lin.end() ) continue; // only nonlinear objectives
-//    T Iobj(-SBB<T>::INF,SBB<T>::INF);
-//    try{
-//      // Polynomial model evaluation
-//      _dag->eval( _op_f, _CMwk, 1, std::get<1>(_obj).data(), &_CMobj,
-//                  _nvar, _var.data(), _CMvar.data() );
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Objective remainder: " << _CMobj.R() << std::endl;
-//      std::cout << _CMobj;
-//      //if(_p_inc.data()) std::cout << _CMobj.P(_p_inc.data())+_CMobj.R() << std::endl;
-//#endif
-//      // Test for too large Chebyshev bounds or NaN
-//      if( !(Op<SCVar<T>>::diam(_CMobj) <= options.CMODDMAX) ) throw(0);
-
-//      // Keep track of participating Chebyshev monomials into '_Xmon'
-//      auto first_CMobj = _CMobj.coefmon().lower_bound( std::make_pair( 1, std::map<unsigned,unsigned>() ) );
-//      auto last_CMobj  = _CMobj.coefmon().lower_bound( std::make_pair( basisord+1, std::map<unsigned,unsigned>() ) );
-//      for( auto it=first_CMobj; it!=last_CMobj; ++it )
-//        _Xmon.insert( std::make_pair( it->first, FFVar() ) );
-//    }
-//    catch( int ecode ){
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Objective: " << "cut too weak!\n";
-//#endif
-//      Op<T>::inter( Iobj, Iobj, _CMobj.B() );
-//      _CMobj = Iobj;
-//    }
-//    catch(...){
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Objective: " << "cut failed!\n";
-//#endif
-//      //Op<T>::inter( Iobj, Iobj, _CMobj.B() );
-//      _CMobj = Iobj;
-//      // No cut added for objective in case evaluation failed
-//    }
-//  }
-
-//  // Evaluate Chebyshev model for (nonlinear) constraints and keep track of participating monomials
-//  _CMctr.resize( _nctr );
-//  auto itc = std::get<0>(_ctr).begin();
-//  for( unsigned j=0; itc!=std::get<0>(_ctr).end(); ++itc, j++ ){
-//    if( _fct_lin.find(std::get<1>(_ctr).data()+j) != _fct_lin.end() ) continue;
-//    T Ictr(-SBB<T>::INF,SBB<T>::INF);
-//    try{
-//      // Polynomial model evaluation
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      _dag->output( _op_g[j] );
-//#endif
-//      _dag->eval( _op_g[j], _CMwk, 1, std::get<1>(_ctr).data()+j, _CMctr.data()+j,
-//                  _nvar, _var.data(), _CMvar.data() );
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "\nConstraint #" << j << ": " << _CMctr[j];
-//      //if(_p_inc.data()) std::cout << "optim: " << _CMctr[j].P(_p_inc.data())+_CMctr[j].R() << std::endl;
-//      //{ int dum; std::cout << "PAUSED"; std::cin >> dum; }
-//#endif
-//      // Test for too large Chebyshev bounds or NaN
-//      if( !(Op<SCVar<T>>::diam(_CMctr[j]) <= options.CMODDMAX) ) throw(0);
-
-//      // Keep track of participating Chebyshev monomials into '_Xmon'
-//      auto first_CMctr = _CMctr[j].coefmon().lower_bound( std::make_pair( 1, std::map<unsigned,unsigned>() ) );
-//      auto last_CMctr  = _CMctr[j].coefmon().lower_bound( std::make_pair( basisord+1, std::map<unsigned,unsigned>() ) );
-//      for( auto it=first_CMctr; it!=last_CMctr; ++it )
-//        _Xmon.insert( std::make_pair( it->first, FFVar() ) );
-//   }
-//    catch( int ecode ){
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Constraint #" << j << ": " << "cut too weak!\n";
-//#endif
-//      Op<T>::inter( Ictr, Ictr, _CMctr[j].B() );
-//      _CMctr[j] = Ictr;
-//    }
-//    catch(...){
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Constraint #" << j << ": " << "cut failed!\n";
-//#endif
-//      //Op<T>::inter( Ictr, Ictr, _CMctr[j].B() );
-//      _CMctr[j] = Ictr;
-//      // No cut added for constraint #j in case evaluation failed
-//    }
-//  }
-
-//  // Keep track of participating monomials in Chebyshev model for dependents
-//  for( auto it=_CMndxdep.begin(); options.CMODDEPS && options.CMODRED == OPT::APPEND && it!=_CMndxdep.end(); ++it ){
-//    const unsigned irdep = _var_fperm[*it]-_nrvar;
-//    T Irdep(-SBB<T>::INF,SBB<T>::INF);
-//    try{
-//      // Test for too large Chebyshev bounds or NaN
-//      if( !(Op<SCVar<T>>::diam(_CMrdep[irdep]) <= options.CMODDMAX) ) throw(0);
-//      // Keep track of participating Chebyshev monomials into '_Xmon'
-//      auto first_CMrdep = _CMrdep[irdep].coefmon().lower_bound( std::make_pair( 1, std::map<unsigned,unsigned>() ) );
-//      auto last_CMrdep  = _CMrdep[irdep].coefmon().lower_bound( std::make_pair( basisord+1, std::map<unsigned,unsigned>() ) );
-//      for( auto jt=first_CMrdep; jt!=last_CMrdep; ++jt ){
-//        t_expmon expmon_CMrdep;
-//        expmon_CMrdep.first = jt->first.first;
-//        // Match indices between the full and reduced Chebyshev models
-//        for( auto ie = jt->first.second.begin(); ie!=jt->first.second.end(); ++ie )
-//          expmon_CMrdep.second.insert( std::make_pair( _var_rperm[ie->first], ie->second ) );
-//        _Xmon.insert( std::make_pair( expmon_CMrdep, FFVar() ) );
-//      }
-//    }
-//    catch(...){
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//      std::cout << "Dependent #" << irdep << ": " << "cut failed!\n";
-//#endif
-//      Op<T>::inter( Irdep, Irdep, _CMrdep[irdep].B() );
-//      _CMrdep[irdep] = Irdep; // <- more efficient to interesect with dependent bounds?
-//      // No cut added for constraint #j in case evaluation failed
-//    }
-//  }
-
-//  // Populate '_Xmon' with references to the Chebyshev monomials in the DAG
-//  _CMenv->get_bndmon( _Xmon, _scalvar.data(), true );
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//  std::cout << "\nBASIS:\n";
-//  for( auto it=_Xmon.begin(); it!=_Xmon.end(); ++it ){
-//    std::cout << it->second << " = ";
-//    for( auto ie=it->first.second.begin(); ie!=it->first.second.end(); ++ie )
-//      std::cout << "T" << ie->second << "[" << ie->first << "] ";
-//    std::cout << std::endl;
-//  }
-//  std::list<const mc::FFOp*> op_Xmon  = _dag->subgraph( _Xmon );
-//  _dag->output( op_Xmon );
-//  { int dum; std::cin >> dum; }
-//#endif
-
-//  // Populate '_POLXmon' with references to the Chebyshev monomials in the polyhedral relaxation
-//  _dag->eval( _POLwk, _Xmon, _POLXmon, _scalvar.size(), _scalvar.data(), _POLscalvar.data() );
-
-//  // Append cuts for the Chebyshev monomials in the polyhedral relaxation
-//  _POLenv.generate_cuts( _POLXmon, false );
-
-//  // Add Chebyshev-derived cuts for objective
-//  ito = std::get<0>(_obj).begin();
-//  for( unsigned j=0; ito!=std::get<0>(_obj).end() && j<1; ++ito, j++ ){
-//    if( feastest
-//     || _fct_lin.find(std::get<1>(_obj).data()) != _fct_lin.end()
-//     || !(Op<SCVar<T>>::diam(_CMobj) < SBB<T>::INF) ) continue; // only nonlinear / finite objectives
-
-//    // Constant, variable and bound on objective model
-//    T Robj = _CMobj.bndord( basisord+1 ) + _CMobj.remainder();
-//    const double a0 = (_CMobj.coefmon().empty() || _CMobj.coefmon().begin()->first.first)?
-//                      0.: _CMobj.coefmon().begin()->second;
-//    auto first_CMobj = _CMobj.coefmon().lower_bound( std::make_pair( 1, std::map<unsigned,unsigned>() ) );
-//    auto last_CMobj  = _CMobj.coefmon().lower_bound( std::make_pair( basisord+1, std::map<unsigned,unsigned>() ) );
-//    t_coefmon Cobj; Cobj.insert( first_CMobj, last_CMobj );
-
-//    // Linear objective sparse cut
-//    switch( std::get<0>(_obj)[0] ){
-//      case MIN: _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Robj)-a0, _POLXmon, Cobj, _POLobjaux, -1. ); break;
-//      case MAX: _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Robj)-a0, _POLXmon, Cobj, _POLobjaux, -1. ); break;
-//    }
-//    _POLobjaux.update( _CMobj.bound(), true );
-
-//  }
-//#ifdef MC__NLGO_DEBUG
-//  std::cout << _POLenv;
-//#endif
-
-//  // Add Chebyshev-derived cuts for constraints
-//  itc = std::get<0>(_ctr).begin();
-//  for( unsigned j=0; itc!=std::get<0>(_ctr).end(); ++itc, j++ ){
-//    if( _fct_lin.find(std::get<1>(_ctr).data()+j) != _fct_lin.end()
-//     || !(Op<SCVar<T>>::diam(_CMctr[j]) < SBB<T>::INF) ) continue; // only nonlinear / finite constraints
-
-//    // Constant, variable and bound on constraint model
-//    T Rctr = _CMctr[j].bndord( basisord+1 ) + _CMctr[j].remainder();
-//    const double a0 = (_CMctr[j].coefmon().empty() || _CMctr[j].coefmon().begin()->first.first)?
-//                      0.: _CMctr[j].coefmon().begin()->second;
-//    auto first_CMctr = _CMctr[j].coefmon().lower_bound( std::make_pair( 1, std::map<unsigned,unsigned>() ) );
-//    auto last_CMctr  = _CMctr[j].coefmon().lower_bound( std::make_pair( basisord+1, std::map<unsigned,unsigned>() ) );
-//    t_coefmon Cctr; Cctr.insert( first_CMctr, last_CMctr );
-
-//    // Nonlinear constraint sparse cut
-//    switch( (*itc) ){
-//      case EQ: if( !feastest ){ if( !Cctr.empty() ) _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rctr)-a0, _POLXmon, Cctr ); }// no break
-//               else { _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rctr)-a0, _POLXmon, Cctr, _POLobjaux,  1. ); }// no break
-//      case LE: if( !feastest ){ if( !Cctr.empty() ) _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Rctr)-a0, _POLXmon, Cctr ); break; }
-//               else { _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Rctr)-a0, _POLXmon, Cctr, _POLobjaux, -1. ); break; }
-//      case GE: if( !feastest ){ if( !Cctr.empty() ) _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rctr)-a0, _POLXmon, Cctr ); break; }
-//               else { _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rctr)-a0, _POLXmon, Cctr, _POLobjaux,  1. ); break; }
-//    }
-//  }
-
-//  // Add Chebyshev-derived cuts for dependents
-//  for( auto it=_CMndxdep.begin(); options.CMODDEPS && options.CMODRED == OPT::APPEND && it!=_CMndxdep.end(); ++it ){
-//    // Constant, variable and bound on constraint model
-//    const unsigned irdep = _var_fperm[*it]-_nrvar;
-//#ifdef MC__NLGO_CHEBCUTS_DEBUG
-//    std::cout << "\nDependent #" << irdep << ": " << _CMrdep[irdep];
-//#endif
-//    T Rrdep = _CMrdep[irdep].bndord( basisord+1 ) + _CMrdep[irdep].remainder();
-//    const double a0 = (_CMrdep[irdep].coefmon().empty() || _CMrdep[irdep].coefmon().begin()->first.first)?
-//                      0.: _CMrdep[irdep].coefmon().begin()->second;
-//    auto first_CMrdep = _CMrdep[irdep].coefmon().lower_bound( std::make_pair( 1, std::map<unsigned,unsigned>() ) );
-//    auto last_CMrdep  = _CMrdep[irdep].coefmon().lower_bound( std::make_pair( basisord+1, std::map<unsigned,unsigned>() ) );
-//    t_coefmon Crdep; //Crdep.insert( first_CMrdep, last_CMrdep );
-//    for( auto jt=first_CMrdep; jt!=last_CMrdep; ++jt ){
-//      t_expmon expmon_CMrdep;
-//      expmon_CMrdep.first = jt->first.first;
-//      // Match indices between the full and reduced Chebyshev models
-//      for( auto ie = jt->first.second.begin(); ie!=jt->first.second.end(); ++ie )
-//        expmon_CMrdep.second.insert( std::make_pair( _var_rperm[ie->first], ie->second ) );
-//      Crdep.insert( std::make_pair( expmon_CMrdep, jt->second ) );
-//    }
-
-//    // Dependent sparse cut
-//    if( !feastest ){
-//      _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rrdep)-a0, _POLXmon, Crdep, _POLvar[*it],  -1. );
-//      _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Rrdep)-a0, _POLXmon, Crdep, _POLvar[*it],  -1. );
-//    }
-//    else{
-//      _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rrdep)-a0, _POLXmon, Crdep, _POLvar[*it],  -1., _POLobjaux,  1. );
-//      _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Rrdep)-a0, _POLXmon, Crdep, _POLvar[*it],  -1., _POLobjaux, -1. );
-//    }
-//  }
-
-#ifdef MC__MINLPBND_CHEBCUTS_DEBUG
-  std::cout << _POLenv;
-  { int dum; std::cin >> dum; }
-#endif
-}
-
-template <typename T, typename MIP>
-inline void
-MINLPBND<T,MIP>::_set_cuts_ISM
-()
-{
-//  // Auxiliary variables in polyhedral image are defined locally 
-//  std::vector<std::vector<PolVar<T>>> POL_ISMaux( _nvar );
-//  std::vector<double> DL_ISMaux( _ISMenv->ndiv() );
-//  std::vector<double> DU_ISMaux( _ISMenv->ndiv() );
-
-//  // Add polyhedral cuts for objective - by-pass if feasibility test or no objective function defined
-//  auto ito = std::get<0>(_obj).begin();
-//  for( unsigned j=0; ito!=std::get<0>(_obj).end() && j<1; ++ito, j++ ){
-//    if( feastest || _fct_lin.find(std::get<1>(_obj).data()) != _fct_lin.end() ) continue;
-//    try{
-//#ifdef MC__NLGO_SUPCUTS_DEBUG
-//      std::cout << "objective" << std::endl;
-//#endif
-//      // Interval superposition evaluation
-//      _dag->eval( _op_f, _ISMwk, 1, std::get<1>(_obj).data(), &_ISMobj, _nvar, _var.data(), _ISMvar.data() );
-//#ifdef MC__NLGO_SUPCUTS_DEBUG
-//      std::cout << "IAM of objective:\n" << _ISMobj;
-//      //_dag->output( _op_f );
-//#endif
-//      _POLobj.set( &_POLenv, std::get<1>(_obj)[0], _ISMobj.B(), true );
-//      // Polyhedral cut generation
-//      const double rhs = (_ISMobj.ndep()? 0.: -_ISMobj.cst());
-//      auto CutObjL = _POLenv.add_cut( PolCut<T>::LE, rhs, _POLobj, -1. );
-//      auto CutObjU = _POLenv.add_cut( PolCut<T>::GE, rhs, _POLobj, -1. );
-//      for( unsigned ivar=0; ivar<_nvar; ivar++ ){
-//        auto&& vec = _ISMobj.C()[ivar];
-//        if( vec.empty() ) continue;
-//        if( POL_ISMaux[ivar].empty() ){
-//          POL_ISMaux[ivar].resize( _ISMenv->ndiv() );
-//          for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ )
-//            POL_ISMaux[ivar][jsub].set( &_POLenv, Op<T>::zeroone(), !options.ISMMIPREL );
-//        }
-//        for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ ){
-//          DL_ISMaux[jsub] = Op<T>::l(vec[jsub]);
-//          DU_ISMaux[jsub] = Op<T>::u(vec[jsub]);
-//        }
-//        (*CutObjL)->append( _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DL_ISMaux.data() );
-//        (*CutObjU)->append( _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DU_ISMaux.data() );
-//      }
-//      switch( std::get<0>(_obj)[0] ){
-//        case MIN: _POLenv.add_cut( PolCut<T>::GE, 0., _POLobjaux, 1., _POLobj, -1. ); break;
-//        case MAX: _POLenv.add_cut( PolCut<T>::LE, 0., _POLobjaux, 1., _POLobj, -1. ); break;
-//      }
-//    }
-//    catch(...){
-//      // No cut added for objective in case evaluation failed
-//#ifdef MC__NLGO_SUPCUTS_DEBUG
-//      std::cout << "evaluation failed" << std::endl;
-//#endif
-//    }
-//  }
-
-//  // Add polyhedral cuts for constraints - add slack to inequality constraints if feasibility test
-//  _POLctr.resize( _nctr );
-//  _ISMctr.resize( _nctr );
-//  auto itc = std::get<0>(_ctr).begin();
-//  for( unsigned j=0; itc!=std::get<0>(_ctr).end(); ++itc, j++ ){
-//    if( _fct_lin.find(std::get<1>(_ctr).data()+j) != _fct_lin.end() ) continue;
-//    try{
-//      // Interval superposition evaluation
-//      _dag->eval( _op_g[j], _ISMwk, 1, std::get<1>(_ctr).data()+j, _ISMctr.data()+j, _nvar, _var.data(), _ISMvar.data() );
-//#ifdef MC__NLGO_SUPCUTS_DEBUG
-//      std::cout << "ISM of constraint #" << j << std::endl << _ISMctr[j];
-//      //_dag->output( _op_g[j] );
-//#endif
-//      _POLctr[j].set( &_POLenv, std::get<1>(_ctr)[j], _ISMctr[j].B(), true );
-//      // Polyhedral cut generation
-//      const double rhs = (_ISMobj.ndep()? 0.: -_ISMctr[j].cst());
-//      auto CutCtrL = _POLenv.add_cut( PolCut<T>::LE, rhs, _POLctr[j], -1. );
-//      auto CutCtrU = _POLenv.add_cut( PolCut<T>::GE, rhs, _POLctr[j], -1. );
-//      for( unsigned ivar=0; ivar<_nvar; ivar++ ){
-//        auto&& vec = _ISMctr[j].C()[ivar];
-//        if( vec.empty() ) continue;
-//        if( POL_ISMaux[ivar].empty() ){
-//          POL_ISMaux[ivar].resize( _ISMenv->ndiv() );
-//          for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ )
-//            POL_ISMaux[ivar][jsub].set( &_POLenv, Op<T>::zeroone(), !options.ISMMIPREL );
-//        }
-//        for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ ){
-//          DL_ISMaux[jsub] = Op<T>::l(vec[jsub]);
-//          DU_ISMaux[jsub] = Op<T>::u(vec[jsub]);
-//        }
-//        (*CutCtrL)->append( _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DL_ISMaux.data() );
-//        (*CutCtrU)->append( _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DU_ISMaux.data() );
-//      }
-//      switch( (*itc) ){
-//        case EQ: if( !feastest ){ _POLenv.add_cut( PolCut<T>::EQ, 0., _POLctr[j], 1. ); break; }
-//                 else             _POLenv.add_cut( PolCut<T>::GE, 0., _POLctr[j], 1., _POLobjaux,  1. ); // no break
-//        case LE: if( !feastest ){ _POLenv.add_cut( PolCut<T>::LE, 0., _POLctr[j], 1. ); break; }
-//                 else           { _POLenv.add_cut( PolCut<T>::LE, 0., _POLctr[j], 1., _POLobjaux, -1. ); break; }
-//        case GE: if( !feastest ){ _POLenv.add_cut( PolCut<T>::GE, 0., _POLctr[j], 1. ); break; }
-//                 else           { _POLenv.add_cut( PolCut<T>::GE, 0., _POLctr[j], 1., _POLobjaux,  1. ); break; }
-//      }
-//    }
-//    catch(...){
-//      // No cut added for constraint #j in case evaluation failed
-//#ifdef MC__NLGO_SUPCUTS_DEBUG
-//      std::cout << "evaluation failed" << std::endl;
-//#endif
-//      continue;
-//    }
-//  }
-//  
-//  // Add polyhedral cuts for ISM-participating variables
-//  for( unsigned ivar=0; ivar<_nvar; ivar++ ){
-//    if( POL_ISMaux[ivar].empty() ) continue;
-//    // Auxiliaries add up to 1
-//    for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ )
-//      DL_ISMaux[jsub] = 1.;
-//    _POLenv.add_cut( PolCut<T>::EQ, 1., _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DL_ISMaux.data() );
-//    // Relationship between variables and auxiliaries
-//    PolVar<T> POLvarL( 0. ), POLvarU( 0. );
-//    auto&& vec = _ISMvar[ivar].C()[ivar];
-//#ifdef MC__NLGO_SUPCUTS_DEBUG
-//    assert( !vec.empty() );
-//#endif
-//    for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ ){
-//      DL_ISMaux[jsub] = Op<T>::l(vec[jsub]);
-//      DU_ISMaux[jsub] = Op<T>::u(vec[jsub]);
-//    }
-//    _POLenv.add_cut( PolCut<T>::LE, 0., _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DL_ISMaux.data(), _POLvar[ivar], -1. );
-//    _POLenv.add_cut( PolCut<T>::GE, 0., _ISMenv->ndiv(), POL_ISMaux[ivar].data(), DU_ISMaux.data(), _POLvar[ivar], -1. );
-//  }
-
-#ifdef MC__CSEARCH_DEBUG
-  std::cout << _POLenv;
-#endif
-}
-
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 template <typename U>
 inline double
-MINLPBND<T,MIP>::_dH
+MINLPBND<DAG,T,MIP>::_dH
 ( const U&X, const U&Y )
 {
   return std::max( std::fabs(Op<U>::l(X)-Op<U>::l(Y)),
                    std::fabs(Op<U>::u(X)-Op<U>::u(Y)) );
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 template <typename U>
 inline double
-MINLPBND<T,MIP>::_reducrel
+MINLPBND<DAG,T,MIP>::_reducrel
 ( const unsigned n, const U*Xred, const U*X )
 {
   double drel = 0.;
@@ -2889,10 +2733,10 @@ MINLPBND<T,MIP>::_reducrel
   return drel;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 template <typename U>
 inline double
-MINLPBND<T,MIP>::_reducrel
+MINLPBND<DAG,T,MIP>::_reducrel
 ( const unsigned n, const U*Xred, const U*X, const U*X0 )
 {
   double drel = 0.;
@@ -2901,9 +2745,9 @@ MINLPBND<T,MIP>::_reducrel
   return drel;
 }
 
-template <typename T, typename MIP>
+template <typename DAG, typename T, typename MIP>
 inline void
-MINLPBND<T,MIP>::Options::display
+MINLPBND<DAG,T,MIP>::Options::display
 ( std::ostream&out ) const
 {
   // Display MINLPBND Options

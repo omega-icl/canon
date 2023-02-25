@@ -37,14 +37,26 @@ namespace mc
 //! Stefan Vigerske for the solver SCIP (C files reader_gmo.h,
 //! reader_gmo.c, reader_gms.h, reader_gms.c; see https://scip.zib.de/doc/html/).
 ////////////////////////////////////////////////////////////////////////
+template < typename DAG >
 class GAMSIO:
-  public virtual BASE_NLP
+  public virtual BASE_NLP<DAG>
 {
+protected:
+
+  using BASE_AE<DAG>::_var;
+  using BASE_AE<DAG>::_vartyp;
+  using BASE_AE<DAG>::_varlb;
+  using BASE_AE<DAG>::_varub;
+
+  using BASE_NLP<DAG>::set_obj;
+  using BASE_NLP<DAG>::add_ctr;
+
 public:
+
   //! @brief Class constructor
   GAMSIO
     ()
-    : BASE_NLP(),
+    : BASE_NLP<DAG>(),
       _gmo( nullptr ),
       _gev( nullptr ),
       //_pal( nullptr ),
@@ -71,6 +83,7 @@ public:
     ( struct gmoRec* gmo, bool const disp=false );
 
 private:
+
    //! @brief GAMS modeling object
    struct gmoRec*        _gmo;
 
@@ -81,7 +94,7 @@ private:
    //struct palRec*        _pal;
 
   //! @brief DAG environment
-  FFGraph* _dag;
+  DAG* _dag;
 
   //! @brief setup optimization model from GAMS modelling object
   bool _populate
@@ -92,7 +105,12 @@ private:
     ( int const codelen, std::vector<int>& opcodes, std::vector<int>& fields,
       double const* constants );
 
+  //! @brief format string to remove left/right brackets (...) - e.g. in name of indexed variable
+  std::string _format_name
+    ( std::string const& name );
+
 protected:
+
   //! @brief number of variables
   int _nvar;
   
@@ -104,9 +122,10 @@ protected:
 };
 
 #if defined (MC__WITH_GAMS)
+template <typename DAG>
 inline
 bool
-GAMSIO::read
+GAMSIO<DAG>::read
 ( std::string const filename, bool const disp )
 {
   // reset
@@ -179,9 +198,10 @@ TERMINATE:
 }
 #endif
 
+template <typename DAG>
 inline
 bool
-GAMSIO::read
+GAMSIO<DAG>::read
 ( struct gmoRec* gmo, bool const disp )
 {
    _gmo = gmo;
@@ -222,9 +242,25 @@ GAMSIO::read
    return _populate( disp );
 }
 
+template <typename DAG>
+inline
+std::string
+GAMSIO<DAG>::_format_name
+( std::string const& name )
+{
+  auto left = name.find_last_of( '(' );
+  if( left == std::string::npos ) return name;
+  
+  auto right = name.find_first_of( ')', left );
+  if( right == std::string::npos ) return name;
+
+  return name.substr(0, left) + '_' + name.substr(left+1, right-left-1);
+}
+
+template <typename DAG>
 inline
 bool
-GAMSIO::_populate
+GAMSIO<DAG>::_populate
 ( bool const disp )
 {
   assert( _gmo != nullptr );
@@ -299,11 +335,13 @@ GAMSIO::_populate
 
   // reset DAG environment
   if( _dag ) delete _dag;
-  BASE_AE::_dag = _dag = new FFGraph;
+  BASE_AE<DAG>::_dag = _dag = new DAG;
 
   // set DAG variables
+  char buffer[255];
   for( int i=0; i<_nvar; ++i ){
-    _var[i].set( _dag );
+    gmoGetVarNameOne( _gmo, i, buffer );
+    _var[i].set( _dag, _format_name( buffer ) );
     switch( gmoGetVarTypeOne( _gmo, i ) ){
       case gmovar_SC:
         _varlb[i] = 0e0;
@@ -400,7 +438,7 @@ GAMSIO::_populate
   if( disp )
     _dag->output( _dag->subgraph( 1, &objvar ), " objective" );
   //_objscal = (gmoSense( _gmo ) == gmoObj_Min? 1e0: -1e0);
-  set_obj( gmoSense( _gmo ) == gmoObj_Min? MIN: MAX, objvar );
+  set_obj( gmoSense( _gmo ) == gmoObj_Min? BASE_OPT::MIN: BASE_OPT::MAX, objvar );
 
 
   // add constraints
@@ -457,15 +495,15 @@ GAMSIO::_populate
     {
       case gmoequ_E:
         ctrvar -= gmoGetRhsOne( _gmo, j );
-        add_ctr( EQ, ctrvar );
+        add_ctr( BASE_OPT::EQ, ctrvar );
         break;
       case gmoequ_L:
         ctrvar -= gmoGetRhsOne( _gmo, j );
-        add_ctr( LE, ctrvar );
+        add_ctr( BASE_OPT::LE, ctrvar );
         break;
       case gmoequ_G:
         ctrvar -= gmoGetRhsOne( _gmo, j );
-        add_ctr( GE, ctrvar );
+        add_ctr( BASE_OPT::GE, ctrvar );
         break;
       case gmoequ_N:
         // ignore free constraints, should have been permutated out anyway
@@ -499,9 +537,10 @@ GAMSIO::_populate
   return true;
 }
 
+template <typename DAG>
 inline
 std::pair<FFVar,bool>
-GAMSIO::_parse
+GAMSIO<DAG>::_parse
 ( int const codelen, std::vector<int>& opcodes, std::vector<int>& fields,
   double const* constants )
 {

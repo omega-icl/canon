@@ -104,7 +104,7 @@ struct SOLUTION_OPT
 
 std::ostream&
 operator<<
-( std::ostream & out, SOLUTION_OPT const& sol )
+( std::ostream& out, SOLUTION_OPT const& sol )
 {
   std::cout << "STATUS: " << sol.stat << std::endl;
   std::cout << std::scientific << std::setprecision(6) << std::right;

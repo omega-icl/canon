@@ -1,4 +1,4 @@
-// Copyright (C) 2014 Benoit Chachuat, Imperial College London.
+// Copyright (C) Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
@@ -17,12 +17,13 @@ namespace mc
 //! equations, distinguishing between independent and dependent
 //! variables
 ////////////////////////////////////////////////////////////////////////
+template < typename DAG >
 class BASE_AE:
   protected virtual BASE_OPT
 {
 protected:
   //! @brief pointer to DAG of equation
-  FFGraph* _dag;
+  DAG* _dag;
 
   //! @brief parameters
   std::vector<FFVar> _par;
@@ -128,12 +129,12 @@ public:
     {}
 
   //! @brief Get pointer to DAG
-  FFGraph* dag() const
+  DAG* dag() const
     { return _dag; }
 
   //! @brief Set pointer to DAG
   void set_dag
-    ( FFGraph*dag )
+    ( DAG* dag )
     { _dag = dag; }
 
   //! @brief Get parameters
@@ -526,8 +527,9 @@ protected:
   BASE_AE& operator=( BASE_AE const& );
 };
 
+template < typename DAG >
 inline bool
-BASE_AE::reset_block
+BASE_AE<DAG>::reset_block
 ()
 {
   const unsigned int ndep = _dep.size();
@@ -540,8 +542,9 @@ BASE_AE::reset_block
   return true;
 }
 
+template < typename DAG >
 inline bool
-BASE_AE::set_block
+BASE_AE<DAG>::set_block
 ( const bool disp, std::ostream&os )
 {
   const unsigned int ndep = _dep.size();

@@ -11,6 +11,7 @@
 
 #include "base_opt.hpp"
 #include "polimage.hpp"
+#include "ffexpr.hpp"
 
 //#define MC__GAMSWRITER_DEBUG
 
@@ -21,12 +22,14 @@ namespace mc
 //! mc::GAMSWRITER is a C++ class for exporting a reformulated CANON
 //! model into GAMS language.
 ////////////////////////////////////////////////////////////////////////
-template< typename T>
+template< typename DAG,
+          typename T >
 class GAMSWRITER
 : public virtual BASE_OPT
 {  
   // Typedef for variable set
-  typedef std::set< PolVar<T> const*, lt_PolVar<T> > t_Var;
+  typedef std::map< FFVar const*, std::tuple<unsigned, T const*, double const*>, lt_FFVar > t_DAGVar;
+  typedef std::set< PolVar<T> const*, lt_PolVar<T> > t_PolVar;
 
 public:
 
@@ -76,7 +79,16 @@ protected:
   unsigned long _EqnCnt;
 
   //! @brief set of variables in GAMS model
-  t_Var _GAMSvar;
+  t_DAGVar _GAMSdagvar;
+
+  //! @brief vector of variables in GAMS model
+  std::vector<FFExpr<DAG>> _GAMSvar;
+
+  //! @brief vector of functions in GAMS model
+  std::vector<FFExpr<DAG>> _GAMSfun;
+
+  //! @brief set of variables in GAMS model
+  t_PolVar _GAMSpolvar;
 
   //! @brief Polyhedral image environment
   PolImg<T>* _POLenv;
@@ -109,11 +121,44 @@ public:
   void set_objective
     ( PolVar<T> const& pObj, t_OBJ const& tObj );
 
-  //! @brief Set starting point and branch priority of PolImg variable <a>X</a>
+  //! @brief Set PolImg variable <a>X</a> with level 
   bool set_variable
-    ( PolVar<T> const& X, double const* pval ); //, unsigned const priority );
+    ( PolVar<T> const& X, double const* l );
+
+  //! @brief Set DAG variable <a>X</a> with pointers to lower/upper bounds and level
+  void add_variable
+    ( FFVar const& Var, unsigned type, T const* Bnd, double const* l );
+
+  //! @brief Set DAG variable <a>X</a> with pointers to lower/upper bounds and level
+  void add_variables
+    ( unsigned const nVar, FFVar const* Var, unsigned const* type, T const* Bnd, double const* l );
+
+  //! @brief Set DAG function <a>F</a> expressions
+  void set_functions
+    ( DAG* pDAG, unsigned const nFun, FFVar const* Fun, unsigned const nVar, FFVar const* Var );
+
+  //! @brief Set constraints corresponding to DAG functions
+  void set_constraints
+    ( unsigned const objRow, unsigned const nFun, T const* Fbnd );
+
+  //! @brief Set objective corresponding to DAG functions
+  void set_objective
+    ( unsigned const objRow, t_OBJ const& tObj );
+
+  //! @brief Real values
+  static std::string d2s
+    ( double const& c )
+    { std::ostringstream ostr;
+      ostr << std::setprecision(FFExpr<DAG>::options.DISPLEN);
+      ostr << c;
+      return ostr.str(); }
+
 
 protected:
+
+  //! @brief Append variable to MIP model
+  void _add_var
+    ( FFVar const* pVar, unsigned type, T const* Bnd, double const* l );
 
   //! @brief Append variable to MIP model
   void _add_var
@@ -132,9 +177,9 @@ protected:
     ( std::stringstream& line, unsigned const maxlen=10 );
 };
 
-template <typename T>
+template <typename DAG, typename T>
 inline void
-GAMSWRITER<T>::reset
+GAMSWRITER<DAG,T>::reset
 ()
 {
   _type = LIN;
@@ -149,9 +194,9 @@ GAMSWRITER<T>::reset
   _VarIni.clear();  _VarIni.str(""); _VarIni << std::setprecision(16);
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline bool
-GAMSWRITER<T>::write
+GAMSWRITER<DAG,T>::write
 ( std::string const filename )
 {
   // Create GAMS file
@@ -200,9 +245,9 @@ GAMSWRITER<T>::write
   return true;
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline std::string
-GAMSWRITER<T>::_write_line
+GAMSWRITER<DAG,T>::_write_line
 ( std::stringstream& line, unsigned const maxlen )
 {
   std::stringstream linewithbreaks;
@@ -215,9 +260,145 @@ GAMSWRITER<T>::_write_line
   return linewithbreaks.str();
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline void
-GAMSWRITER<T>::set_cuts
+GAMSWRITER<DAG,T>::_add_var
+( FFVar const* pVar, unsigned type, T const* Bnd, double const* l )
+{
+  assert( pVar );
+
+  // Case constant variable
+  if( pVar->cst() ){
+    _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
+    _VarFix  << pVar->name() << ".FX = " << d2s(pVar->num().val()) << ";" << std::endl;
+  }
+
+  else{
+    switch( type ){
+      case 0:
+        _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
+        if( Bnd && Op<T>::l(*Bnd) == Op<T>::u(*Bnd) )
+          _VarBnd << pVar->name() << ".FX = " << d2s(Op<T>::l(*Bnd)) << ";" << std::endl;
+	else{
+          if( Bnd && Op<T>::l(*Bnd) > -0.999*BASE_OPT::INF )
+            _VarBnd << pVar->name() << ".LO = " << d2s(Op<T>::l(*Bnd)) << ";" << std::endl;
+          if( Bnd && Op<T>::u(*Bnd) <  0.999*BASE_OPT::INF )
+            _VarBnd << pVar->name() << ".UP = " << d2s(Op<T>::u(*Bnd)) << ";" << std::endl;
+        }
+	break;
+	
+      case 1:
+        if( !Bnd || Op<T>::l(*Bnd) < -0.999*BASE_OPT::INF || Op<T>::u(*Bnd) > 0.999*BASE_OPT::INF )
+	  throw std::runtime_error("GAMSWRITER - Error: Discrete variable must be bounded");
+        if( Op<T>::l(*Bnd) > -1. && Op<T>::u(*Bnd) < 2. )
+          _BVarDec << (_BVarDec.tellp()>0?", ":" ") << pVar->name();
+        else{
+          _IVarDec << (_IVarDec.tellp()>0?", ":" ") << pVar->name();
+          if( !isequal( Op<T>::l(*Bnd), 0. ) )
+            _VarBnd << pVar->name() << ".LO = " << d2s(std::ceil(Op<T>::l(*Bnd))) << ";" << std::endl;
+          if( !isequal( Op<T>::u(*Bnd), 100. ) )
+            _VarBnd << pVar->name() << ".UP = " << d2s(std::floor(Op<T>::u(*Bnd))) << ";" << std::endl;
+        }
+        break;
+
+      default:
+        throw std::runtime_error("GAMSWRITER - Error: Unsupported variable type");
+    }
+    
+    if( l ) _VarIni << pVar->name() << ".L = " << *l << ";" << std::endl;
+  }
+}
+
+template <typename DAG, typename T>
+inline void
+GAMSWRITER<DAG,T>::add_variable
+( FFVar const& Var, unsigned type, T const* Bnd, double const* l )
+{
+  auto itv = _GAMSdagvar.find( const_cast<FFVar*>(&Var) );
+  if( itv != _GAMSdagvar.end() )
+    throw std::runtime_error("GAMSWRITER - Error: Cannot redefine DAG variable");
+  _GAMSdagvar[&Var] = std::make_tuple( type, Bnd, l );
+  _add_var( &Var, type, Bnd, l );
+}
+
+template <typename DAG, typename T>
+inline void
+GAMSWRITER<DAG,T>::add_variables
+( unsigned const nVar, FFVar const* Var, unsigned const* type, T const* Bnd, double const* l )
+{
+  for( unsigned i=0; i<nVar; ++i )
+    add_variable( Var[i], type[i], (Bnd? &Bnd[i]: nullptr), (l? &l[i]: nullptr) );
+}
+
+template <typename DAG, typename T>
+inline void
+GAMSWRITER<DAG,T>::set_functions
+( DAG* pDAG, unsigned const nFun, FFVar const* Fun, unsigned const nVar, FFVar const* Var )
+{
+  _type = NLIN;
+  _GAMSfun.resize( nFun );
+  _GAMSvar.resize( nVar );
+  FFExpr<DAG>::options.LANG = FFExpr<DAG>::Options::GAMS;
+  for( unsigned int i=0; i<nVar; i++ ) _GAMSvar[i].set( Var[i] );
+  pDAG->eval( nFun, Fun, _GAMSfun.data(), nVar, Var, _GAMSvar.data() );
+
+#ifdef MC__GAMSWRITER_DEBUG
+  for( unsigned int i=0; i<nFun; i++ ){
+    pDAG->output( pDAG->subgraph( 1, &Fun[i] ) );    
+    std::cout << "Expression of F[" << i << "]: " << _GAMSfun[i] << std::endl;
+  }
+#endif
+}
+
+template <typename DAG, typename T>
+inline void
+GAMSWRITER<DAG,T>::set_constraints
+( unsigned const objRow, unsigned const nFun, T const* Fbnd )
+{
+  assert( Fbnd );
+  for( unsigned i=0; i<nFun; i++ ){
+    if( i == objRow ) continue; // Exclude objective row
+    if( Op<T>::l(Fbnd[i]) < -0.999*BASE_OPT::INF ){ // lower bound inactive
+      assert( Op<T>::u(Fbnd[i]) < 0.999*BASE_OPT::INF );
+      _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
+      _EqnDef << "E" << _EqnCnt << " .. " << _GAMSfun[i] << " =L= "
+              << d2s(Op<T>::u(Fbnd[i])) << ";" << std::endl;
+    }
+    else if( Op<T>::u(Fbnd[i]) > 0.999*BASE_OPT::INF ){ // upper bound inactive
+      assert( Op<T>::l(Fbnd[i]) > -0.999*BASE_OPT::INF );
+      _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
+      _EqnDef << "E" << _EqnCnt << " .. " << _GAMSfun[i] << " =G= "
+              << d2s(Op<T>::l(Fbnd[i])) << ";" << std::endl;
+    }
+    else if( Op<T>::l(Fbnd[i]) == Op<T>::u(Fbnd[i]) ){ // equality constraints
+      _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
+      _EqnDef << "E" << _EqnCnt << " .. " << _GAMSfun[i] << " =E= "
+              << d2s(Op<T>::l(Fbnd[i])) << ";" << std::endl;
+    }
+    else{ // two distinct inequality constraints
+      _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
+      _EqnDef << "E" << _EqnCnt << " .. " << _GAMSfun[i] << " =L= "
+              << d2s(Op<T>::u(Fbnd[i])) << ";" << std::endl;
+      _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
+      _EqnDef << "E" << _EqnCnt << " .. " << _GAMSfun[i] << " =G= "
+              << d2s(Op<T>::l(Fbnd[i])) << ";" << std::endl;
+    }
+  }
+}
+
+template <typename DAG, typename T>
+inline void
+GAMSWRITER<DAG,T>::set_objective
+( unsigned const objRow, t_OBJ const& tObj )
+{
+  _DirObj = tObj;
+  _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
+  _EqnDef << "E" << _EqnCnt << " .. " << _VarObj << " =E= " << _GAMSfun[objRow] << ";" << std::endl;
+}
+
+template <typename DAG, typename T>
+inline void
+GAMSWRITER<DAG,T>::set_cuts
 ( PolImg<T>* env, bool const reset_ )
 {
   if( reset_ ) reset();
@@ -240,24 +421,24 @@ GAMSWRITER<T>::set_cuts
   }
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline void
-GAMSWRITER<T>::_add_var
+GAMSWRITER<DAG,T>::_add_var
 ( PolVar<T> const* pVar )
 {
   switch( pVar->id().first ){
     case PolVar<T>::AUXCST:
       _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
-      _VarFix  << pVar->name() << ".FX = " << Op<T>::mid(pVar->range()) << ";" << std::endl;
+      _VarFix  << pVar->name() << ".FX = " << d2s(Op<T>::mid(pVar->range())) << ";" << std::endl;
       break;
 
     case PolVar<T>::VARCONT:
     case PolVar<T>::AUXCONT:
       _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
       if( Op<T>::l(pVar->range()) > -0.999*BASE_OPT::INF )
-        _VarBnd << pVar->name() << ".LO = " << Op<T>::l(pVar->range()) << ";" << std::endl;
+        _VarBnd << pVar->name() << ".LO = " << d2s(Op<T>::l(pVar->range())) << ";" << std::endl;
       if( Op<T>::u(pVar->range()) <  0.999*BASE_OPT::INF )
-        _VarBnd << pVar->name() << ".UP = " << Op<T>::u(pVar->range()) << ";" << std::endl;
+        _VarBnd << pVar->name() << ".UP = " << d2s(Op<T>::u(pVar->range())) << ";" << std::endl;
       break;
       
     case PolVar<T>::VARINT:
@@ -267,9 +448,9 @@ GAMSWRITER<T>::_add_var
       else{
         _IVarDec << (_IVarDec.tellp()>0?", ":" ") << pVar->name();
         if( !isequal( Op<T>::l(pVar->range()), 0. ) )
-          _VarBnd << pVar->name() << ".LO = " << Op<T>::l(pVar->range()) << ";" << std::endl;
+          _VarBnd << pVar->name() << ".LO = " << d2s(Op<T>::l(pVar->range())) << ";" << std::endl;
         if( !isequal( Op<T>::u(pVar->range()), 100. ) )
-          _VarBnd << pVar->name() << ".UP = " << Op<T>::u(pVar->range()) << ";" << std::endl;
+          _VarBnd << pVar->name() << ".UP = " << d2s(Op<T>::u(pVar->range())) << ";" << std::endl;
       }
       break;
 
@@ -277,12 +458,12 @@ GAMSWRITER<T>::_add_var
       throw std::runtime_error("GAMSWRITER - Error: Unsupported variable type");
   }
 
-  _GAMSvar.insert( pVar );
+  _GAMSpolvar.insert( pVar );
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline std::string
-GAMSWRITER<T>::_lhs_cut
+GAMSWRITER<DAG,T>::_lhs_cut
 ( PolCut<T> const* pCut )
 {
   std::stringstream lhs;
@@ -296,7 +477,7 @@ GAMSWRITER<T>::_lhs_cut
     else if( lhs.tellp() > 0 && pCut->coef()[k] > 0. )
       lhs << " + ";
     if( std::fabs(pCut->coef()[k]) != 1. )
-      lhs << std::fabs(pCut->coef()[k]) << "*";
+      lhs << d2s(std::fabs(pCut->coef()[k])) << "*";
     lhs << pCut->var()[k].name();
   }
 
@@ -309,7 +490,7 @@ GAMSWRITER<T>::_lhs_cut
     else if( lhs.tellp() > 0 && pCut->qcoef()[k] > 0. )
       lhs << " + ";
     if( std::fabs(pCut->qcoef()[k]) != 1. )
-      lhs << std::fabs(pCut->qcoef()[k]) << "*";
+      lhs << d2s(std::fabs(pCut->qcoef()[k])) << "*";
     if( pCut->qvar1()[k].name() == pCut->qvar2()[k].name() )
       lhs << "SQR(" << pCut->qvar1()[k].name() << ")";
     else
@@ -319,9 +500,9 @@ GAMSWRITER<T>::_lhs_cut
   return lhs.str();
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline void
-GAMSWRITER<T>::_add_cut
+GAMSWRITER<DAG,T>::_add_cut
 ( PolCut<T> const* pCut )
 {
   // Check valid cut
@@ -332,17 +513,17 @@ GAMSWRITER<T>::_add_cut
 
   // Declare equation and initiate definition
   _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
-  _EqnDef << "E" << _EqnCnt << " .. ";// << _VarObj << " =E= " << pObj.name() << ";" << std::endl;
+  _EqnDef << "E" << _EqnCnt << " .. ";
   
   // Add participating variables to GAMS model
   for( unsigned k=0; k<pCut->nvar(); k++ ){
-    if( _GAMSvar.find( pCut->var()+k ) == _GAMSvar.end() )
+    if( _GAMSpolvar.find( pCut->var()+k ) == _GAMSpolvar.end() )
       _add_var( pCut->var()+k );
   }
   for( unsigned k=0; k<pCut->nqvar(); k++ ){
-    if( _GAMSvar.find( pCut->qvar1()+k ) == _GAMSvar.end() )
+    if( _GAMSpolvar.find( pCut->qvar1()+k ) == _GAMSpolvar.end() )
       _add_var( pCut->qvar1()+k );
-    if( _GAMSvar.find( pCut->qvar2()+k ) == _GAMSvar.end() )
+    if( _GAMSpolvar.find( pCut->qvar2()+k ) == _GAMSpolvar.end() )
       _add_var( pCut->qvar2()+k );
   }
 
@@ -350,15 +531,15 @@ GAMSWRITER<T>::_add_cut
   switch( pCut->type() ){
 
     case PolCut<T>::EQ:
-      _EqnDef << _lhs_cut( pCut ) << " =E= " << pCut->rhs() << ";" << std::endl;
+      _EqnDef << _lhs_cut( pCut ) << " =E= " << d2s(pCut->rhs()) << ";" << std::endl;
       break;
 
     case PolCut<T>::LE:
-      _EqnDef << _lhs_cut( pCut ) << " =L= " << pCut->rhs() << ";" << std::endl;
+      _EqnDef << _lhs_cut( pCut ) << " =L= " << d2s(pCut->rhs()) << ";" << std::endl;
       break;
 
     case PolCut<T>::GE:
-      _EqnDef << _lhs_cut( pCut ) << " =G= " << pCut->rhs() << ";" << std::endl;
+      _EqnDef << _lhs_cut( pCut ) << " =G= " << d2s(pCut->rhs()) << ";" << std::endl;
       break;
 
     case PolCut<T>::SOS1:
@@ -382,8 +563,8 @@ GAMSWRITER<T>::_add_cut
           break;
 
         case FFOp::DPOW:{
-          _EqnDef << pCut->var()[0].name() << " - " << pCut->var()[1].name()
-                  << "**" << pCut->op()->pops[1]->num().x << " =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " - RPOWER(" << pCut->var()[1].name()
+                  << "," << d2s(pCut->op()->pops[1]->num().x) << " =E= 0;" << std::endl;
           break;
 
         case FFOp::CHEB:{
@@ -487,113 +668,27 @@ GAMSWRITER<T>::_add_cut
   }
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline bool
-GAMSWRITER<T>::set_variable
-( PolVar<T> const& pVar, double const* pVal )//, unsigned const priority )
+GAMSWRITER<DAG,T>::set_variable
+( PolVar<T> const& polVar, double const* l )
 {
-  auto itv = _GAMSvar.find( const_cast<PolVar<T>*>(&pVar) );
-  if( itv == _GAMSvar.end() ) return false;
-  if( pVal ) _VarIni << pVar.name() << ".L = " << *pVal << ";" << std::endl;
-  //itv->second.set( GRB_IntAttr_BranchPriority, (int)priority );
+  auto itv = _GAMSpolvar.find( const_cast<PolVar<T>*>(&polVar) );
+  if( itv == _GAMSpolvar.end() ) return false;
+  if( l ) _VarIni << polVar.name() << ".L = " << d2s(*l) << ";" << std::endl;
   return true;
 }
 
-template <typename T>
+template <typename DAG, typename T>
 inline void
-GAMSWRITER<T>::set_objective
-( PolVar<T> const& pObj, t_OBJ const& tObj )
+GAMSWRITER<DAG,T>::set_objective
+( PolVar<T> const& polObj, t_OBJ const& tObj )
 {
   _DirObj = tObj;
-  if( _GAMSvar.find( &pObj ) == _GAMSvar.end() ) _add_var( &pObj );
+  if( _GAMSpolvar.find( &polObj ) == _GAMSpolvar.end() ) _add_var( &polObj );
   _EqnDec << (_EqnDec.tellp()>0?", ":" ") << "E" << ++_EqnCnt;
-  _EqnDef << "E" << _EqnCnt << " .. " << _VarObj << " =E= " << pObj.name() << ";" << std::endl;
+  _EqnDef << "E" << _EqnCnt << " .. " << _VarObj << " =E= " << polObj.name() << ";" << std::endl;
 }
-
-//template <typename T>
-//inline void
-//GAMSWRITER<T>::set_objective
-//( unsigned const nObj, PolVar<T> const* pObj, double const* cObj,
-//  t_OBJ const& tObj )
-//{
-//  _DirObj = tObj;
-
-//  // Set objective
-//  GRBLinExpr linobj;
-//  _cutvar.resize( nObj );
-//  for( unsigned k=0; k<nObj; k++ ){
-//    auto itvar = _MIPvar.find( &pObj[k] );
-//    if( itvar == _MIPvar.end() && appvar_)
-//      itvar = _add_var( &pObj[k] ).first;
-//    else if( itvar == _MIPvar.end() )
-//      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in objective");
-//    _cutvar[k] = itvar->second;
-//  }
-//  linobj.addTerms( cObj, _cutvar.data(), nObj );
-//  _GRBmodel->setObjective( linobj );
-//  switch( tObj ){
-//    case MIN: _GRBmodel->set( GRB_IntAttr_ModelSense,  1 ); break;
-//    case MAX: _GRBmodel->set( GRB_IntAttr_ModelSense, -1 ); break;
-//  }
-//}
-
-//template <typename T>
-//inline typename MIPSLV_GUROBI<T>::t_MIPCtr
-//MIPSLV_GUROBI<T>::add_constraint
-//( PolVar<T> const& pCtr, t_CTR const& tCtr, double const rhs,
-//  bool const appvar_ )
-//{
-//  // Set constraint
-//  auto jtctr = _MIPvar.find( &pCtr );
-//  if( jtctr == _MIPvar.end() && appvar_ )
-//      jtctr = _add_var( &pCtr ).first;
-//  else if( jtctr == _MIPvar.end() )
-//    throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
-//  GRBLinExpr lhs( jtctr->second );
-//  GRBConstr ctr;
-//  switch( tCtr ){
-//    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
-//    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
-//    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
-//  }
-//  return ctr;
-//}
-
-//template <typename T>
-//inline typename MIPSLV_GUROBI<T>::t_MIPCtr
-//MIPSLV_GUROBI<T>::add_constraint
-//( unsigned const nCtr, PolVar<T> const* pCtr, double const* cCtr,
-//  t_CTR const& tCtr, double const rhs, bool const appvar_ )
-//{
-//  // Set constraint
-//  GRBLinExpr lhs;
-//  _cutvar.resize( nCtr );
-//  for( unsigned k=0; k<nCtr; k++ ){
-//    auto jtctr = _MIPvar.find( &pCtr[k] );
-//    if( jtctr == _MIPvar.end() && appvar_)
-//        jtctr = _add_var( &pCtr[k] ).first;
-//    else if( jtctr == _MIPvar.end() )
-//      throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in constraint");
-//    _cutvar[k] = jtctr->second;
-//  }
-//  lhs.addTerms( cCtr, _cutvar.data(), nCtr );
-//  GRBConstr ctr;
-//  switch( tCtr ){
-//    case EQ: ctr = _GRBmodel->addConstr( lhs, GRB_EQUAL,         rhs ); break;
-//    case LE: ctr = _GRBmodel->addConstr( lhs, GRB_LESS_EQUAL,    rhs ); break;
-//    case GE: ctr = _GRBmodel->addConstr( lhs, GRB_GREATER_EQUAL, rhs ); break;
-//  }
-//  return ctr;
-//}
-
-//template <typename T>
-//inline typename MIPSLV_GUROBI<T>::t_MIPCtr
-//MIPSLV_GUROBI<T>::dummy_constraint
-//()
-//{
-//  GRBConstr ctr;
-//  return ctr;
-//}
 
 } // end namespace mc
 
