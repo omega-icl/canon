@@ -10,10 +10,10 @@ int main()
   NLP.set_dag( &DAG );                       // DAG
   NLP.add_var( P[0], 0, 6 );
   NLP.add_var( P[1], 0, 4 );
-  NLP.set_obj( mc::BASE_NLP::MAX, P[0]+P[1] );   // objective
-  NLP.add_ctr( mc::BASE_NLP::LE, P[0]*P[1]-4. ); // constraints
+  NLP.set_obj( mc::BASE_OPT::MAX, P[0]+P[1] );   // objective
+  NLP.add_ctr( mc::BASE_OPT::LE, P[0]*P[1]-4. ); // constraints
 
-  NLP.options.DISPLEVEL = 0;
+  NLP.options.DISPLEVEL = 1;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
 

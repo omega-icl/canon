@@ -24,12 +24,12 @@ int main()
   for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
 
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT *NLP = new mc::NLPSLV_SNOPT;
+  mc::NLPSLV_SNOPT<mc::FFGraph<>> *NLP = new mc::NLPSLV_SNOPT<mc::FFGraph<>>;
   NLP->options.DISPLEVEL = 1;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FAD;
+  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<mc::FFGraph<>>::Options::FAD;
   NLP->options.GRADCHECK = false;
   NLP->options.MAXTHREAD = 8;
 #else
@@ -56,17 +56,17 @@ int main()
   NLP->add_var( N, X, -LMAX, LMAX );
   NLP->add_var( N, Y, -LMAX, LMAX );
 
-  NLP->set_obj( mc::BASE_NLP::MIN, L );
+  NLP->set_obj( mc::BASE_OPT::MIN, L );
   for( unsigned i=0; i<N; i++ ){
     for( unsigned j=i+1; j<N; j++ )
-      NLP->add_ctr( mc::BASE_NLP::GE, mc::sqr(X[i]-X[j]) + mc::sqr(Y[i]-Y[j]) - mc::sqr(R[i]+R[j]) );
-    NLP->add_ctr( mc::BASE_NLP::LE, X[i] + R[i] - 0.5*L );
-    NLP->add_ctr( mc::BASE_NLP::GE, X[i] - R[i] + 0.5*L );
-    NLP->add_ctr( mc::BASE_NLP::LE, Y[i] + R[i] - 0.5*L );
-    NLP->add_ctr( mc::BASE_NLP::GE, Y[i] - R[i] + 0.5*L );
+      NLP->add_ctr( mc::BASE_OPT::GE, mc::sqr(X[i]-X[j]) + mc::sqr(Y[i]-Y[j]) - mc::sqr(R[i]+R[j]) );
+    NLP->add_ctr( mc::BASE_OPT::LE, X[i] + R[i] - 0.5*L );
+    NLP->add_ctr( mc::BASE_OPT::GE, X[i] - R[i] + 0.5*L );
+    NLP->add_ctr( mc::BASE_OPT::LE, Y[i] + R[i] - 0.5*L );
+    NLP->add_ctr( mc::BASE_OPT::GE, Y[i] - R[i] + 0.5*L );
   }
-//  NLP->add_ctr( mc::BASE_NLP::LE, X[0] - X[1] );
-//  NLP->add_ctr( mc::BASE_NLP::LE, Y[0] - Y[1] );
+//  NLP->add_ctr( mc::BASE_OPT::LE, X[0] - X[1] );
+//  NLP->add_ctr( mc::BASE_OPT::LE, Y[0] - Y[1] );
   NLP->setup();
 
 //  typedef mc::Interval I;
@@ -83,9 +83,9 @@ int main()
   std::cout << "STATIONARY: " << NLP->is_stationary( 1e-7 ) << std::endl;
 
   NLP->options.DISPLEVEL = 0;
-  for( NLP->options.MAXTHREAD = 1; NLP->options.MAXTHREAD <= 8; NLP->options.MAXTHREAD++ ){
+  for( NLP->options.MAXTHREAD = 16; NLP->options.MAXTHREAD <= 16; NLP->options.MAXTHREAD*=2 ){
     double tStart = mc::userclock();
-    NLP->solve( 1000 );
+    NLP->solve( 10000 );
     std::cout << "MULTISTART ON " << NLP->options.MAXTHREAD << " THREADS: " << mc::userclock()-tStart << " CPU-sec\n";
   }
 

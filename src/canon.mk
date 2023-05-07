@@ -5,10 +5,10 @@ include $(srcpath)/makeoptions.mk
 
 #####
 
-incobjs = base_ae.hpp base_opt.hpp base_nlp.hpp \
+incobjs = base_ae.hpp base_opt.hpp base_nlp.hpp aebnd.hpp \
           GamsNLinstr.h gamsio.hpp gamswriter.hpp \
           nlpslv_ipopt.hpp nlpslv_snopt.hpp mipslv_gurobi.hpp \
-          minlpslv.hpp minlpbnd.hpp minlgo.hpp
+          minlpslv.hpp minlpref.hpp minlpbnd.hpp minlgo.hpp
 
 binobjs = minlgo.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 
@@ -20,7 +20,7 @@ binname = canon
 
 #####
 
-install: dispBuild canon canon_lib dispInstall
+install: dispBuild canon_inc canon canon_lib dispInstall
 	@if test ! -e $(binpath)/$(binname); then \
 		echo creating symolic link to executable $(binname); \
 		cd $(binpath) ; ln -s $(srcpath)/$(binname) $(binname); \
@@ -29,12 +29,12 @@ install: dispBuild canon canon_lib dispInstall
 #		echo creating symolic link to shared library $(libname); \
 #		cd $(libpath) ; ln -s $(srcpath)/$(libname) $(libname); \
 #	fi
-	@for INC in $(incobjs); do \
-		if test ! -e $(incpath)/$$INC; then \
-			echo creating symbolic link to header file $$INC; \
-			cd $(incpath); ln -s $(srcpath)/$$INC $$INC; \
-		fi; \
-	done
+#	@for INC in $(incobjs); do \
+#		if test ! -e $(incpath)/$$INC; then \
+#			echo creating symbolic link to header file $$INC; \
+#			cd $(incpath); ln -s $(srcpath)/$$INC $$INC; \
+#		fi; \
+#	done
 	@echo
 
 canon: $(binobjs)
@@ -42,6 +42,14 @@ canon: $(binobjs)
 
 canon_lib: $(libobjs)
 #	$(CPP) -shared -o $(libname) $(libobjs)
+
+canon_inc:
+	@for INC in $(incobjs); do \
+		if test ! -e $(incpath)/$$INC; then \
+			echo creating symbolic link to header file $$INC; \
+			cd $(incpath); ln -s $(srcpath)/$$INC $$INC; \
+		fi; \
+	done
 
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_DEP) $< -o $@

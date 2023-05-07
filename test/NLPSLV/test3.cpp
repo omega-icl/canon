@@ -61,12 +61,12 @@ int main()
 {
 
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT *NLP = new mc::NLPSLV_SNOPT;
+  mc::NLPSLV_SNOPT<mc::FFGraph<>> *NLP = new mc::NLPSLV_SNOPT<mc::FFGraph<>>;
   NLP->options.DISPLEVEL = 1;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FAD;
+  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<mc::FFGraph<>>::Options::FAD;
   NLP->options.MAXTHREAD = 4;
 #else
   mc::NLPSLV_IPOPT *NLP = new mc::NLPSLV_IPOPT;
@@ -102,25 +102,25 @@ int main()
   NLP->add_var( P,    0.0e0,  1.0e2 );
   NLP->add_par( Msp,  Mspdef );
 
-  NLP->set_obj( mc::BASE_NLP::MIN, sum( NS, P.data() ) );
-  NLP->add_ctr( mc::BASE_NLP::EQ, sum( NS, Mout.data() ) - Msp );
+  NLP->set_obj( mc::BASE_OPT::MIN, sum( NS, P.data() ) );
+  NLP->add_ctr( mc::BASE_OPT::EQ, sum( NS, Mout.data() ) - Msp );
   for( unsigned i=0; i<NS; i++ ){
-    NLP->add_ctr( mc::BASE_NLP::LE, PI[i] - s0 - s1*Mc[i] );
-    NLP->add_ctr( mc::BASE_NLP::GE, PI[i] - c0 - c1*Mc[i] );
-    NLP->add_ctr( mc::BASE_NLP::EQ, Vrec[i] * ( PI[i] - s0 - s1*Mc[i] ) ); // <- complementarity constraint to force Vrec>0 only if surge constraint is active
-    NLP->add_ctr( mc::BASE_NLP::EQ, sqr(Min[i]/kin) - (Pin-Ps[i]) );
-    NLP->add_ctr( mc::BASE_NLP::EQ, sqr(Mout[i]/kout) - (Pd[i]-Pout) );
-    NLP->add_ctr( mc::BASE_NLP::EQ, sqr(Mrec[i]/krec) - sqr(Vrec[i])*(Pd[i]-Ps[i]) );
-    NLP->add_ctr( mc::BASE_NLP::EQ, Mout[i] - Min[i] );
-    NLP->add_ctr( mc::BASE_NLP::EQ, Mc[i] - Min[i] - Mrec[i] );
-    NLP->add_ctr( mc::BASE_NLP::EQ, Pd[i] - PI[i] * Ps[i] );
-    NLP->add_ctr( mc::BASE_NLP::EQ, PI[i] - map_pi( Mc[i], W[i], maps_a[i] ) );
-    NLP->add_ctr( mc::BASE_NLP::EQ, Ep[i] - map_eta( Mc[i], PI[i], maps_b[i] ) );
-    NLP->add_ctr( mc::BASE_NLP::EQ, Yp[i] - ((Zin*R*Tin)/MW)*(nv/(nv-1))*(pow(PI[i],(nv-1)/nv)-1) );
-    NLP->add_ctr( mc::BASE_NLP::EQ, P[i] * Ep[i] - Yp[i] * Mc[i] );
-    NLP->add_ctr( mc::BASE_NLP::GE, Pin   - Ps[i] );
-    NLP->add_ctr( mc::BASE_NLP::GE, Pd[i] - Ps[i] );
-    NLP->add_ctr( mc::BASE_NLP::LE, Pout  - Pd[i] );
+    NLP->add_ctr( mc::BASE_OPT::LE, PI[i] - s0 - s1*Mc[i] );
+    NLP->add_ctr( mc::BASE_OPT::GE, PI[i] - c0 - c1*Mc[i] );
+    NLP->add_ctr( mc::BASE_OPT::EQ, Vrec[i] * ( PI[i] - s0 - s1*Mc[i] ) ); // <- complementarity constraint to force Vrec>0 only if surge constraint is active
+    NLP->add_ctr( mc::BASE_OPT::EQ, sqr(Min[i]/kin) - (Pin-Ps[i]) );
+    NLP->add_ctr( mc::BASE_OPT::EQ, sqr(Mout[i]/kout) - (Pd[i]-Pout) );
+    NLP->add_ctr( mc::BASE_OPT::EQ, sqr(Mrec[i]/krec) - sqr(Vrec[i])*(Pd[i]-Ps[i]) );
+    NLP->add_ctr( mc::BASE_OPT::EQ, Mout[i] - Min[i] );
+    NLP->add_ctr( mc::BASE_OPT::EQ, Mc[i] - Min[i] - Mrec[i] );
+    NLP->add_ctr( mc::BASE_OPT::EQ, Pd[i] - PI[i] * Ps[i] );
+    NLP->add_ctr( mc::BASE_OPT::EQ, PI[i] - map_pi( Mc[i], W[i], maps_a[i] ) );
+    NLP->add_ctr( mc::BASE_OPT::EQ, Ep[i] - map_eta( Mc[i], PI[i], maps_b[i] ) );
+    NLP->add_ctr( mc::BASE_OPT::EQ, Yp[i] - ((Zin*R*Tin)/MW)*(nv/(nv-1))*(pow(PI[i],(nv-1)/nv)-1) );
+    NLP->add_ctr( mc::BASE_OPT::EQ, P[i] * Ep[i] - Yp[i] * Mc[i] );
+    NLP->add_ctr( mc::BASE_OPT::GE, Pin   - Ps[i] );
+    NLP->add_ctr( mc::BASE_OPT::GE, Pd[i] - Ps[i] );
+    NLP->add_ctr( mc::BASE_OPT::LE, Pout  - Pd[i] );
   }
   NLP->setup();
   NLP->options.DISPLEVEL = 0;

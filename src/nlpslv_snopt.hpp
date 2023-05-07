@@ -1,12 +1,12 @@
-// Copyright (C) 2020 Benoit Chachuat, Imperial College London.
+// Copyright (C) Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
 /*!
 \page page_NLPSLV_SNOPT Local (Continuous) Nonlinear Optimization interfacing SNOPT with MC++
 \author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
-\version 1.0
-\date 2020
+\version 2.0
+\date 2023
 \bug No known bugs.
 
 Consider a nonlinear optimization problem in the form:
@@ -43,8 +43,8 @@ Next, set the variables and objective/constraint functions after creating a DAG 
   NLP.set_dag( &DAG );                           // DAG
   NLP.add_var( P[0], 0, 6 );                     // decision variables and bounds
   NLP.add_var( P[1], 0, 4 );
-  NLP.set_obj( mc::BASE_NLP::MAX, P[0]+P[1] );   // objective function
-  NLP.add_ctr( mc::BASE_NLP::LE, P[0]*P[1]-4. ); // constraints
+  NLP.set_obj( mc::BASE_OPT::MAX, P[0]+P[1] );   // objective function
+  NLP.add_ctr( mc::BASE_OPT::LE, P[0]*P[1]-4. ); // constraints
 \endcode
 
 Possibly set options using the class member NLPSLV_SNOPT::options:
@@ -90,6 +90,7 @@ producing the following display:
 
 #include "mctime.hpp"
 #include "base_nlp.hpp"
+#include "gamsio.hpp"
 
 #ifdef MC__USE_SOBOL
   #include <boost/random/sobol.hpp>
@@ -104,40 +105,93 @@ producing the following display:
 namespace mc
 {
 
-class WORKER_SNOPT;
+//! @brief C++ class for calling SNOPT on local threads
+////////////////////////////////////////////////////////////////////////
+//! mc::WORKER_SNOPT and mc::WORKER_BASE are C++ class for calling
+//! SNOPT on local threads
+////////////////////////////////////////////////////////////////////////
+struct WORKER_BASE
+{
+  //! @brief Constructor
+  WORKER_BASE
+    ()
+    : is_registered( false )
+    {}
+
+  //! @brief flag indicating whether the thread is registered
+  bool is_registered;
+
+  //! @brief thread-safe static pointer to SNOPT worker
+  thread_local static WORKER_BASE* PTR_WORKER_SNOPT;
+
+  //! @brief pure virtual callback function
+  virtual void callback
+    ( int *Status, int *neX, double *X, int *needF, int *neF, double *F,
+      int *needG, int *neG, double *G, int *fdG )
+    = 0;
+};
+
+thread_local WORKER_BASE* WORKER_BASE::PTR_WORKER_SNOPT = nullptr;
+thread_local void (WORKER_BASE::*PTR_CBACK_SNOPT)( int*, int*, double*,
+  int*, int*, double*, int*, int*, double*, int* ) = nullptr;
 
 void REG_CBACK_SNOPT
-( WORKER_SNOPT*th, void (WORKER_SNOPT::*usr)( int*, int*, double*,
-  int*, int*, double*, int*, int*, double*, int* ) );
+( WORKER_BASE*th, void (WORKER_BASE::*usr)( int*, int*, double*,
+  int*, int*, double*, int*, int*, double*, int* ) )
+{
+#ifdef MC__NLPSLV_SNOPT_CHECK
+  assert( WORKER_BASE::PTR_WORKER_SNOPT == nullptr && PTR_CBACK_SNOPT == nullptr );
+#endif
+  WORKER_BASE::PTR_WORKER_SNOPT = th;
+  PTR_CBACK_SNOPT  = usr;
+}
 
 void UNREG_CBACK_SNOPT
-();
+()
+{
+#ifdef MC__NLPSLV_SNOPT_CHECK
+  assert( WORKER_BASE::PTR_WORKER_SNOPT != nullptr && PTR_CBACK_SNOPT != nullptr);
+#endif
+  WORKER_BASE::PTR_WORKER_SNOPT = nullptr;
+  PTR_CBACK_SNOPT  = nullptr;
+}
 
 extern "C"
 void WRP_CBACK_SNOPT
-  ( int *Status, int *n, double *x, int *needF, int *neF, double *F, int *needG, int *neG,
-    double *G, char *cu, int *lencu, int *iu, int *leniu, double *ru, int *lenru );
+( int *Status, int *n, double *x, int *needF, int *neF, double *F, int *needG, int *neG,
+  double *G, char *cu, int *lencu, int *iu, int *leniu, double *ru, int *lenru )
+{
+#ifdef MC__NLPSLV_SNOPT_CHECK
+  //std::cout << "PTR_WORKER_SNOPT: " << PTR_WORKER_SNOPT << "  PTR_CBACK_SNOPT: " << PTR_CBACK_SNOPT << std::endl;
+  assert( WORKER_BASE::PTR_WORKER_SNOPT != nullptr && PTR_CBACK_SNOPT != nullptr);
+#endif
+  return (WORKER_BASE::PTR_WORKER_SNOPT->*PTR_CBACK_SNOPT)( Status, n, x, needF, neF, F, needG, neG, G, iu );
+}
 
-//! @brief C++ class for calling SNOPT on local threads
-////////////////////////////////////////////////////////////////////////
-//! mc::WORKER_SNOPT is a C++ class for calling SNOPT on local threads
-////////////////////////////////////////////////////////////////////////
+template < typename DAG >
 struct WORKER_SNOPT
+: WORKER_BASE
 {
   //! @brief Constructor
   WORKER_SNOPT
     ()
+    : WORKER_BASE()
     {
       snOptA.initialize( "", 0, "", 0 );
-      is_registered = false;
     }
+
+  //! @brief Destructor
+  virtual ~WORKER_SNOPT
+    ()
+    {}
 
   //! @brief Function registering thread
   void registration
     ()
     {
       if( is_registered ) return;
-      REG_CBACK_SNOPT( this, &WORKER_SNOPT::callback );
+      //REG_CBACK_SNOPT( this, &WORKER_SNOPT<DAG>::callback );
+      REG_CBACK_SNOPT( this, &WORKER_BASE::callback );
       is_registered = true;
     }
 
@@ -149,9 +203,6 @@ struct WORKER_SNOPT
       UNREG_CBACK_SNOPT();
       is_registered = false;
     }
-
-  //! @brief flag indicating whether the thread is registered
-  bool                is_registered;
   
   //! @brief SNOPTA class object
   snoptProblemA       snOptA;
@@ -206,7 +257,7 @@ struct WORKER_SNOPT
   double              sInf;
   
   //! @brief local copy of DAG
-  FFGraph DAG;
+  DAG dag;
   //! @brief vector of decision variables in DAG
   std::vector<FFVar>  Xvar;
   //! @brief vector of functions in DAG
@@ -244,8 +295,8 @@ struct WORKER_SNOPT
   void finalize
     ( int const stat, int const ObjRow, double const ObjMul );
 
- //! @brief User function evaluating nonlinear functions and gradients
- void callback
+  //! @brief User function evaluating nonlinear functions and gradients
+  void callback
    ( int *Status, int *neX, double *X, int *needF, int *neF, double *F,
      int *needG, int *neG, double *G, int *fdG );
 
@@ -263,13 +314,14 @@ struct WORKER_SNOPT
     ( int const nF, int const nX, int const ObjRow, int const nA );
 };
 
+template <typename DAG>
 inline
 void
-WORKER_SNOPT::update
+WORKER_SNOPT<DAG>::update
 ( int const nX, double const* Xl, double const* Xu, int const nP, double const* Pval )
 {
 #ifdef MC__NLPSLV_SNOPT_TRACE
-    std::cout << "  WORKER_SNOPT::initialize  " << warm << std::endl;
+    std::cout << "  WORKER_SNOPT<DAG>::initialize  " << warm << std::endl;
 #endif
 
   // variable bounds
@@ -290,13 +342,14 @@ WORKER_SNOPT::update
   }
 }
 
+template <typename DAG>
 inline
 void
-WORKER_SNOPT::initialize
+WORKER_SNOPT<DAG>::initialize
 ( int const nF, int const nX, double const* Xini, bool const warm )
 {
 #ifdef MC__NLPSLV_SNOPT_TRACE
-    std::cout << "  WORKER_SNOPT::initialize  " << warm << std::endl;
+    std::cout << "  WORKER_SNOPT<DAG>::initialize  " << warm << std::endl;
 #endif
 
   // initial starting point
@@ -318,14 +371,15 @@ WORKER_SNOPT::initialize
   Fmul.assign( nF, 0. );
 }
     
+template <typename DAG>
 inline
 void
-WORKER_SNOPT::solve
+WORKER_SNOPT<DAG>::solve
 ( int& stat, int iStart, int nF, int nX, double ObjAdd, int ObjRow,
   int nA, int nG )
 {
 #ifdef MC__NLPSLV_SNOPT_TRACE
-  std::cout << "  WORKER_SNOPT::solve\n";
+  std::cout << "  WORKER_SNOPT<DAG>::solve\n";
 #endif
   // Run NLP solver
   stat = snOptA.solve( iStart, nF, nX, ObjAdd, ObjRow, WRP_CBACK_SNOPT,
@@ -335,13 +389,14 @@ WORKER_SNOPT::solve
     nS, nInf, sInf );
 }
 
+template <typename DAG>
 inline
 void
-WORKER_SNOPT::finalize
+WORKER_SNOPT<DAG>::finalize
 ( int const stat, int const ObjRow, double const ObjMul )
 {
 #ifdef MC__NLPSLV_SNOPT_TRACE
-  std::cout << "  WORKER_SNOPT::finalize\n";
+  std::cout << "  WORKER_SNOPT<DAG>::finalize\n";
 #endif
   solution.stat       = stat;
   solution.x          = Xval;
@@ -358,14 +413,15 @@ WORKER_SNOPT::finalize
   if( ObjRow >= 0 ) solution.uf[ObjRow] = ObjMul;
 }
 
+template <typename DAG>
 inline
 void
-WORKER_SNOPT::callback
+WORKER_SNOPT<DAG>::callback
 ( int *Status, int *neX, double *X, int *needF, int *neF, double *F,
   int *needG, int *neG, double *G, int *fdG )
 {
 #ifdef MC__NLPSLV_SNOPT_TRACE
-    std::cout << "  WORKER_SNOPT::callback\n";
+    std::cout << "  WORKER_SNOPT<DAG>::callback\n";
 #endif
   if( *Status > 1 ) return; // <- Could be set as on option?
 
@@ -382,7 +438,7 @@ WORKER_SNOPT::callback
   try{
     // Needs nonlinear function values
     if( *needF > 0 ){
-      DAG.eval( op_F, dwk, Gndx, Fvar.data(), F, *neX, Xvar.data(), X );
+      dag.eval( op_F, dwk, Gndx, Fvar.data(), F, *neX, Xvar.data(), X );
 #ifdef MC__NLPSLV_SNOPT_DEBUG
       for( auto && i : Gndx )
         std::cout << "  F[" << i << "] = " << F[i] << std::endl;
@@ -391,7 +447,7 @@ WORKER_SNOPT::callback
     
     // Needs nonlinear function derivatives
     if( *needG > 0 && !*fdG ){
-      DAG.eval( op_G, dwk, *neG, Gvar.data(), G, *neX, Xvar.data(), X );
+      dag.eval( op_G, dwk, *neG, Gvar.data(), G, *neX, Xvar.data(), X );
 #ifdef MC__NLPSLV_SNOPT_DEBUG
       for( int ie=0; ie<*neG; ie++ )
         std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << G[ie] << std::endl;
@@ -403,9 +459,10 @@ WORKER_SNOPT::callback
   }
 }
 
+template <typename DAG>
 inline
 bool
-WORKER_SNOPT::feasible
+WORKER_SNOPT<DAG>::feasible
 ( double const CTRTOL, int const nF, int const nX, int const ObjRow,
   int const nA )
 {
@@ -422,7 +479,7 @@ WORKER_SNOPT::feasible
 
   try{
     solution.f.assign( nF, 0. );
-    DAG.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+    dag.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
     for( int iA=0; iA<nA; iA++ )
       solution.f[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
   }
@@ -443,14 +500,15 @@ WORKER_SNOPT::feasible
   return true;
 }
 
+template <typename DAG>
 inline
 bool
-WORKER_SNOPT::stationary
+WORKER_SNOPT<DAG>::stationary
 ( double const GRADTOL, int const nX, int const nA, int const nG )
 {
   try{
     Gval.resize( nG );
-    DAG.eval( op_G, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+    dag.eval( op_G, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
   }
   catch(...){
     return false;
@@ -469,9 +527,10 @@ WORKER_SNOPT::stationary
   return true;
 }
 
+template <typename DAG>
 inline
 double
-WORKER_SNOPT::correction
+WORKER_SNOPT<DAG>::correction
 ( int const nF, int const nX, int const ObjRow, int const nA )
 {
   double costcorr = 0.;
@@ -485,7 +544,7 @@ WORKER_SNOPT::correction
 
   try{
     solution.f.assign( nF, 0. );
-    DAG.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+    dag.eval( op_F, dwk, Gndx, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
     for( int iA=0; iA<nA; iA++ )
       solution.f[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
   }
@@ -509,12 +568,68 @@ WORKER_SNOPT::correction
 //! mc::NLPSLV_SNOPT is a C++ class for solving NLP problems
 //! using SNOPT and MC++
 ////////////////////////////////////////////////////////////////////////
-class NLPSLV_SNOPT:
-  public virtual BASE_NLP
+template < typename DAG = mc::FFGraph<> >
+class NLPSLV_SNOPT
+#if defined (MC__WITH_GAMS)
+: protected virtual GAMSIO<DAG>,
+  public virtual BASE_NLP<DAG>
+#else
+: public virtual BASE_NLP<DAG>
+#endif
 {
-  // Overloading stdout operator
-  //friend std::ostream& operator<<
-  //  ( std::ostream &, NLPSLV_SNOPT const& );
+public:
+
+  using BASE_AE<DAG>::set;
+  using BASE_AE<DAG>::dag;
+  using BASE_AE<DAG>::set_dag;
+  using BASE_AE<DAG>::par;
+  using BASE_AE<DAG>::set_par;
+  using BASE_AE<DAG>::add_par;
+  using BASE_AE<DAG>::reset_par;
+  using BASE_AE<DAG>::var;
+  using BASE_AE<DAG>::set_var;
+  using BASE_AE<DAG>::add_var;
+  using BASE_AE<DAG>::reset_var;
+  using BASE_AE<DAG>::update_vartyp;
+  using BASE_AE<DAG>::dep;
+  using BASE_AE<DAG>::set_dep;
+  using BASE_AE<DAG>::add_dep;
+  using BASE_AE<DAG>::reset_dep;
+  using BASE_AE<DAG>::sys;
+  using BASE_AE<DAG>::add_sys;
+  using BASE_AE<DAG>::reset_sys;
+
+  using BASE_NLP<DAG>::set_obj;
+  using BASE_NLP<DAG>::add_ctr;
+
+#if defined (MC__WITH_GAMS)
+  using GAMSIO<DAG>::read;
+#endif
+
+protected:
+
+  using BASE_AE<DAG>::_dag;
+  using BASE_AE<DAG>::_var;
+  using BASE_AE<DAG>::_vartyp;
+  using BASE_AE<DAG>::_varlb;
+  using BASE_AE<DAG>::_varlm;
+  using BASE_AE<DAG>::_varub;
+  using BASE_AE<DAG>::_varum;
+  using BASE_AE<DAG>::_dep;
+  using BASE_AE<DAG>::_deplb;
+  using BASE_AE<DAG>::_deplm;
+  using BASE_AE<DAG>::_depub;
+  using BASE_AE<DAG>::_depum;
+  using BASE_AE<DAG>::_sys;
+  using BASE_AE<DAG>::_sysm;
+  using BASE_AE<DAG>::_par;
+
+  using BASE_NLP<DAG>::_obj;
+  using BASE_NLP<DAG>::_ctr;
+
+#if defined (MC__WITH_GAMS)
+  using GAMSIO<DAG>::_varini;
+#endif
 
 public:
 
@@ -537,7 +652,7 @@ public:
 private:
 
   //! @brief vector of SNOPTA workers
-  std::vector<WORKER_SNOPT*> _worker;
+  std::vector<WORKER_SNOPT<DAG>*> _worker;
 
   //! @brief number of parameters in problem
   int                 _nP;
@@ -554,6 +669,8 @@ private:
   std::vector<double> _Xupp;
   //! @brief vector of zeros for constant term calculation in functions
   std::vector<double> _X0;
+  //! @brief vector of decision variable levels (size _nX0)
+  std::vector<double> _Xini;
 
   //! @brief number of functions (objective and constraints) in problem
   int                 _nF;
@@ -738,11 +855,11 @@ public:
 
   //! @brief Change objective function of NLP model
   bool set_obj_lazy
-    ( t_OBJ const& type, FFVar const& obj );
+    ( BASE_OPT::t_OBJ const& type, FFVar const& obj );
 
   //! @brief Append general constraint to NLP model
   bool add_ctr_lazy
-    ( t_CTR const type, FFVar const& ctr );
+    ( BASE_OPT::t_CTR const type, FFVar const& ctr );
 
   //! @brief Restore original NLP model
   bool restore_model
@@ -825,11 +942,11 @@ protected:
 
   //! @brief set the solver options
   int _set_options
-    ( WORKER_SNOPT * th );
+    ( WORKER_SNOPT<DAG>* th );
 
   //! @brief set the worker internal variables
   void _set_worker
-    ( WORKER_SNOPT * th );
+    ( WORKER_SNOPT<DAG>* th );
 
   //! @brief resize the number of workers
   void _resize_workers
@@ -854,50 +971,14 @@ protected:
 private:
 
   //! @brief Private methods to block default compiler methods
-  NLPSLV_SNOPT( NLPSLV_SNOPT const& );
-  NLPSLV_SNOPT& operator=( NLPSLV_SNOPT const& );
+  NLPSLV_SNOPT( NLPSLV_SNOPT<DAG> const& );
+  NLPSLV_SNOPT<DAG>& operator=( NLPSLV_SNOPT<DAG> const& );
 };
 
-thread_local WORKER_SNOPT* PTR_WORKER_SNOPT = nullptr;
-thread_local void (WORKER_SNOPT::*PTR_CBACK_SNOPT)( int*, int*, double*,
-  int*, int*, double*, int*, int*, double*, int* ) = nullptr;
-
-void REG_CBACK_SNOPT
-( WORKER_SNOPT*th, void (WORKER_SNOPT::*usr)( int*, int*, double*,
-  int*, int*, double*, int*, int*, double*, int* ) )
-{
-#ifdef MC__NLPSLV_SNOPT_CHECK
-  assert( PTR_WORKER_SNOPT == nullptr && PTR_CBACK_SNOPT == nullptr );
-#endif
-  PTR_WORKER_SNOPT = th;
-  PTR_CBACK_SNOPT  = usr;
-}
-
-void UNREG_CBACK_SNOPT
-()
-{
-#ifdef MC__NLPSLV_SNOPT_CHECK
-  assert( PTR_WORKER_SNOPT != nullptr && PTR_CBACK_SNOPT != nullptr );
-#endif
-  PTR_WORKER_SNOPT = nullptr;
-  PTR_CBACK_SNOPT  = nullptr;
-}
-
-extern "C"
-void WRP_CBACK_SNOPT
-( int *Status, int *n, double *x, int *needF, int *neF, double *F, int *needG, int *neG,
-  double *G, char *cu, int *lencu, int *iu, int *leniu, double *ru, int *lenru )
-{
-#ifdef MC__NLPSLV_SNOPT_CHECK
-  //std::cout << "PTR_WORKER_SNOPT: " << PTR_WORKER_SNOPT << "  PTR_CBACK_SNOPT: " << PTR_CBACK_SNOPT << std::endl;
-  assert( PTR_WORKER_SNOPT != nullptr && PTR_CBACK_SNOPT != nullptr);
-#endif
-  return (PTR_WORKER_SNOPT->*PTR_CBACK_SNOPT)( Status, n, x, needF, neF, F, needG, neG, G, iu );
-}
-
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::setup
+NLPSLV_SNOPT<DAG>::setup
 ()
 {
   // full set of parameters
@@ -909,6 +990,13 @@ NLPSLV_SNOPT::setup
   _Xvar.insert( _Xvar.end(), _dep.begin(), _dep.end() );
   _nX = _Xvar.size();
   _X0.resize( _nX, 0. );
+  
+  // full set of variable initial values from GAMS
+#if defined (MC__WITH_GAMS)
+  _Xini = _varini;
+#else
+  _Xini.clear();
+#endif
 
   // full set of variable bounds (independent & dependent)
   _Xlow = _varlb;
@@ -954,9 +1042,9 @@ NLPSLV_SNOPT::setup
     else
       _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
     switch( std::get<0>(_ctr)[i] ){
-      case EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
-      case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
-      case GE: _Flow.push_back( -CtrCst );        _Fupp.push_back(  BASE_OPT::INF ); break;
+      case BASE_OPT::EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
+      case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
+      case BASE_OPT::GE: _Flow.push_back( -CtrCst );        _Fupp.push_back(  BASE_OPT::INF ); break;
     }
     _Foff.push_back( CtrCst );
   }
@@ -1018,9 +1106,10 @@ NLPSLV_SNOPT::setup
   return true;
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::_record_model
+NLPSLV_SNOPT<DAG>::_record_model
 ()
 {
   if( _recModel ) return false;
@@ -1048,9 +1137,10 @@ NLPSLV_SNOPT::_record_model
   return true;
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::restore_model
+NLPSLV_SNOPT<DAG>::restore_model
 ()
 {
   if( !_recModel ) return false;
@@ -1078,10 +1168,11 @@ NLPSLV_SNOPT::restore_model
   return true;
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::set_obj_lazy
-( t_OBJ const& type, FFVar const& obj )
+NLPSLV_SNOPT<DAG>::set_obj_lazy
+( BASE_OPT::t_OBJ const& type, FFVar const& obj )
 {
   // Keep track of original model 
   if( _recModel && _Fvar[_ObjRow] == obj
@@ -1179,10 +1270,11 @@ NLPSLV_SNOPT::set_obj_lazy
   return true;
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::add_ctr_lazy
-( t_CTR const type, FFVar const& ctr )
+NLPSLV_SNOPT<DAG>::add_ctr_lazy
+( BASE_OPT::t_CTR const type, FFVar const& ctr )
 {
   // Keep track of original model 
   _record_model();
@@ -1196,9 +1288,9 @@ NLPSLV_SNOPT::add_ctr_lazy
   else
     _dag->eval( 1, &_Fvar.back(), &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
   switch( type ){
-    case EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
-    case LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
-    case GE: _Flow.push_back( -CtrCst );        _Fupp.push_back(  BASE_OPT::INF ); break;
+    case BASE_OPT::EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
+    case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
+    case BASE_OPT::GE: _Flow.push_back( -CtrCst );        _Fupp.push_back(  BASE_OPT::INF ); break;
   }
   _Foff.push_back( CtrCst );
   _nF = _Fvar.size();
@@ -1239,10 +1331,11 @@ NLPSLV_SNOPT::add_ctr_lazy
   return true;
 }
 
+template <typename DAG>
 inline
 int
-NLPSLV_SNOPT::_set_options
-( WORKER_SNOPT * th )
+NLPSLV_SNOPT<DAG>::_set_options
+( WORKER_SNOPT<DAG>* th )
 {
   _iusr[0] = ( options.GRADMETH == Options::FD ? 1 : 0 );
   th->snOptA.setUserI( _iusr, 1 );
@@ -1288,21 +1381,22 @@ NLPSLV_SNOPT::_set_options
   return error;
 }
 
+template <typename DAG>
 inline
 void
-NLPSLV_SNOPT::_set_worker
-( WORKER_SNOPT * th )
+NLPSLV_SNOPT<DAG>::_set_worker
+( WORKER_SNOPT<DAG>* th )
 {
   th->Pvar.resize( _nP );
   th->Xvar.resize( _nX );
   th->Fvar.resize( _nF );
   th->Gvar.resize( _nG );
-  th->DAG.insert( _dag, _nP, _Pvar.data(), th->Pvar.data() );
-  th->DAG.insert( _dag, _nX, _Xvar.data(), th->Xvar.data() );
-  th->DAG.insert( _dag, _nF, _Fvar.data(), th->Fvar.data() );
-  th->DAG.insert( _dag, _nG, _Gvar.data(), th->Gvar.data() );
-  th->op_F  = th->DAG.subgraph( _Gndx, th->Fvar.data() );
-  th->op_G  = th->DAG.subgraph( _nG, th->Gvar.data() );
+  th->dag.insert( _dag, _nP, _Pvar.data(), th->Pvar.data() );
+  th->dag.insert( _dag, _nX, _Xvar.data(), th->Xvar.data() );
+  th->dag.insert( _dag, _nF, _Fvar.data(), th->Fvar.data() );
+  th->dag.insert( _dag, _nG, _Gvar.data(), th->Gvar.data() );
+  th->op_F  = th->dag.subgraph( _Gndx, th->Fvar.data() );
+  th->op_G  = th->dag.subgraph( _nG, th->Gvar.data() );
   th->iAfun = _iAfun;
   th->jAvar = _jAvar;
   th->Aval  = _Aval;
@@ -1317,19 +1411,21 @@ NLPSLV_SNOPT::_set_worker
   th->tMAX  = userclock() + options.TIMELIMIT;
 }
 
+template <typename DAG>
 inline
 void
-NLPSLV_SNOPT::_resize_workers
+NLPSLV_SNOPT<DAG>::_resize_workers
 ( int const noth )
 {
   while( (int)_worker.size() < noth )
-    _worker.push_back( new WORKER_SNOPT );
+    _worker.push_back( new WORKER_SNOPT<DAG> );
 }
 
+template <typename DAG>
 template <typename T>
 inline
 int
-NLPSLV_SNOPT::solve
+NLPSLV_SNOPT<DAG>::solve
 ( double const* Xini, T const* Xbnd, double const* Pval, bool const warm )
 {
   std::vector<double> Xlow, Xupp;
@@ -1344,9 +1440,10 @@ NLPSLV_SNOPT::solve
   return solve( Xini, Xlow.data(), Xupp.data(), Pval, warm );
 }
 
+template <typename DAG>
 inline
 int
-NLPSLV_SNOPT::solve
+NLPSLV_SNOPT<DAG>::solve
 ( double const* Xini, double const* Xlow, double const* Xupp, double const* Pval,
   bool const warm )
 {
@@ -1361,7 +1458,7 @@ NLPSLV_SNOPT::solve
   _iStart = ( warm? WARM: COLD );
   int stat;
   _worker[th]->registration();
-  _worker[th]->initialize( _nF, _nX, Xini, false );
+  _worker[th]->initialize( _nF, _nX, !Xini && !_Xini.empty()? _Xini.data(): Xini, false );
   _worker[th]->solve( stat, _iStart, _nF, _nX, _ObjAdd, _ObjRow, _nA, _nG );
   _worker[th]->finalize( stat, _ObjRow, _ObjMul );
   _solution = _worker[th]->solution;
@@ -1371,10 +1468,11 @@ NLPSLV_SNOPT::solve
 }
 
 #ifdef MC__USE_SOBOL
+template <typename DAG>
 template <typename T>
 inline
 int
-NLPSLV_SNOPT::solve
+NLPSLV_SNOPT<DAG>::solve
 ( unsigned const NSAM, T const* Xbnd, double const* Pval, bool const* logscal,
   bool const DISP )
 {
@@ -1386,9 +1484,10 @@ NLPSLV_SNOPT::solve
   return solve( NSAM, Xlow.data(), Xupp.data(), Pval, logscal, DISP );
 }
 
+template <typename DAG>
 inline
 int
-NLPSLV_SNOPT::solve
+NLPSLV_SNOPT<DAG>::solve
 ( unsigned const NSAM, double const* Xlow, double const* Xupp, double const* Pval,
   bool const* logscal, bool const DISP )
 {
@@ -1412,7 +1511,7 @@ NLPSLV_SNOPT::solve
   // Run NLP solver on auxiliary threads
   for( unsigned th=1; th<NOTHREADS; th++ ){
     //_worker[th]->snOptA.setIntParameter ( "Summary file ", 6 );
-    vth[th-1] = std::thread( &NLPSLV_SNOPT::_mssolve, this, th, NOTHREADS, NSAM,
+    vth[th-1] = std::thread( &NLPSLV_SNOPT<DAG>::_mssolve, this, th, NOTHREADS, NSAM,
                              logscal, DISP, std::ref(feasible[th]), std::ref(solution[th]) );
   }
 
@@ -1455,9 +1554,10 @@ NLPSLV_SNOPT::solve
   return _solution.stat;
 }
 
+template <typename DAG>
 inline
 void
-NLPSLV_SNOPT::_mssolve
+NLPSLV_SNOPT<DAG>::_mssolve
 ( int const th, unsigned const NOTHREADS, unsigned const NSAM, bool const* logscal,
   bool const DISP, int& feasible, SOLUTION_OPT& solution )
 {
@@ -1532,9 +1632,10 @@ NLPSLV_SNOPT::_mssolve
 }
 #endif
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::is_feasible
+NLPSLV_SNOPT<DAG>::is_feasible
 ( const double*x, const double CTRTOL )
 {
   if( !x ) return false;
@@ -1549,9 +1650,10 @@ NLPSLV_SNOPT::is_feasible
   return feas;
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::is_feasible
+NLPSLV_SNOPT<DAG>::is_feasible
 ( const double CTRTOL )
 {
   if( _solution.x.empty() ) return false;
@@ -1565,9 +1667,10 @@ NLPSLV_SNOPT::is_feasible
   return feas;
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::is_stationary
+NLPSLV_SNOPT<DAG>::is_stationary
 ( const double*x, const double*ux, const double*uf, const double GRADTOL )
 {
   // Initialize main thread
@@ -1580,9 +1683,10 @@ NLPSLV_SNOPT::is_stationary
   return _worker[th]->stationary( GRADTOL, _nX, _nA, _nG );
 }
 
+template <typename DAG>
 inline
 bool
-NLPSLV_SNOPT::is_stationary
+NLPSLV_SNOPT<DAG>::is_stationary
 ( const double GRADTOL )
 {
   // Initialize main thread
@@ -1592,9 +1696,10 @@ NLPSLV_SNOPT::is_stationary
   return _worker[th]->stationary( GRADTOL, _nX, _nA, _nG );
 }
 
+template <typename DAG>
 inline
 double
-NLPSLV_SNOPT::cost_correction
+NLPSLV_SNOPT<DAG>::cost_correction
 ( const double*x, const double*ux, const double*uf )
 {
   // Initialize main thread
@@ -1607,9 +1712,10 @@ NLPSLV_SNOPT::cost_correction
   return _worker[th]->correction( _nF, _nX, _ObjRow, _nA );
 }
 
+template <typename DAG>
 inline
 double
-NLPSLV_SNOPT::cost_correction
+NLPSLV_SNOPT<DAG>::cost_correction
 ()
 {
   // Initialize main thread

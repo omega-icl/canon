@@ -244,7 +244,7 @@ public:
       _vartyp.assign( var.size(), typ );
       _varlm.clear();
       _varum.clear();
-      for( unsigned i=0; i<_var.size(); i++ ){
+      for( unsigned i=0; i<var.size(); i++ ){
         _varlm.push_back( FFVar( _dag ) );
         _varum.push_back( FFVar( _dag ) );
       }
@@ -294,7 +294,7 @@ public:
       else      _vartyp.assign( nvar,       0 );
       _varlm.clear();
       _varum.clear();
-      for( unsigned i=0; i<_var.size(); i++ ){
+      for( unsigned i=0; i<nvar; i++ ){
         _varlm.push_back( FFVar( _dag ) );
         _varum.push_back( FFVar( _dag ) );
       }
@@ -309,7 +309,7 @@ public:
       _vartyp.assign( nvar, typ );
       _varlm.clear();
       _varum.clear();
-      for( unsigned i=0; i<_var.size(); i++ ){
+      for( unsigned i=0; i<nvar; i++ ){
         _varlm.push_back( FFVar( _dag ) );
         _varum.push_back( FFVar( _dag ) );
       }
@@ -404,7 +404,7 @@ public:
 
   //! @brief Set dependent variables
   void set_dep
-    ( const unsigned ndep, const FFVar*dep, const FFVar*eq, double const* lb=0, double const* ub=0 )
+    ( const unsigned ndep, const FFVar*dep, const FFVar*eq, double const* lb=nullptr, double const* ub=nullptr )
     { _dep.assign( dep, dep+ndep );
       _sys.assign( eq, eq+ndep );
       if( lb ) _deplb.assign( lb, lb+ndep );
@@ -466,57 +466,68 @@ public:
 
   //! @brief Number of blocks
   unsigned int noblk
-    () const
+    ()
+    const
     { return _noblk; }
 
   //! @brief Size of block ib
   unsigned int nblk
-    ( const unsigned ib ) const
+    ( const unsigned ib )
+    const
     { return ib<_noblk? _nblk[ib]: 0; }
 
   //! @brief Current block
   unsigned int iblk
-    () const
+    ()
+    const
     { return _iblk; }
 
   //! @brief Linearity of block ib
   bool linblk
-    ( const unsigned ib ) const
+    ( const unsigned ib )
+    const
     { return ib<_noblk? _linblk[ib]: false; }
 
   //! @brief Equations in block ib
   FFVar const* eqblk
-    ( const unsigned ib ) const
+    ( const unsigned ib )
+    const
     { return ib<_noblk? _sys.data()+_pblk[ib]: 0; }
 
   //! @brief Variables in block ib
   FFVar const* depblk
-    ( const unsigned ib ) const
+    ( const unsigned ib )
+    const
     { return ib<_noblk? _dep.data()+_pblk[ib]: 0; }
 
   //! @brief Linearity of block ib
   bool lindepblk
-    ( const unsigned ib, const unsigned j ) const
+    ( const unsigned ib, const unsigned j )
+    const
     { return ib<_noblk && j<_nblk[ib]? _lindep[_pblk[ib]+j]: false; }
 
   //! @brief Forward permutation of dependent variables
   unsigned int pblk
-    ( const unsigned ib ) const
+    ( const unsigned ib )
+    const
     { return ib<_noblk? _pblk[ib]: 0; }
 
   //! @brief Forward permutation of dependent variables
   unsigned int fpdep
-    ( const unsigned i ) const
+    ( const unsigned i )
+    const
     { return i<_dep.size()? _fpdep[i]: 0; }
 
   //! @brief Reverse permutation of dependent variables
   unsigned int rpdep
-    ( const unsigned i ) const
+    ( const unsigned i )
+    const
     { return i<_dep.size()? _rpdep[i]: 0; }
 
   //! @brief Reverse permutation of dependent variables
   unsigned int rpdep
-    ( const unsigned ib, const unsigned j ) const
+    ( const unsigned ib, const unsigned j )
+    const
     { return ib<_noblk && j<_nblk[ib]? _rpdep[_pblk[ib]+j]: 0; }
   /** @} */
 
@@ -556,7 +567,7 @@ BASE_AE<DAG>::set_block
   int NB = 1;
   std::vector<int> IPERM(ndep), IOR(ndep), IB(ndep);
   _singsys = !_dag->MC13( ndep, _sys.data(), _dep.data(), IPERM.data(),
-    IOR.data(), IB.data(), NB, disp?true:false, os );
+                          IOR.data(), IB.data(), NB, disp?true:false, os );
   if( _singsys ) return reset_block();
 
   // Permute order of equation system AND variables in vectors sys and var,

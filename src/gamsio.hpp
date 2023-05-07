@@ -47,6 +47,8 @@ protected:
   using BASE_AE<DAG>::_vartyp;
   using BASE_AE<DAG>::_varlb;
   using BASE_AE<DAG>::_varub;
+  using BASE_AE<DAG>::_varlm;
+  using BASE_AE<DAG>::_varum;
 
   using BASE_NLP<DAG>::set_obj;
   using BASE_NLP<DAG>::add_ctr;
@@ -75,12 +77,12 @@ public:
   //! @brief GAMS reader
 #if defined (MC__WITH_GAMS)
   bool read
-    ( std::string const filename, bool const disp=false );
+    ( std::string const filename, bool const init=false, bool const disp=false );
 #endif
 
   //! @brief GAMS API
   bool read
-    ( struct gmoRec* gmo, bool const disp=false );
+    ( struct gmoRec* gmo, bool const init=false, bool const disp=false );
 
 private:
 
@@ -98,7 +100,7 @@ private:
 
   //! @brief setup optimization model from GAMS modelling object
   bool _populate
-    ( bool const disp );
+    ( bool const init, bool const disp );
     
   //! @brief parse nonlinear function from GAMS modelling object
   std::pair<FFVar,bool> _parse
@@ -126,7 +128,7 @@ template <typename DAG>
 inline
 bool
 GAMSIO<DAG>::read
-( std::string const filename, bool const disp )
+( std::string const filename, bool const init, bool const disp )
 {
   // reset
   _gmo = nullptr;
@@ -186,7 +188,7 @@ GAMSIO<DAG>::read
   }
 
   // populate optimization model out of _gmo
-  flag = _populate( disp );
+  flag = _populate( init, disp );
 
 TERMINATE:
   // clean-up
@@ -202,7 +204,7 @@ template <typename DAG>
 inline
 bool
 GAMSIO<DAG>::read
-( struct gmoRec* gmo, bool const disp )
+( struct gmoRec* gmo, bool const init, bool const disp )
 {
    _gmo = gmo;
    if( _gmo == nullptr ){
@@ -239,7 +241,7 @@ GAMSIO<DAG>::read
 
    gevLogStatPChar( _gev, "\nCANON (ver. 1.0)\nwritten by Benoit Chachuat\n\n");
 
-   return _populate( disp );
+   return _populate( init, disp );
 }
 
 template <typename DAG>
@@ -261,7 +263,7 @@ template <typename DAG>
 inline
 bool
 GAMSIO<DAG>::_populate
-( bool const disp )
+( bool const init, bool const disp )
 {
   assert( _gmo != nullptr );
   gmoInterfaceSet( _gmo, gmoIFace_Raw );
@@ -320,17 +322,24 @@ GAMSIO<DAG>::_populate
   // process variables and expressions
   _nvar = gmoN( _gmo );
   _var.resize( _nvar );
-  _varini.resize( _nvar );
   _vartyp.resize( _nvar );
   _varlb.resize( _nvar );
   _varub.resize( _nvar );
+  _varlm.resize( _nvar );
+  _varum.resize( _nvar );
 
-  gmoGetVarL( _gmo, _varini.data() );
+  if( init ){
+    _varini.resize( _nvar );
+    gmoGetVarL( _gmo, _varini.data() );
+  }
+  else
+    _varini.clear();
+
   gmoGetVarLower( _gmo, _varlb.data() );
-  for( auto&& lb : _varlb )
+  for( auto& lb : _varlb )
     if( lb < -BASE_OPT::INF ) lb = -BASE_OPT::INF;
   gmoGetVarUpper( _gmo, _varub.data() );
-  for( auto&& ub : _varub )
+  for( auto& ub : _varub )
     if( ub >  BASE_OPT::INF ) ub =  BASE_OPT::INF;
 
   // reset DAG environment
@@ -342,6 +351,8 @@ GAMSIO<DAG>::_populate
   for( int i=0; i<_nvar; ++i ){
     gmoGetVarNameOne( _gmo, i, buffer );
     _var[i].set( _dag, _format_name( buffer ) );
+    _varlm[i].set( _dag );
+    _varum[i].set( _dag );
     switch( gmoGetVarTypeOne( _gmo, i ) ){
       case gmovar_SC:
         _varlb[i] = 0e0;

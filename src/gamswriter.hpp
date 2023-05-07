@@ -111,7 +111,7 @@ public:
 
   //! @brief Write GAMS model to file
   bool write
-    ( std::string const filename );
+    ( std::string const filename, bool const optfile=true );
 
   //! @brief Set variables and cuts in GAMS model
   void set_cuts
@@ -135,7 +135,8 @@ public:
 
   //! @brief Set DAG function <a>F</a> expressions
   void set_functions
-    ( DAG* pDAG, unsigned const nFun, FFVar const* Fun, unsigned const nVar, FFVar const* Var );
+    ( DAG* pDAG, GAMSWRITER<DAG,T>::MODELTYPE const type, unsigned const nFun, FFVar const* Fun,
+      unsigned const nVar, FFVar const* Var );
 
   //! @brief Set constraints corresponding to DAG functions
   void set_constraints
@@ -172,9 +173,13 @@ protected:
   std::string _lhs_cut
     ( PolCut<T> const* pCut );
     
-  //! @brief Write long line with breaks 
-  std::string _write_line
+  //! @brief Write long line with fragments 
+  std::string _split_line
     ( std::stringstream& line, unsigned const maxlen=10 );
+    
+  //! @brief Write long line with breaks 
+  std::string _break_line
+    ( std::stringstream& line, unsigned const maxlen=79900 );
 };
 
 template <typename DAG, typename T>
@@ -197,7 +202,7 @@ GAMSWRITER<DAG,T>::reset
 template <typename DAG, typename T>
 inline bool
 GAMSWRITER<DAG,T>::write
-( std::string const filename )
+( std::string const filename, bool const optfile )
 {
   // Create GAMS file
   std::ofstream GAMSmodel;
@@ -219,13 +224,14 @@ GAMSWRITER<DAG,T>::write
   // Write GAMS model to file
   GAMSmodel << "VARIABLE " << _VarObj << ";" << std::endl << std::endl;
   if( _CVarDec.tellp() > 0 )
-    GAMSmodel << "VARIABLES " << _write_line( _CVarDec ) << ";" << std::endl << std::endl;
+    GAMSmodel << "VARIABLES " << _split_line( _CVarDec ) << ";" << std::endl << std::endl;
   if( _BVarDec.tellp() > 0 )
-    GAMSmodel << "BINARY VARIABLES " << _write_line( _BVarDec ) << ";" << std::endl << std::endl;
+    GAMSmodel << "BINARY VARIABLES " << _split_line( _BVarDec ) << ";" << std::endl << std::endl;
   if( _IVarDec.tellp() > 0 )
-    GAMSmodel << "INTEGER VARIABLES " << _write_line( _IVarDec ) << ";" << std::endl << std::endl;
-  GAMSmodel << "EQUATIONS " << _write_line( _EqnDec ) << ";" << std::endl << std::endl;
-  GAMSmodel << _EqnDef.str() << std::endl;
+    GAMSmodel << "INTEGER VARIABLES " << _split_line( _IVarDec ) << ";" << std::endl << std::endl;
+  GAMSmodel << "EQUATIONS " << _split_line( _EqnDec ) << ";" << std::endl << std::endl;
+  GAMSmodel << _break_line( _EqnDef ) << std::endl;
+  //GAMSmodel << _EqnDef.str() << std::endl;
   if( _VarBnd.tellp() > 0 )
     GAMSmodel << _VarBnd.str() << std::endl;
   if( _VarIni.tellp() > 0 )
@@ -233,6 +239,7 @@ GAMSWRITER<DAG,T>::write
   if( _VarFix.tellp() > 0 )
     GAMSmodel << _VarFix.str() << std::endl;
   GAMSmodel << "MODEL canon / ALL /;" << std::endl;
+  if( optfile ) GAMSmodel << "canon.OPTFILE = 1;" << std::endl;
   GAMSmodel << "SOLVE canon USING " << type;
   switch( _DirObj ){
     case MIN  : GAMSmodel << " MINIMIZING "; break;
@@ -247,7 +254,7 @@ GAMSWRITER<DAG,T>::write
 
 template <typename DAG, typename T>
 inline std::string
-GAMSWRITER<DAG,T>::_write_line
+GAMSWRITER<DAG,T>::_split_line
 ( std::stringstream& line, unsigned const maxlen )
 {
   std::stringstream linewithbreaks;
@@ -257,6 +264,32 @@ GAMSWRITER<DAG,T>::_write_line
     if( !(pos%maxlen) ) linewithbreaks << std::endl << "  ";
     linewithbreaks << term;
   }
+  return linewithbreaks.str();
+}
+
+template <typename DAG, typename T>
+inline std::string
+GAMSWRITER<DAG,T>::_break_line
+( std::stringstream& line, unsigned const maxlen )
+{
+  std::stringstream linewithbreaks;
+  std::string::size_type len = 0;
+  std::string fragment;
+  while( line >> fragment ){
+    len += fragment.size();
+    if( fragment.back() == ';' ){
+      linewithbreaks << fragment << std::endl;
+      len = 0;
+      continue;    
+    }
+    if( len + fragment.size() > maxlen && fragment.front() != '*' ){
+      linewithbreaks << std::endl;
+      len = 0;
+    }
+    linewithbreaks << fragment << ' ';
+    len += fragment.size()+1;
+  }
+
   return linewithbreaks.str();
 }
 
@@ -333,9 +366,10 @@ GAMSWRITER<DAG,T>::add_variables
 template <typename DAG, typename T>
 inline void
 GAMSWRITER<DAG,T>::set_functions
-( DAG* pDAG, unsigned const nFun, FFVar const* Fun, unsigned const nVar, FFVar const* Var )
+( DAG* pDAG, GAMSWRITER<DAG,T>::MODELTYPE const type, unsigned const nFun, FFVar const* Fun,
+  unsigned const nVar, FFVar const* Var )
 {
-  _type = NLIN;
+  _type = type;
   _GAMSfun.resize( nFun );
   _GAMSvar.resize( nVar );
   FFExpr<DAG>::options.LANG = FFExpr<DAG>::Options::GAMS;

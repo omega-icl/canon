@@ -19,22 +19,22 @@ int main()
 
   // Local optimization
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT NLP;
+  mc::NLPSLV_SNOPT<mc::FFGraph<>> NLP;
   NLP.options.DISPLEVEL = 0;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<mc::FFGraph<>>::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 8;
 #else
   //Ipopt::SmartPtr<mc::NLPSLV_IPOPT> NLP = new mc::NLPSLV_IPOPT;
-  mc::NLPSLV_IPOPT NLP;
+  mc::NLPSLV_IPOPT<mc::FFGraph<>> NLP;
   NLP.options.DISPLEVEL = 5;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT<mc::FFGraph<>>::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 8;
 #endif
@@ -42,8 +42,8 @@ int main()
   NLP.add_var( P[0], 0., 6. );                    // decision variables
   NLP.add_var( P[1], 0., 4. );
   NLP.add_par( RHS, 4. );                         // parameters
-  NLP.set_obj( mc::BASE_NLP::MAX, P[0]+P[1] );    // objective
-  NLP.add_ctr( mc::BASE_NLP::LE, P[0]*P[1]-RHS ); // constraints
+  NLP.set_obj( mc::BASE_OPT::MAX, P[0]+P[1] );    // objective
+  NLP.add_ctr( mc::BASE_OPT::LE, P[0]*P[1]-RHS ); // constraints
   NLP.setup();
 
   //double p0[NP] = { 5., 1. };
@@ -54,13 +54,13 @@ int main()
   std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-7 )   << std::endl;
   std::cout << "STATIONARY: " << NLP.is_stationary( 1e-7 ) << std::endl;
 
-  NLP.set_obj_lazy( mc::BASE_NLP::MAX, P[0]*P[1] );    // new objective
+  NLP.set_obj_lazy( mc::BASE_OPT::MAX, P[0]*P[1] );    // new objective
   NLP.solve( 10 );//, p0 ); //, Ip );
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP.solution();
   std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-7 )   << std::endl;
   std::cout << "STATIONARY: " << NLP.is_stationary( 1e-7 ) << std::endl;
 
-  NLP.add_ctr_lazy( mc::BASE_NLP::LE, P[0]-P[1] );    // new constraint
+  NLP.add_ctr_lazy( mc::BASE_OPT::LE, P[0]-P[1] );    // new constraint
   NLP.solve( 10 );//, p0 ); //, Ip );
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP.solution();
   std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-7 )   << std::endl;

@@ -13,8 +13,11 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 doxydoc : doxydoc.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
-test% : test%.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
-	$(CPP) $< $(LIB_CANON) $(LIB_DEP) -o $@
+CS_DB : CS_DB.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
+CS_Xmin : CS_Xmin.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
@@ -28,6 +31,6 @@ test% : test%.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 #####
 
 clean:
-	rm -f doxydoc test? test?b
-	rm -f *.o *.out *.dat *.eps *.dot *.svg *~
+	rm -f doxydoc CS_DB CS_Xmin
+	rm -f *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
 

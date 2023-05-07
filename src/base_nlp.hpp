@@ -150,6 +150,11 @@ BASE_NLP<DAG>::set_nco
       break;
     }
   }
+#ifdef MC__BASE_NLP__DEBUG
+  std::cout << "_var.size = " << _var.size() << ", _varlm.size = " << _varlm.size() << std::endl;
+#endif
+  assert(_var.size() == _varlm.size() );
+  assert(_var.size() == _varum.size() );
   for( unsigned ip=0; ip<_var.size(); ip++ ){
     // Only accout for finite bounds on continuous variables in Lagrangian function
     if( tvar && tvar[ip] ) continue;
