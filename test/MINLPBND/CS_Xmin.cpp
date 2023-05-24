@@ -1,20 +1,19 @@
 #undef  CHECK_REFORMULATION
-#undef  MC__MINLPREF_DEBUG_ELIM
 
 #ifdef MC__USE_PROFIL
  #include "mcprofil.hpp"
  typedef INTERVAL I;
 #else
- #ifdef MC__USE_FILIB
-  #include "mcfilib.hpp"
-  typedef filib::interval<double,filib::native_switched,filib::i_mode_extended> I;
- #else
-  #ifdef MC__USE_BOOST
-   #include "mcboost.hpp"
+ #ifdef MC__USE_BOOST
+  #include "mcboost.hpp"
    typedef boost::numeric::interval_lib::save_state<boost::numeric::interval_lib::rounded_transc_opp<double>> T_boost_round;
    typedef boost::numeric::interval_lib::checking_base<double> T_boost_check;
    typedef boost::numeric::interval_lib::policies<T_boost_round,T_boost_check> T_boost_policy;
    typedef boost::numeric::interval<double,T_boost_policy> I;
+ #else
+  #ifdef MC__USE_FILIB
+   #include "mcfilib.hpp"
+   typedef filib::interval<double> I;
   #else
    #include "interval.hpp"
    typedef mc::Interval I;
@@ -253,10 +252,10 @@ int main()
 #endif
 
   // Formulate reduced-space model and export to GAMS
-  MINLP.options.AEBND.DISPLEVEL     = 0;
   MINLP.setup();
   MINLP.propagate_bounds();
 
+  MINLP.options.AEBND.DISPLEVEL     = 1;
   MINLP.options.SELIM.MIPDISPLEVEL  = 0;
   MINLP.options.SELIM.ELIMMLIN      = 0;
   MINLP.options.SELIM.ELIMNLIN      = {};

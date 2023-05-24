@@ -80,11 +80,12 @@ int main()
   // Eliminating variables using invertible equality constraints
   MINLP.setup();
   MINLP.propagate_bounds();
+  MINLP.options.AEBND.DISPLEVEL     = 1;
   MINLP.options.SELIM.MIPDISPLEVEL  = 0;
   MINLP.options.SELIM.ELIMMLIN      = 1;
   MINLP.options.SELIM.ELIMNLIN      = {};
   //MINLP.options.SELIM.MULTMAX       = 3;
-  MINLP.eliminate_invertible_constraints( false, true );  
+  MINLP.eliminate_invertible_constraints( true, true );  
   MINLP.export_model( "CS_DB_reduced.gms" );
 
   // Lifting non-polynomial terms and quadratizing polynomials

@@ -106,9 +106,14 @@ protected:
   //! @brief variable indices after possible permutation (reverse)
   std::vector<unsigned> _rpdep;
 
-  //! @brief Perform block decomposition of system
+  //! @brief Perform block decomposition of system using Harwell's MC13
   bool set_block
     ( const bool disp=false, std::ostream&os=std::cout );
+
+  //! @brief Set block decomposition of system using user arrays IOR, IB and IPERM (per Harwell's MC13 input/output)
+  bool set_block
+    ( int const NB, int const* IOR=nullptr, int const* IB=nullptr, int const* IPERM=nullptr,
+      const bool disp=false, std::ostream&os=std::cout );
 
   //! @brief Reset block decomposition
   bool reset_block
@@ -561,7 +566,7 @@ BASE_AE<DAG>::set_block
   const unsigned int ndep = _dep.size();
   if( !ndep || _sys.size() != ndep ) return false;
   if( !_newsys ) return true;
-  _newsys = false;
+  //_newsys = false;
 
   // Perform block lower-triangular decomposition using MC21A/MC13D
   int NB = 1;
@@ -570,16 +575,59 @@ BASE_AE<DAG>::set_block
                           IOR.data(), IB.data(), NB, disp?true:false, os );
   if( _singsys ) return reset_block();
 
+  return set_block( NB, IOR.data(), IB.data(), IPERM.data() );
+}
+
+template < typename DAG >
+inline bool
+BASE_AE<DAG>::set_block
+( int const NB, int const* IOR, int const* IB, int const* IPERM,
+  const bool disp, std::ostream&os )
+{
+  const unsigned int ndep = _dep.size();
+  if( !ndep || _sys.size() != ndep ) return false;
+  if( !_newsys ) return true;
+  _newsys  = false;
+  _singsys = false;
+
+//  // Display permuted system structure
+//  if( disp ){
+//    std::cout << std::endl << "Number of Blocks: " << NB << std::endl;
+//    os << "Lower-triangular block structure:" << std::endl
+//       << std::right << "     ";
+//    for( unsigned j=0; j<nDep; j++ )
+//    //  os << " " << std::setw(3) << IOR[j]-1;
+//      os << " " << std::setw(4) << _dep[IOR[j]-1];
+//    os << std::endl;
+//    for( unsigned i=0; i<nDep; i++ ){
+//      //os << std::setw(3) << IPERM[IOR[i]-1]-1 << " ";
+//      os << std::setw(4) << _sys[IPERM[IOR[i]-1]-1] << " ";
+//      for( unsigned j=0; j<nDep; j++ )
+//        os << std::setw(3) << " "
+//           << (vDep[IPERM[IOR[i]-1]-1].dep(IOR[j]-1).first?"X ":"  ");
+//      os << std::endl;
+//    }
+//    os << std::endl;
+//  }
+
   // Permute order of equation system AND variables in vectors sys and var,
   // now arranged in upper-triangular block form
   // Keep track of forward and reverse permutations in _fpdep and _rpdep
   std::vector<FFVar> sys(ndep), var(ndep);
   _fpdep.resize(ndep); _rpdep.resize(ndep);
   for( unsigned int i=0; i<ndep; i++ ){
-    sys[i] = _sys[IPERM[IOR[ndep-i-1]-1]-1];
-    var[i] = _dep[IOR[ndep-i-1]-1];
-    _fpdep[IOR[i]-1] = ndep-i-1;
-    _rpdep[ndep-i-1] = IOR[i]-1;
+    if( IOR ){
+      sys[i] = IPERM? _sys[IPERM[IOR[ndep-i-1]-1]-1]: _sys[IOR[ndep-i-1]-1];
+      var[i] = _dep[IOR[ndep-i-1]-1];
+      _fpdep[IOR[i]-1] = ndep-i-1;
+      _rpdep[ndep-i-1] = IOR[i]-1;
+    }
+    else{
+      sys[i] = IPERM? _sys[IPERM[ndep-i-1]-1]: _sys[ndep-i-1];
+      var[i] = _dep[ndep-i-1];
+      _fpdep[i] = ndep-i-1;
+      _rpdep[ndep-i-1] = i;    
+    }
   }
   _sys = sys;
   _dep = var;
@@ -589,8 +637,15 @@ BASE_AE<DAG>::set_block
   _nblk.resize(_noblk);
   _pblk.resize(_noblk);
   for( int i=0; i<NB; i++ ){
-    _nblk[i] = ( i==NB-1? ndep+1: IB[i+1] ) - IB[i]; 
-    _pblk[i] = ndep+1 - IB[i] - _nblk[i];   
+    if( IB ){
+      _nblk[i] = ( i==NB-1? ndep+1: IB[i+1] ) - IB[i];
+      _pblk[i] = ndep - (IB[i]-1) - _nblk[i];
+    }
+    else{
+      assert( NB == (int)ndep );
+      _nblk[i] = 1;
+      _pblk[i] = ndep-i-1;
+    }
   }
 
   // Systam & block properties (linearity, Jacobian bandwidth)
@@ -603,8 +658,7 @@ BASE_AE<DAG>::set_block
   std::vector<FFDep> depsys(ndep), depvar(var.size());
   for( unsigned i=0; i<ndep; i++ ) depvar[i].indep(i);
   //for( unsigned i=0; i<var.size(); i++ ) std::cout << var[i] << ": " << depvar[i] << std::endl;
-  _dag->eval( ndep, sys.data(), depsys.data(), var.size(), var.data(),
-              depvar.data() );
+  _dag->eval( ndep, sys.data(), depsys.data(), var.size(), var.data(), depvar.data() );
   _bwsys.first = _bwsys.second = 0;
   for( unsigned i=0; i<ndep; i++ ){
     auto cit = depsys[i].dep().begin();

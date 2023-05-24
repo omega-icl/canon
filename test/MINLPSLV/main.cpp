@@ -1,4 +1,4 @@
-#define READ_GAMS    // <-- select test problem here
+#undef READ_GAMS    // <-- select test problem here
 ////////////////////////////////////////////////////////////////////////
 //#define MC__MINLPSLV_DEBUG
 //#define MC__REVAL_DEBUG
@@ -37,10 +37,10 @@
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT NLP;
+ typedef mc::NLPSLV_SNOPT<> NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT NLP;
+ typedef mc::NLPSLV_IPOPT<> NLP;
 #endif
 
 #include "minlpslv.hpp"
@@ -50,7 +50,7 @@ int main()
 ////////////////////////////////////////////////////////////////////////
 {
   // Local optimization
-  mc::MINLPSLV<I,NLP,MIP> MINLP;
+  mc::MINLPSLV<mc::FFGraph<>,I,NLP,MIP> MINLP;
   MINLP.options.DISPLEVEL               = 1;
 //  MINLP.options.CVRTOL                  = 1e-5;
 //  MINLP.options.CVATOL                  = 1e-5;
@@ -65,7 +65,7 @@ int main()
   MINLP.options.NLPSLV.MAXITER          = 500;
 //  MINLP.options.NLPSLV.FEASTOL          = 1e-7;
 //  MINLP.options.NLPSLV.OPTIMTOL         = 1e-7;
-  MINLP.options.NLPSLV.GRADMETH         = mc::NLPSLV_SNOPT::Options::FAD;
+  MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
   MINLP.options.NLPSLV.GRADCHECK        = false;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 //#elif  MC__USE_IPOPT
@@ -73,7 +73,7 @@ int main()
 //  MINLP.options.NLPSLV.MAXITER          = 100;
 //  MINLP.options.NLPSLV.FEASTOL          = 1e-8;
 //  MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
-//  MINLP.options.NLPSLV.GRADMETH         = mc::NLPSLV_IPOPT::Options::FAD;
+//  MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
 //  MINLP.options.NLPSLV.GRADCHECK        = false;
 //  MINLP.options.NLPSLV.MAXTHREAD        = 0;
 //#endif
@@ -101,10 +101,10 @@ int main()
   MINLP.set_dag( &DAG );
   MINLP.add_var( P[0], 1, 20, 0 );
   MINLP.add_var( P[1], 1, 20, 1 );
-  MINLP.set_obj( mc::BASE_NLP::MIN, -6*P[0]-P[1] );
-  MINLP.add_ctr( mc::BASE_NLP::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
-  MINLP.add_ctr( mc::BASE_NLP::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
-  MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
+  MINLP.set_obj( mc::BASE_OPT::MIN, -6*P[0]-P[1] );
+  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+  MINLP.add_ctr( mc::BASE_OPT::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
+  MINLP.add_ctr( mc::BASE_OPT::LE, 2*P[0]-5*P[1]+1 );
 #endif
 
   MINLP.setup();

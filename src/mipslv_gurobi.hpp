@@ -335,8 +335,11 @@ protected:
 
 private:
 
-  //! @brief Vector of Gurobi variables in linear terms
+  //! @brief Vector of Gurobi variables in linear/nonlinear terms
   std::vector<GRBVar> _cutvar;
+
+  //! @brief Vector of variable bounds in linear/nonlinear terms
+  std::vector<T> _bndvar;
 
   //! @brief Vector of Gurobi variables in quadratic terms
   std::vector<GRBVar> _cutqvar1;
@@ -697,6 +700,7 @@ MIPSLV_GUROBI<T>::_add_cut
 
   // Form vector of variables in linear terms or SOS
   _cutvar.resize( pCut->nvar() );
+  _bndvar.resize( pCut->nvar() );
   for( unsigned k=0; k<pCut->nvar(); k++ ){
     auto itvar = _MIPvar.find( pCut->var()+k );
     //if( itvar->first->var().cst() )
@@ -706,6 +710,7 @@ MIPSLV_GUROBI<T>::_add_cut
       throw std::runtime_error("MIPSLV_GUROBI - Error: Unknown variable in cut");
     }
     _cutvar[k] = itvar->second;
+    _bndvar[k] = itvar->first->range();
   }
 
   // Form vector of variables in quadratic terms
@@ -831,6 +836,17 @@ MIPSLV_GUROBI<T>::_add_cut
             options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrTan( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
+
+          case FFOp::TANH:{
+            T bndx = 2.*_bndvar[0];
+            GRBVar grbvarx = _GRBmodel->addVar( Op<T>::l(bndx), Op<T>::u(bndx), 0., GRB_CONTINUOUS );
+            _GRBmodel->addConstr( grbvarx, GRB_EQUAL, 2.*_cutvar[0] );
+            T bndy = Op<T>::tanh( bndx );
+            GRBVar grbvary = _GRBmodel->addVar( Op<T>::l(bndy), Op<T>::u(bndy), 0., GRB_CONTINUOUS );
+            options.check_pwl( grbvarx, grbvary );
+            _GRBmodel->addGenConstrLogistic( grbvarx, grbvary, "", options.pwl() );
+            _GRBmodel->addConstr( _cutvar[1], GRB_EQUAL, 2.*grbvary-1. );
+            break;}
 
           case FFOp::FABS:
             _GRBmodel->addGenConstrAbs( _cutvar[0], _cutvar[1] );

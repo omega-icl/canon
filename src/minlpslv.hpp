@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Benoit Chachuat, Imperial College London.
+// Copyright (C) Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
@@ -106,14 +106,67 @@ namespace mc
 //! constraints are generated using MC++. Further details can be found
 //! at: \ref page_MINLPSLV
 ////////////////////////////////////////////////////////////////////////
-template < typename T=Interval,
-           typename NLP=NLPSLV_SNOPT,
+template < typename DAG = mc::FFGraph<>,
+           typename T=Interval,
+           typename NLP=NLPSLV_SNOPT<DAG>,
            typename MIP=MIPSLV_GUROBI<T> >
-class MINLPSLV:
-  public    virtual BASE_NLP,
-  protected virtual GAMSIO
+class MINLPSLV
+#if defined (MC__WITH_GAMS)
+: protected virtual GAMSIO<DAG>,
+  public virtual BASE_NLP<DAG>
+#else
+: public virtual BASE_NLP<DAG>
+#endif
 {
-using BASE_NLP::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
+public:
+
+  using BASE_AE<DAG>::set;
+  using BASE_AE<DAG>::dag;
+  using BASE_AE<DAG>::set_dag;
+  using BASE_AE<DAG>::par;
+  using BASE_AE<DAG>::set_par;
+  using BASE_AE<DAG>::add_par;
+  using BASE_AE<DAG>::reset_par;
+  using BASE_AE<DAG>::var;
+  using BASE_AE<DAG>::set_var;
+  using BASE_AE<DAG>::add_var;
+  using BASE_AE<DAG>::reset_var;
+  using BASE_AE<DAG>::update_vartyp;
+  using BASE_AE<DAG>::dep;
+  using BASE_AE<DAG>::set_dep;
+  using BASE_AE<DAG>::add_dep;
+  using BASE_AE<DAG>::reset_dep;
+  using BASE_AE<DAG>::sys;
+  using BASE_AE<DAG>::add_sys;
+  using BASE_AE<DAG>::reset_sys;
+
+  using BASE_NLP<DAG>::set_obj;
+  using BASE_NLP<DAG>::add_ctr;
+
+protected:
+
+  using BASE_AE<DAG>::_dag;
+  using BASE_AE<DAG>::_var;
+  using BASE_AE<DAG>::_vartyp;
+  using BASE_AE<DAG>::_varlb;
+  using BASE_AE<DAG>::_varlm;
+  using BASE_AE<DAG>::_varub;
+  using BASE_AE<DAG>::_varum;
+  using BASE_AE<DAG>::_dep;
+  using BASE_AE<DAG>::_deplb;
+  using BASE_AE<DAG>::_deplm;
+  using BASE_AE<DAG>::_depub;
+  using BASE_AE<DAG>::_depum;
+  using BASE_AE<DAG>::_sys;
+  using BASE_AE<DAG>::_sysm;
+  using BASE_AE<DAG>::_par;
+
+  using BASE_NLP<DAG>::_obj;
+  using BASE_NLP<DAG>::_ctr;
+
+#if defined (MC__WITH_GAMS)
+  using GAMSIO<DAG>::_varini;
+#endif
 
 public:
 
@@ -533,10 +586,8 @@ public:
 private:
 
   //! @brief Private methods to block default compiler methods
-  MINLPSLV
-    ( MINLPSLV const& );
-  MINLPSLV& operator=
-    ( MINLPSLV const& );
+  MINLPSLV( MINLPSLV<DAG,T,NLP,MIP> const& );
+  MINLPSLV<DAG,T,NLP,MIP>& operator=( MINLPSLV<DAG,T,NLP,MIP> const& );
 
   //! @brief Interval representation of 'unbounded' variables
   T _IINF;
@@ -604,14 +655,14 @@ private:
 };
 
 #if defined (MC__WITH_GAMS)
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::read
+MINLPSLV<DAG,T,NLP,MIP>::read
 ( std::string const& filename )
 {
   auto tstart = stats.start();
 
-  bool flag = this->GAMSIO::read( filename, options.DISPLEVEL>1? true: false );
+  bool flag = this->GAMSIO<DAG>::read( filename, options.DISPLEVEL>1? true: false );
 
   stats.walltime_setup += stats.walltime( tstart );
   stats.walltime_all   += stats.walltime( tstart );
@@ -619,9 +670,9 @@ MINLPSLV<T,NLP,MIP>::read
 }
 #endif
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::setup
+MINLPSLV<DAG,T,NLP,MIP>::setup
 ( std::ostream& os )
 {
   //stats.reset();
@@ -637,8 +688,8 @@ MINLPSLV<T,NLP,MIP>::setup
 
   assert( !std::get<0>(_obj).empty() );
   switch( std::get<0>(_obj)[0] ){
-    case MIN: _objscal =  1e0; break;
-    case MAX: _objscal = -1e0; break;
+    case BASE_OPT::MIN: _objscal =  1e0; break;
+    case BASE_OPT::MAX: _objscal = -1e0; break;
   }
 
 #ifdef MC__MINLPSLV_DEBUG
@@ -681,7 +732,7 @@ MINLPSLV<T,NLP,MIP>::setup
     _Fvar.push_back( std::get<1>(_obj)[0] );
   }
   else{
-    _Ftyp.push_back( MIN );
+    _Ftyp.push_back( BASE_OPT::MIN );
     _Fvar.push_back( 0 );
   }
   _Fbnd.push_back( _IINF );
@@ -690,12 +741,12 @@ MINLPSLV<T,NLP,MIP>::setup
     _Ftyp.push_back( std::get<0>(_ctr)[i] );
     _Fvar.push_back( std::get<1>(_ctr)[i] );
     switch( std::get<0>(_ctr)[i] ){
-      case EQ: _Fbnd.push_back( T(0) );                break;
-      case LE: _Fbnd.push_back( T(-BASE_OPT::INF,0) ); break;
-      case GE: _Fbnd.push_back( T(0,BASE_OPT::INF) );  break;
+      case BASE_OPT::EQ: _Fbnd.push_back( T(0) );                break;
+      case BASE_OPT::LE: _Fbnd.push_back( T(-BASE_OPT::INF,0) ); break;
+      case BASE_OPT::GE: _Fbnd.push_back( T(0,BASE_OPT::INF) );  break;
     }
   }
-  _Ftyp.insert( _Ftyp.end(), _sys.size(), EQ );
+  _Ftyp.insert( _Ftyp.end(), _sys.size(), BASE_OPT::EQ );
   _Fvar.insert( _Fvar.end(), _sys.begin(), _sys.end() );
   _Fbnd.insert( _Fbnd.end(), _sys.size(), T(0) );
   _nF = _Fvar.size();
@@ -771,9 +822,9 @@ MINLPSLV<T,NLP,MIP>::setup
   _issetup = true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_cleanup_grad
+MINLPSLV<DAG,T,NLP,MIP>::_cleanup_grad
 ()
 {
   delete[] std::get<1>(_Fgrad);  std::get<1>(_Fgrad) = 0;
@@ -781,9 +832,9 @@ MINLPSLV<T,NLP,MIP>::_cleanup_grad
   delete[] std::get<3>(_Fgrad);  std::get<3>(_Fgrad) = 0;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_is_integer_feasible
+MINLPSLV<DAG,T,NLP,MIP>::_is_integer_feasible
 ( double const* Xval, double const& feastol )
 const
 {
@@ -795,9 +846,9 @@ const
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_is_integer_equal
+MINLPSLV<DAG,T,NLP,MIP>::_is_integer_equal
 ( double const* Xval, double const* Xref )
 const
 {
@@ -809,9 +860,9 @@ const
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_interrupted
+MINLPSLV<DAG,T,NLP,MIP>::_interrupted
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 const
 {
@@ -821,9 +872,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_converged
+MINLPSLV<DAG,T,NLP,MIP>::_converged
 ()
 const
 {
@@ -833,9 +884,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP>::_finalize
+MINLPSLV<DAG,T,NLP,MIP>::_finalize
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   STATUS const status, std::ostream& os )
 {
@@ -845,9 +896,9 @@ MINLPSLV<T,NLP,MIP>::_finalize
   return _status;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_solve_local
+MINLPSLV<DAG,T,NLP,MIP>::_solve_local
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   double const* Xini, T const* Xbnd, bool const pumpfeas,
   bool const inccut, std::ostream& os )
@@ -888,9 +939,9 @@ MINLPSLV<T,NLP,MIP>::_solve_local
   return !_solution.x.empty();
 }
   
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_init_master
+MINLPSLV<DAG,T,NLP,MIP>::_init_master
 ()
 {
   auto tMIP = stats.start();
@@ -921,9 +972,9 @@ MINLPSLV<T,NLP,MIP>::_init_master
   stats.walltime_slvnlp += stats.walltime( tMIP );
 }
   
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_update_master
+MINLPSLV<DAG,T,NLP,MIP>::_update_master
 ( bool const locfeas, bool const pumpfeas, bool const inccut )
 {
   auto tMIP = stats.start();
@@ -965,18 +1016,18 @@ MINLPSLV<T,NLP,MIP>::_update_master
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_add_incumbent_cut
+MINLPSLV<DAG,T,NLP,MIP>::_add_incumbent_cut
 ()
 {
   _POLenv.add_cut( _Ftyp[0]==BASE_OPT::MIN? PolCut<T>::LE: PolCut<T>::GE, _Zinc, _POLSvar.front(), 1. );
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_add_outerapproximation_cuts
+MINLPSLV<DAG,T,NLP,MIP>::_add_outerapproximation_cuts
 ( std::vector<double> const& Xval, std::vector<double>& Fval, std::vector<double>& Fmul )
 {
   // Initialize cuts
@@ -1053,9 +1104,9 @@ MINLPSLV<T,NLP,MIP>::_add_outerapproximation_cuts
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_add_integer_cut
+MINLPSLV<DAG,T,NLP,MIP>::_add_integer_cut
 ( std::vector<double> const& Xint )
 {
   // Add constraints for the linear cut: \|y-\bar{y}\|_1 \geq 1
@@ -1064,9 +1115,9 @@ MINLPSLV<T,NLP,MIP>::_add_integer_cut
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_set_integer_cut
+MINLPSLV<DAG,T,NLP,MIP>::_set_integer_cut
 ( std::vector<double> const& Xint, std::vector<PolVar<T>>& linvar,
   std::vector<double>& linwei, double& cst )
 {
@@ -1102,9 +1153,9 @@ MINLPSLV<T,NLP,MIP>::_set_integer_cut
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP>::_add_anticycling_cut
+MINLPSLV<DAG,T,NLP,MIP>::_add_anticycling_cut
 ( std::vector<double> const& Xval, std::vector<double> const& Xrel )
 {
   // Add linear cut: [\bar{y}-\hat{y}]^T[y-\hat{y}] \geq 0
@@ -1115,9 +1166,9 @@ MINLPSLV<T,NLP,MIP>::_add_anticycling_cut
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP>::_solve_master
+MINLPSLV<DAG,T,NLP,MIP>::_solve_master
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   auto tMIP = stats.start();
@@ -1130,9 +1181,9 @@ MINLPSLV<T,NLP,MIP>::_solve_master
   return _MIPSLV.get_status();
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP>::_propagate_bounds
+MINLPSLV<DAG,T,NLP,MIP>::_propagate_bounds
 ( T* Xbnd )
 {
   auto tstart = stats.start();
@@ -1170,9 +1221,9 @@ MINLPSLV<T,NLP,MIP>::_propagate_bounds
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP>::optimize
+MINLPSLV<DAG,T,NLP,MIP>::optimize
 (  double const* Xini, T const* Xbnd, std::ostream& os )
 {
   auto tstart = stats.start();
@@ -1366,9 +1417,9 @@ MINLPSLV<T,NLP,MIP>::optimize
   return _finalize( tstart, STATUS::SUCCESSFUL );
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::Options::display
+MINLPSLV<DAG,T,NLP,MIP>::Options::display
 ( std::ostream & out ) const
 {
   // Display MINLPSLV Options
@@ -1393,10 +1444,10 @@ MINLPSLV<T,NLP,MIP>::Options::display
       << DISPLEVEL << std::endl;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline std::ostream&
 operator <<
-( std::ostream & out, MINLPSLV<T,NLP,MIP> const& MINLP )
+( std::ostream & out, MINLPSLV<DAG,T,NLP,MIP> const& MINLP )
 {
   out << std::left << std::endl
       << std::setfill('_') << std::setw(72) << "#" << std::endl << "#" << std::endl << std::setfill(' ')
@@ -1411,9 +1462,9 @@ operator <<
   return out;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_setup
+MINLPSLV<DAG,T,NLP,MIP>::_display_setup
 ( std::ostream& os )
 {
   if( options.DISPLEVEL < 2 ) return;
@@ -1422,9 +1473,9 @@ MINLPSLV<T,NLP,MIP>::_display_setup
   _display_flush( os ); 
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_init
+MINLPSLV<DAG,T,NLP,MIP>::_display_init
 ( std::ostream& os)
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1437,9 +1488,9 @@ MINLPSLV<T,NLP,MIP>::_display_init
   _display_flush( os ); 
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_final
+MINLPSLV<DAG,T,NLP,MIP>::_display_final
 ( unsigned const iter, std::chrono::microseconds const& walltime,
   std::ostream& os )
 {
@@ -1472,9 +1523,9 @@ MINLPSLV<T,NLP,MIP>::_display_final
   _display_flush( os );
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_add
+MINLPSLV<DAG,T,NLP,MIP>::_display_add
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1482,9 +1533,9 @@ MINLPSLV<T,NLP,MIP>::_display_add
          << std::setw(7) << stats.to_time( stats.walltime( tstart ) ) << "s";
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_add
+MINLPSLV<DAG,T,NLP,MIP>::_display_add
 ( const double dval )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1492,27 +1543,27 @@ MINLPSLV<T,NLP,MIP>::_display_add
          << std::setw(_DPREC+8) << dval;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_add
+MINLPSLV<DAG,T,NLP,MIP>::_display_add
 ( const unsigned ival )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(_IPREC) << ival;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_add
+MINLPSLV<DAG,T,NLP,MIP>::_display_add
 ( const std::string &sval )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(3) << sval;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename DAG, typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP>::_display_flush
+MINLPSLV<DAG,T,NLP,MIP>::_display_flush
 ( std::ostream &os )
 {
   if( _odisp.str() == "" ) return;

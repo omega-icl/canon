@@ -10,16 +10,18 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-doxydoc : doxydoc.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+all : test_MINLPREF test_MINLPBND CS_Xmin CS_DB
+
+test_MINLPREF : test_MINLPREF.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
-doxydoc2 : doxydoc2.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+test_MINLPBND : test_MINLPBND.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
-CSI_Wnet : CSI_Wnet.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+CS_DB : CS_DB.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
-CSI_LCOE : CSI_LCOE.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+CS_Xmin : CS_Xmin.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 %.o : %.cpp
@@ -34,6 +36,6 @@ CSI_LCOE : CSI_LCOE.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 #####
 
 clean:
-	rm -f doxydoc doxydoc2 CSI_Wnet CSI_LCOE
-	rm -f *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
+	rm -f test_MINLPREF test_MINLPBND CS_DB CS_Xmin
+	rm -f *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *.ilp *~
 

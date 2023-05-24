@@ -275,6 +275,11 @@ public:
   STATUS setup
     ( bool const updtdec = true, std::ostream& os = std::cout );
 
+  //! @brief Setup block decomposition of parametric AEs, subgraphs, and required differentiation for each block using user arrays IOR, IB and IPERM (per Harwell's MC13 input/output)
+  STATUS setup
+    ( int const NB, int const* IOR, int const* IB, int const* IPERM = nullptr,
+      std::ostream& os = std::cout );
+
   //! @brief Compute interval enclosure of solution set of parametric AEs
   STATUS solve
     ( T const* Ip, T* Ix, T const* Ix0 = nullptr, std::ostream& os = std::cout );
@@ -320,6 +325,11 @@ private:
 
   //! @brief Lower and upper band width of problem blocks
   std::vector< std::pair<long,long> > _bwblk;
+
+
+  //! @brief Setup block decomposition of parametric AEs, subgraphs, and required differentiation for each block
+  STATUS _setup
+    ( std::ostream& os );
 
   //! @brief Compute preconditionned equation system LHS and RHS for given block
   template <typename U, typename V>
@@ -524,6 +534,21 @@ template <typename DAG, typename T, typename PMT, typename PVT>
 inline
 typename AEBND<DAG,T,PMT,PVT>::STATUS
 AEBND<DAG,T,PMT,PVT>::setup
+( int const NB, int const* IOR, int const* IB, int const* IPERM, std::ostream& os )
+{
+  _issetup = false;
+
+  // Perform block decomposition
+  if( !BASE_AE<DAG>::set_block( NB, IOR, IB, IPERM, options.DISPLEVEL, os ) ) return FAILURE;
+  if( BASE_AE<DAG>::_singsys ) return SINGULAR;
+
+  return _setup( os );
+}
+
+template <typename DAG, typename T, typename PMT, typename PVT>
+inline
+typename AEBND<DAG,T,PMT,PVT>::STATUS
+AEBND<DAG,T,PMT,PVT>::setup
 ( bool const updtdec, std::ostream& os )
 {
   _issetup = false;
@@ -532,6 +557,15 @@ AEBND<DAG,T,PMT,PVT>::setup
   if( updtdec && !BASE_AE<DAG>::set_block( options.DISPLEVEL, os ) ) return FAILURE;
   if( BASE_AE<DAG>::_singsys ) return SINGULAR;
 
+  return _setup( os );
+}
+
+template <typename DAG, typename T, typename PMT, typename PVT>
+inline
+typename AEBND<DAG,T,PMT,PVT>::STATUS
+AEBND<DAG,T,PMT,PVT>::_setup
+( std::ostream& os )
+{
   // (Re)size variable arrays
   _ndep = BASE_AE<DAG>::_dep.size();
   _nvar = _ndep + BASE_AE<DAG>::_var.size();
@@ -569,11 +603,11 @@ AEBND<DAG,T,PMT,PVT>::setup
   }
   _fpdep = BASE_AE<DAG>::_fpdep;
   _rpdep = BASE_AE<DAG>::_rpdep;
-#ifdef MC__AEBND_SHOW_PERMUTATION
+//#ifdef MC__AEBND_SHOW_PERMUTATION
   std::cout << "VARIABLE PERMUTATION:";
   for( unsigned const& i : _fpdep ) std::cout << " " << i;
   std::cout << std::endl;
-#endif
+//#endif
 
   _sgsys.resize(_noblk);
   auto it = _jac.begin();

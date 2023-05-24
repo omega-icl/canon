@@ -329,8 +329,8 @@ public:
     //! @brief Constructor
     Options():
       CPMAX(20), CPTHRES(1e-10),
-      RRLTCUTS(false), MIPQUADCUTS(false), PSDQUADCUTS(0),
-      NCOCUTS(false), NCOADIFF(FSA), TIMELIMIT(6e2), DISPLEVEL(2),
+      RRLTCUTS(false), MIPQUADCUTS(false), PSDQUADCUTS(0), DCQUADCUTS(false), 
+      NCOCUTS(false), NCOADIFF(FSA), TIMELIMIT(6e2), DISPLEVEL(1),
       SELIM(), SLIFT(), SQUAD(), RLTRED(), AEBND()
       { SLIFT.LIFTDIV          = true;
         SLIFT.LIFTIPOW         = false;
@@ -351,6 +351,7 @@ public:
         RRLTCUTS      = options.RRLTCUTS;
 	MIPQUADCUTS   = options.MIPQUADCUTS;
         PSDQUADCUTS   = options.PSDQUADCUTS;
+        DCQUADCUTS    = options.DCQUADCUTS;
         NCOCUTS       = options.NCOCUTS;
         NCOADIFF      = options.NCOADIFF;
         TIMELIMIT     = options.TIMELIMIT;
@@ -377,6 +378,8 @@ public:
     bool MIPQUADCUTS;
     //! @brief Whether to add PSD cuts within quadratisation (0: none; 1: 2-by-2; >1: 3-by-3)
     unsigned PSDQUADCUTS;
+    //! @brief Whether to add DC cuts within quadratisation
+    bool DCQUADCUTS;
     //! @brief Whether to add NCO cuts
     bool NCOCUTS;
     //! @brief NCO method
@@ -507,6 +510,12 @@ public:
   bool export_model
     ( std::string const gmsfile, double const* Xinc=nullptr );
 
+protected:
+
+  //! @brief Tighten bounds using constraint propagation
+  int _propagate_bounds
+    ();
+
 private:
 
   //! @brief Time point to enable TIMELIMIT option
@@ -536,10 +545,6 @@ private:
   void _set_subgraph
     ( std::ostream& os = std::cout );
 
-  //! @brief Tighten bounds using constraint propagation
-  int _propagate_bounds
-    ();
-
   //! @brief Flatten subset of functions in DAG
   bool _flatten_functions
     ( std::set<unsigned> const& Fndx, bool const add2dag );
@@ -561,7 +566,7 @@ private:
 
   //! @brief Search for invertible equality constraints and form correspond triangular constraint subsystem
   void _search_invertible_constraints
-    ();
+    ( std::ostream& os );
 
   //! @brief Bound dependent variables of invertible equality constraints using Gauss-Siedel interval methods
   bool _bound_invertible_constraints
@@ -895,46 +900,39 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
   { std::cout << _SLenv << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
   if( !add2dag ) return true;
-  
-  // append auxiliary variables
-  //std::set<unsigned> Fred;
-  for( auto const& [pAux,pVar] : _SLenv.Aux() ){
-    //bool is_dep = false;
-    //unsigned i = 0;
-    //for( auto it=_Fgal.begin(); it!=_Fgal.end(); ++it ){
-    //  i = *it;
-    //  if( _Fvar[i] != *pAux ) continue;
-    //  is_dep = true;
-    //  break;
-    //}
-    _Xlift[_Xvar.size()] = *pAux; // <- stores original DAG expression
-    _Xvar.push_back( *pVar );
-    _Xlow.push_back( -BASE_OPT::INF ); //is_dep? _Flow[i]: -BASE_OPT::INF );
-    _Xupp.push_back(  BASE_OPT::INF ); //is_dep? _Fupp[i]:  BASE_OPT::INF );
-    _Xtyp.push_back( 0 );
-    
-    // update/erase corresponding entries in function vectors (this is not efficient...)
-    //if( !is_dep ) continue;
-    //if( !i ){
-    //  _Fvar[0] = *pVar;
-    //  continue;
-    //}
-    //Fred.insert( i ); 
-  }
-  //for( auto it=Fred.rbegin(); it!=Fred.rend(); ++it ){
-  //  unsigned i = *it;
-  //  auto itFvar = _Fvar.begin(); std::advance( itFvar, i ); _Fvar.erase( itFvar );
-  //  auto itFlow = _Flow.begin(); std::advance( itFlow, i ); _Flow.erase( itFlow );
-  //  auto itFupp = _Fupp.begin(); std::advance( itFupp, i ); _Fupp.erase( itFupp );
-  //}
 
-  // append auxiliary polynomial constraints
+  // update lifted constraints
+  std::map<FFVar const*, unsigned, lt_FFVar> Frem;
   assert( _Fgal.size() == _SLenv.Dep().size() );
   auto itgal = _Fgal.begin();
   for( auto const& expr : _SLenv.Dep() ){
-    _Fvar[*itgal] = expr;
-    // Do not modify lower and upper constraint range
+    // Earmark constraint if expression matches a variable
+    if( *itgal && expr.ops().first->type == FFOp::VAR )
+      Frem[&expr] = *itgal;
+    else
+      _Fvar[*itgal] = expr;
+      // Do not modify lower and upper constraint range
     ++itgal;
+  }
+  
+  // append auxiliary variables
+  for( auto const& [pAux,pVar] : _SLenv.Aux() ){
+    _Xlift[_Xvar.size()] = *pAux; // <- stores original DAG expression
+    _Xvar.push_back( *pVar );
+    auto itVar = Frem.find( pVar );
+    // Inherit function bounds in case the lifted constraint corresponds to current auxiliary variable 
+    _Xlow.push_back( itVar != Frem.end()? _Flow[itVar->second]: -BASE_OPT::INF );
+    _Xupp.push_back( itVar != Frem.end()? _Fupp[itVar->second]:  BASE_OPT::INF );
+    _Xtyp.push_back( 0 );
+  }
+
+  // eliminate lifted constraints that correspond to new lifted variables
+  //std::cout << "#lifted constraints corresponding to new lifted variables: " << Frem.size() << std::endl;
+  for( auto it=Frem.rbegin(); it!=Frem.rend(); ++it ){
+    unsigned const i = it->second;
+    auto itFvar = _Fvar.begin(); std::advance( itFvar, i ); _Fvar.erase( itFvar );
+    auto itFlow = _Flow.begin(); std::advance( itFlow, i ); _Flow.erase( itFlow );
+    auto itFupp = _Fupp.begin(); std::advance( itFupp, i ); _Fupp.erase( itFupp );
   }
 
   // append auxiliary polynomial constraints
@@ -951,7 +949,9 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
     _Fupp.push_back( 0. );
   }
 
+
   // update variable and function size and type
+  assert( _Fvar.size() == _Flow.size() && _Fvar.size() == _Fupp.size() ); 
   _sgupdt = true;
   _update_model();
   update_bounds( nullptr, nullptr, false, os );
@@ -1107,15 +1107,17 @@ MINLPREF<DAG,T>::quadratize_polynomial_functions
   }
 
   // Append positive semi-definite cuts
-  _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
-  for( auto const& psd : _SQenv.MatPSD() ){
-    _Fvar.push_back( _insert_quad( psd, mapmon ) );
-    _Flow.push_back( 0. );
-    _Fupp.push_back( BASE_OPT::INF );
+  if( options.PSDQUADCUTS ){
+    _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
+    for( auto const& psd : _SQenv.MatPSD() ){
+      _Fvar.push_back( _insert_quad( psd, mapmon ) );
+      _Flow.push_back( 0. );
+      _Fupp.push_back( BASE_OPT::INF );
 #ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of semi-definite quadratic cut >=0";
-    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
+      std::ostringstream ostr; ostr << " of semi-definite quadratic cut >=0";
+      _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
 #endif
+    }
   }
 
   // update variable and function size and type
@@ -1126,133 +1128,7 @@ MINLPREF<DAG,T>::quadratize_polynomial_functions
   
   return true;
 }
-/*
-template <typename DAG, typename T>
-inline void
-MINLPREF<DAG,T>::quadratize_polynomial_subexpressions
-( bool const add2dag, std::ostream& os )
-{
-  std::set<unsigned> Fsalg = _Flin;
-  Fsalg.insert( _Fquad.cbegin(), _Fquad.cend() );
-  Fsalg.insert( _Fpol.cbegin(),  _Fpol.cend()  ); 
-  if( Fsalg.empty() ) return;
 
-  // Create vector of all semi-algebraic expressions
-  t_poly::options.BASIS = t_poly::Options::MONOM;
-  std::vector<typename t_lift::t_poly> SPXvar( _nX ), SPFvar( _nF );
-  for( unsigned ix=0; ix<_nX; ix++ ) SPXvar[ix].var( &_Xvar[ix] );
-  //for( auto const& var: _Xvar ) SPXvar.push_back( t_poly( var ) );
-  _dag->eval( Fsalg, _Fvar.data(), SPFvar.data(), _nX, _Xvar.data(), SPXvar.data() );
-#ifdef MC__MINLPREF_DEBUG_LIFT
-  for( unsigned const& i : Fsalg ){
-    std::ostringstream ostr; ostr << " of polynomial expression F[" << i << "]";
-    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
-    std::cout << "Polynomial expression " << i << ":\n" << SPFvar[i];
-  }
-  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum;}
-#endif
-
-  // Substitute linear and quadratic expressions in DAG
-  for( unsigned const& i : _Flin ){
-    _Fvar[i] = _SLenv.insert_dag( SPFvar[i] );
-#ifdef MC__MINLPREF_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of flattened linear expression F[" << i << "]";
-    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
-#endif
-  }
-  for( unsigned const& i : _Fquad ){
-    _Fvar[i] = _SLenv.insert_dag( SPFvar[i] );
-#ifdef MC__MINLPREF_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of flattened quadratic expression F[" << i << "]";
-    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
-#endif
-  }
-
-  // Transform variable indexing in quadratic and polynomial expressions
-  std::map<FFVar const*, unsigned, lt_FFVar> FFmatch;
-  unsigned ivar = 0;
-  for( auto const& var : _Xvar ) FFmatch[&var] = ivar++;
-  unsigned ifun = 0;
-  std::set<unsigned> Ftpol = _Fpol; Ftpol.insert( _Fquad.cbegin(), _Fquad.cend() );
-  std::vector<t_poly> SPol( Ftpol.size() );
-  for( unsigned const& i : Ftpol ){
-    for( auto const& [FFmon,coef] : SPFvar[i].mapmon() ){
-      t_mon mon( FFmon.tord, FFmon.expr, FFmatch ); 
-      SPol[ifun] += std::make_pair( mon, coef );
-    }
-    ++ifun;
-  }
-
-  // Apply quadratisation to polynomial expressions
-  _SQenv.reset();
-  _SQenv.options = options.SQUAD;
-  _SQenv.process( SPol.size(), SPol.data(), &t_poly::mapmon, t_quad::Options::MONOM );
-  if( options.MIPQUADCUTS ) _SQenv.optimize( true );
-#ifdef MC__MINLPREF_DEBUG_LIFT
-  double viol = _SQenv.check( SPol.size(), SPol.data(), &t_poly::mapmon, t_quad::Options::MONOM );
-  std::cout << "violation: " << viol << std::endl << _SQenv << std::endl;
-  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
-#endif
-  if( !add2dag ) return;
-
-  // Add higher-order monomials in basis to DAG
-  std::map< t_mon, FFVar, lt_mon > mapmon; 
-  for( auto const& mon : _SQenv.SetMon() ){
-    if( mon.tord == 1 ) mapmon[mon] = _Xvar[mon.expr.cbegin()->first];
-    if( mon.tord <= 1 ) continue;
-    auto [pAux,pVar] = _insert_mon( mon );
-    _Xlift[_Xvar.size()] = *pAux; // <- stores monomial DAG expression
-    _Xvar.push_back( *pVar );
-    _Xlow.push_back( -BASE_OPT::INF );
-    _Xupp.push_back(  BASE_OPT::INF );
-    _Xtyp.push_back( 0 );
-    mapmon[mon] = *pVar;
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::cout << "Lifted monomial " << *pVar << " := " << mon.display(options.SQUAD.BASIS) << std::endl;
-    _dag->output( _dag->subgraph( 1, pAux ) );
-#endif
-  }
-
-  // Substitute lifted quadratic expressions
-  unsigned iquad = 0;
-  for( auto i : Ftpol ){
-    _Fvar[i] = _insert_quad( _SQenv.MatFct()[iquad++], mapmon );
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of lifted quadratic expression F[" << i << "]";
-    _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
-#endif
-  }
-  
-  // Append reduction quadratic cuts
-  for( auto const& red : _SQenv.MatRed() ){
-    _Fvar.push_back( _insert_quad( red, mapmon ) );
-    _Flow.push_back( 0. );
-    _Fupp.push_back( 0. );
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of reduction quadratic cut";
-    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
-#endif
-  }
-
-  // Append positive semi-definite cuts
-  _SQenv.tighten( options.PSDQUADCUTS>1? true: false );
-  for( auto const& psd : _SQenv.MatPSD() ){
-    _Fvar.push_back( _insert_quad( psd, mapmon ) );
-    _Flow.push_back( 0. );
-    _Fupp.push_back( BASE_OPT::INF );
-#ifdef MC__MINLPBND_DEBUG_LIFT
-    std::ostringstream ostr; ostr << " of semi-definite quadratic cut >=0";
-    _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
-#endif
-  }
-
-  // update variable and function size and type
-  _sgupdt = true;
-  _update_model();
-  update_bounds( nullptr, nullptr, false, os );
-  if( options.DISPLEVEL ) _display_model( os );
-}
-*/
 template <typename DAG, typename T>
 inline
 FFVar
@@ -1447,7 +1323,7 @@ template <typename DAG, typename T>
 inline
 void
 MINLPREF<DAG,T>::_search_invertible_constraints
-()
+( std::ostream& os )
 {
   if( _Fctreq.empty() ) return;
 
@@ -1465,8 +1341,8 @@ MINLPREF<DAG,T>::_search_invertible_constraints
   std::set<FFVar const*, lt_FFVar> setVar;
   std::vector<FFVar> vDep( nDep ), vSys( nDep );
   std::vector<FFVar>::const_reverse_iterator itvar=vVar.crbegin(), itctr=vCtr.crbegin();
-  std::vector<FFVar>::iterator itdep=vDep.begin(), itsys=vSys.begin();
-  std::vector<std::pair<unsigned,unsigned>>::iterator itndx=_ndxDep.begin(); 
+  std::vector<FFVar>::reverse_iterator itdep=vDep.rbegin(), itsys=vSys.rbegin();
+  std::vector<std::pair<unsigned,unsigned>>::reverse_iterator itndx=_ndxDep.rbegin(); 
   for( ; itvar!=vVar.rend(); ++itvar, ++itctr, ++itdep, ++itsys, ++itndx ){
 
     // track inverted constraint in _Fvar
@@ -1510,7 +1386,7 @@ MINLPREF<DAG,T>::_search_invertible_constraints
   //auto const& pVar : setVar ) _AEBND.add_var( *pVar );
   _AEBND.set_dep( vDep, vSys );
   _AEBND.options = options.AEBND;
-  _AEBND.setup();
+  _AEBND.setup( nDep, nullptr, nullptr, nullptr, os );
 }
 
 template <typename DAG, typename T>
@@ -1533,12 +1409,16 @@ bool
 MINLPREF<DAG,T>::eliminate_invertible_constraints
 ( bool const bndinv, bool const add2dag, std::ostream& os )
 {
-  _search_invertible_constraints();
+  if( options.DISPLEVEL )
+    os << "# SEARCHING INVERTIBLE CONSTRAINTS" << std::endl;
+  _search_invertible_constraints( os );
   if( !add2dag ) return true;
   
   auto const& [vVar,vCtr,vAux] = _SEenv.VarElim();
   if( _Fctreq.empty() || vVar.empty() ) return false;
 
+  if( options.DISPLEVEL )
+    os << "# ELIMINATING INVERTIBLE CONSTRAINTS" << std::endl;
   std::set<unsigned> Fremain;
   for( unsigned j=0; j<_nF; ++j ) Fremain.insert( j );
 
@@ -1547,7 +1427,7 @@ MINLPREF<DAG,T>::eliminate_invertible_constraints
 
   // iterate over set of eliminated variables
   std::vector<FFVar>::const_reverse_iterator itvar=vVar.crbegin(), itaux=vAux.crbegin();
-  std::vector<std::pair<unsigned,unsigned>>::iterator itndx=_ndxDep.begin(); 
+  std::vector<std::pair<unsigned,unsigned>>::reverse_iterator itndx=_ndxDep.rbegin(); 
   for( unsigned iblk=0; itvar!=vVar.rend(); ++itvar, ++itaux, ++itndx, ++iblk ){
 
     // check uniqueness of inverted constraint for current variable ranges
@@ -1634,9 +1514,9 @@ MINLPREF<DAG,T>::export_model
                                                (_Fquad.empty()? GAMSWRITER<DAG,T>::MODELTYPE::LIN:
                                                                 GAMSWRITER<DAG,T>::MODELTYPE::QUAD):
                                                                 GAMSWRITER<DAG,T>::MODELTYPE::NLIN);
-  _Fquad.clear();
-  _Fpol.clear();
-  _Fgal.clear();
+  //_Fquad.clear();
+  //_Fpol.clear();
+  //_Fgal.clear();
 
   GMS.set_functions( _dag, type, _nF, _Fvar.data(), _nX, _Xvar.data() );
   GMS.set_objective( 0, _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
