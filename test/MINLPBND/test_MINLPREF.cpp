@@ -25,7 +25,7 @@
 
 int main()
 {
-  mc::MINLPREF<mc::FFGraph<>,I> MINLP;
+  mc::MINLPREF<I> MINLP;
 
 /*
   mc::FFGraph DAG;
@@ -51,42 +51,75 @@ int main()
   MINLP.add_ctr( mc::BASE_OPT::EQ,  sqr(P[0])+sqr(P[1])+sqr(P[2])+sqr(P[3])-40 );
   //MINLP.add_ctr( mc::BASE_OPT::EQ,  sqr(P[0])-P[0]/P[3] );
 */
-  std::string gamsfile( "tuncphd_30.gms"); 
+  //std::string gamsfile( "tuncphd_29.gms"); 
+  //std::string gamsfile( "tuncphd_30.gms"); 
+  std::string gamsfile( "transswitch0009r.gms" );
   if( !MINLP.read( gamsfile ) ){//, true ) ){
     std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
     return -1;
   }
 
   // Export original model
+  MINLP.options.NCOCUTS             = 0;
+  MINLP.setup();
+ 
+  MINLP.propagate_bounds();
+  MINLP.export_model( "test_MINLPREF_original.gms" );
+/*
+  // Export original model with NCO cuts
   MINLP.options.NCOCUTS             = 1;
   MINLP.setup();
+ 
   MINLP.propagate_bounds();
   MINLP.export_model( "test_MINLPREF_NCOcuts.gms" );
-
+*/
   // Formulate reduced-space model and export to GAMS
   MINLP.options.NCOCUTS             = 0;
-  MINLP.options.SELIM.MIPDISPLEVEL  = 0;
-  MINLP.options.SELIM.ELIMNLIN      = {mc::FFInv::Options::IPOW,mc::FFInv::Options::LOG,mc::FFInv::Options::INV};
+  MINLP.options.INVBNDGS            = 1;
+  MINLP.options.INVKEEPLIN          = 1;
+  MINLP.options.SELIM.MIPDISPLEVEL  = 1;
+  MINLP.options.SELIM.MIPTIMELIMIT  = 10;
+  MINLP.options.SELIM.ELIMLIN       = 1;
+  MINLP.options.SELIM.ELIMMLIN      = 1;
+  MINLP.options.SELIM.ELIMNLIN      = {};//{mc::FFInv::Options::IPOW,mc::FFInv::Options::LOG,mc::FFInv::Options::INV};
   MINLP.options.AEBND.DISPLEVEL     = 0;
   MINLP.setup();
+
   MINLP.propagate_bounds();
-  MINLP.eliminate_invertible_constraints( false, true );//true, true );
+  MINLP.eliminate_invertible_constraints( true );
   MINLP.export_model( "test_MINLPREF_elim.gms" );
+/*
+  MINLP.options.INVKEEPLIN          = 0;
+  MINLP.setup();
+
+  MINLP.propagate_bounds();
+  MINLP.eliminate_invertible_constraints( true );
+  MINLP.export_model( "test_MINLPREF_elimfull.gms" );
 
   // Formulate full-space model after lifting of non-polynomial terms and quadratization of polynomials
   MINLP.options.NCOCUTS             = 0;
-  MINLP.options.MIPQUADCUTS         = 1;
+  MINLP.options.QUADOPTIM           = 0;
   MINLP.options.SQUAD.MIPDISPLEVEL  = 1;
+  MINLP.options.REDELIM             = 0;
+  MINLP.options.SRED.MIPDISPLEVEL   = 1;
+  MINLP.options.SRED.ORDER          = 1;
+  MINLP.options.SRED.NODIV          = 1;
   MINLP.setup();
 
   MINLP.propagate_bounds();
   MINLP.lift_polynomial_subexpressions( true );
+  MINLP.append_reduction_constraints( true );
   //MINLP.flatten_linear_functions( true );
   //MINLP.flatten_quadratic_functions( true );
   //MINLP.flatten_polynomial_functions( true );
+  //MINLP.quadratize_polynomial_functions( true );
+  //MINLP.append_reduction_constraints( true );
+  MINLP.propagate_bounds();
+  MINLP.export_model( "test_MINLPREF_lift.gms" );
+
   MINLP.quadratize_polynomial_functions( true );
   MINLP.propagate_bounds();
   MINLP.export_model( "test_MINLPREF_liftquad.gms" );
-
+*/
   return 0;
 }

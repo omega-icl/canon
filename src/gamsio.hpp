@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Benoit Chachuat, Imperial College London.
+// Copyright (C) Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
@@ -37,28 +37,28 @@ namespace mc
 //! Stefan Vigerske for the solver SCIP (C files reader_gmo.h,
 //! reader_gmo.c, reader_gms.h, reader_gms.c; see https://scip.zib.de/doc/html/).
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG >
+template <typename... ExtOps>
 class GAMSIO:
-  public virtual BASE_NLP<DAG>
+  public virtual BASE_NLP<ExtOps...>
 {
 protected:
 
-  using BASE_AE<DAG>::_var;
-  using BASE_AE<DAG>::_vartyp;
-  using BASE_AE<DAG>::_varlb;
-  using BASE_AE<DAG>::_varub;
-  using BASE_AE<DAG>::_varlm;
-  using BASE_AE<DAG>::_varum;
+  using BASE_AE<ExtOps...>::_var;
+  using BASE_AE<ExtOps...>::_vartyp;
+  using BASE_AE<ExtOps...>::_varlb;
+  using BASE_AE<ExtOps...>::_varub;
+  using BASE_AE<ExtOps...>::_varlm;
+  using BASE_AE<ExtOps...>::_varum;
 
-  using BASE_NLP<DAG>::set_obj;
-  using BASE_NLP<DAG>::add_ctr;
+  using BASE_NLP<ExtOps...>::set_obj;
+  using BASE_NLP<ExtOps...>::add_ctr;
 
 public:
 
   //! @brief Class constructor
   GAMSIO
     ()
-    : BASE_NLP<DAG>(),
+    : BASE_NLP<ExtOps...>(),
       _gmo( nullptr ),
       _gev( nullptr ),
       //_pal( nullptr ),
@@ -96,7 +96,7 @@ private:
    //struct palRec*        _pal;
 
   //! @brief DAG environment
-  DAG* _dag;
+  FFGraph<ExtOps...>* _dag;
 
   //! @brief setup optimization model from GAMS modelling object
   bool _populate
@@ -124,10 +124,10 @@ protected:
 };
 
 #if defined (MC__WITH_GAMS)
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-GAMSIO<DAG>::read
+GAMSIO<ExtOps...>::read
 ( std::string const filename, bool const init, bool const disp )
 {
   // reset
@@ -200,10 +200,10 @@ TERMINATE:
 }
 #endif
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-GAMSIO<DAG>::read
+GAMSIO<ExtOps...>::read
 ( struct gmoRec* gmo, bool const init, bool const disp )
 {
    _gmo = gmo;
@@ -244,10 +244,10 @@ GAMSIO<DAG>::read
    return _populate( init, disp );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 std::string
-GAMSIO<DAG>::_format_name
+GAMSIO<ExtOps...>::_format_name
 ( std::string const& name )
 {
   auto left = name.find_last_of( '(' );
@@ -259,10 +259,10 @@ GAMSIO<DAG>::_format_name
   return name.substr(0, left) + '_' + name.substr(left+1, right-left-1);
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-GAMSIO<DAG>::_populate
+GAMSIO<ExtOps...>::_populate
 ( bool const init, bool const disp )
 {
   assert( _gmo != nullptr );
@@ -344,7 +344,7 @@ GAMSIO<DAG>::_populate
 
   // reset DAG environment
   if( _dag ) delete _dag;
-  BASE_AE<DAG>::_dag = _dag = new DAG;
+  BASE_AE<ExtOps...>::_dag = _dag = new FFGraph<ExtOps...>;
 
   // set DAG variables
   char buffer[255];
@@ -548,10 +548,10 @@ GAMSIO<DAG>::_populate
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 std::pair<FFVar,bool>
-GAMSIO<DAG>::_parse
+GAMSIO<ExtOps...>::_parse
 ( int const codelen, std::vector<int>& opcodes, std::vector<int>& fields,
   double const* constants )
 {

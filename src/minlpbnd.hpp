@@ -102,15 +102,12 @@ Other options can be modified to tailor the relaxations, tune the MIP solver, se
 #include <stdexcept>
 #include <chrono>
 
-#include "polimage.hpp"
-#include "squad.hpp"
-#include "scmodel.hpp"
-#include "ismodel.hpp"
-#include "selim.hpp"
-#include "rltred.hpp"
-
 #include "minlpref.hpp"
 #include "mipslv_gurobi.hpp"
+
+#include "polimage.hpp"
+#include "scmodel.hpp"
+#include "ismodel.hpp"
 
 //#undef MC__MINLPBND_DEBUG
 //#define MC__MINLPBND_DEBUG_LIFT
@@ -125,15 +122,15 @@ namespace mc
 //! mc::MINLPBND is a C++ class for global bounding of factorable MINLP
 //! using MC++
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG,
-           typename T,
-           typename MIP=MIPSLV_GUROBI<T> >
+template < typename T,
+           typename MIP=MIPSLV_GUROBI<T>,
+           typename... ExtOps >
 class MINLPBND
 #if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<DAG>,
-  public virtual MINLPREF<DAG,T>
+: protected virtual GAMSIO<ExtOps...>,
+  public virtual MINLPREF<T,ExtOps...>
 #else
-: public virtual MINLPREF<DAG,T>
+: public virtual MINLPREF<T,ExtOps...>
 #endif
 {
   // Typedef's
@@ -147,94 +144,91 @@ class MINLPBND
   typedef SQuad< unsigned, std::less<unsigned> > t_quad;
   typedef lt_SQuad< std::less<unsigned> > lt_quad;
 
-  typedef SLiftEnv<DAG> t_lift;
-  typedef SElimEnv<DAG> t_elim;
+  typedef SLiftEnv<ExtOps...> t_lift;
+  typedef SElimEnv<ExtOps...> t_elim;
 
 public:
 
-  using BASE_AE<DAG>::set;
-  using BASE_AE<DAG>::dag;
-  using BASE_AE<DAG>::set_dag;
-  using BASE_AE<DAG>::par;
-  using BASE_AE<DAG>::set_par;
-  using BASE_AE<DAG>::add_par;
-  using BASE_AE<DAG>::reset_par;
-  using BASE_AE<DAG>::var;
-  using BASE_AE<DAG>::set_var;
-  using BASE_AE<DAG>::add_var;
-  using BASE_AE<DAG>::reset_var;
-  using BASE_AE<DAG>::update_vartyp;
-  using BASE_AE<DAG>::dep;
-  using BASE_AE<DAG>::set_dep;
-  using BASE_AE<DAG>::add_dep;
-  using BASE_AE<DAG>::reset_dep;
-  using BASE_AE<DAG>::sys;
-  using BASE_AE<DAG>::add_sys;
-  using BASE_AE<DAG>::reset_sys;
+  using BASE_AE<ExtOps...>::set;
+  using BASE_AE<ExtOps...>::dag;
+  using BASE_AE<ExtOps...>::set_dag;
+  using BASE_AE<ExtOps...>::par;
+  using BASE_AE<ExtOps...>::set_par;
+  using BASE_AE<ExtOps...>::add_par;
+  using BASE_AE<ExtOps...>::reset_par;
+  using BASE_AE<ExtOps...>::var;
+  using BASE_AE<ExtOps...>::set_var;
+  using BASE_AE<ExtOps...>::add_var;
+  using BASE_AE<ExtOps...>::reset_var;
+  using BASE_AE<ExtOps...>::update_vartyp;
+  using BASE_AE<ExtOps...>::dep;
+  using BASE_AE<ExtOps...>::set_dep;
+  using BASE_AE<ExtOps...>::add_dep;
+  using BASE_AE<ExtOps...>::reset_dep;
+  using BASE_AE<ExtOps...>::sys;
+  using BASE_AE<ExtOps...>::add_sys;
+  using BASE_AE<ExtOps...>::reset_sys;
 
-  using BASE_NLP<DAG>::set_obj;
-  using BASE_NLP<DAG>::add_ctr;
+  using BASE_NLP<ExtOps...>::set_obj;
+  using BASE_NLP<ExtOps...>::add_ctr;
 
-  using MINLPREF<DAG,T>::problem_class;
-  using MINLPREF<DAG,T>::dag;
-  using MINLPREF<DAG,T>::variables;
-  using MINLPREF<DAG,T>::lifted_variables;
-  using MINLPREF<DAG,T>::functions;
-  using MINLPREF<DAG,T>::variable_bounds;
-  using MINLPREF<DAG,T>::update_bounds;
-  using MINLPREF<DAG,T>::flatten_linear_functions;
-  using MINLPREF<DAG,T>::flatten_quadratic_functions;
-  using MINLPREF<DAG,T>::flatten_polynomial_functions;
+  using MINLPREF<T,ExtOps...>::problem_class;
+  using MINLPREF<T,ExtOps...>::dag;
+  using MINLPREF<T,ExtOps...>::variables;
+  using MINLPREF<T,ExtOps...>::lifted_variables;
+  using MINLPREF<T,ExtOps...>::functions;
+  using MINLPREF<T,ExtOps...>::variable_bounds;
+  using MINLPREF<T,ExtOps...>::update_bounds;
+  using MINLPREF<T,ExtOps...>::flatten_linear_functions;
+  using MINLPREF<T,ExtOps...>::flatten_quadratic_functions;
+  using MINLPREF<T,ExtOps...>::flatten_polynomial_functions;
 
-  using MINLPREF<DAG,T>::lift_polynomial_subexpressions;
-  using MINLPREF<DAG,T>::quadratize_polynomial_functions;
-  using MINLPREF<DAG,T>::eliminate_invertible_constraints;
-  using MINLPREF<DAG,T>::export_model;
+  using MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions;
+  using MINLPREF<T,ExtOps...>::quadratize_polynomial_functions;
+  using MINLPREF<T,ExtOps...>::eliminate_invertible_constraints;
+  using MINLPREF<T,ExtOps...>::export_model;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<DAG>::read;
+  using GAMSIO<ExtOps...>::read;
 #endif
 
 protected:
 
-  using MINLPREF<DAG,T>::_dag;
-  using MINLPREF<DAG,T>::_issetup;
-  using MINLPREF<DAG,T>::_objsense;
+  using MINLPREF<T,ExtOps...>::_dag;
+  using MINLPREF<T,ExtOps...>::_issetup;
+  using MINLPREF<T,ExtOps...>::_objsense;
 
-  using MINLPREF<DAG,T>::_nX;
-  using MINLPREF<DAG,T>::_nX0;
-  using MINLPREF<DAG,T>::_nX1;
-  using MINLPREF<DAG,T>::_Xvar;
-  using MINLPREF<DAG,T>::_Xbnd;
-  using MINLPREF<DAG,T>::_Xtyp;
-  using MINLPREF<DAG,T>::_Xlin;
-  using MINLPREF<DAG,T>::_Xquad;
-  using MINLPREF<DAG,T>::_Xpol;
-  using MINLPREF<DAG,T>::_Xgal;
-  using MINLPREF<DAG,T>::_Xobj;
+  using MINLPREF<T,ExtOps...>::_nX;
+  using MINLPREF<T,ExtOps...>::_nX0;
+  using MINLPREF<T,ExtOps...>::_nX1;
+  using MINLPREF<T,ExtOps...>::_Xvar;
+  using MINLPREF<T,ExtOps...>::_Xbnd;
+  using MINLPREF<T,ExtOps...>::_Xtyp;
+  using MINLPREF<T,ExtOps...>::_Xlin;
+  using MINLPREF<T,ExtOps...>::_Xquad;
+  using MINLPREF<T,ExtOps...>::_Xpol;
+  using MINLPREF<T,ExtOps...>::_Xgal;
+  using MINLPREF<T,ExtOps...>::_Xobj;
   
-  using MINLPREF<DAG,T>::_nF;
-  using MINLPREF<DAG,T>::_Fvar;
-  using MINLPREF<DAG,T>::_Fbnd;
-  using MINLPREF<DAG,T>::_Flin;
-  using MINLPREF<DAG,T>::_Fquad;
-  using MINLPREF<DAG,T>::_Fpol;
-  using MINLPREF<DAG,T>::_Fgal;
-  using MINLPREF<DAG,T>::_Fops;
-  using MINLPREF<DAG,T>::_Fallops;
+  using MINLPREF<T,ExtOps...>::_nF;
+  using MINLPREF<T,ExtOps...>::_Fvar;
+  using MINLPREF<T,ExtOps...>::_Fbnd;
+  using MINLPREF<T,ExtOps...>::_Flin;
+  using MINLPREF<T,ExtOps...>::_Fquad;
+  using MINLPREF<T,ExtOps...>::_Fpol;
+  using MINLPREF<T,ExtOps...>::_Fgal;
+  using MINLPREF<T,ExtOps...>::_Fops;
+  using MINLPREF<T,ExtOps...>::_Fallops;
 
-  using MINLPREF<DAG,T>::_SQenv;
+  using MINLPREF<T,ExtOps...>::_SQenv;
 
-  using MINLPREF<DAG,T>::_propagate_bounds;
-  using MINLPREF<DAG,T>::_Iwk;
-  using MINLPREF<DAG,T>::_CPbnd;
-  using MINLPREF<DAG,T>::_IINF;
+  using MINLPREF<T,ExtOps...>::_propagate_bounds;
+  using MINLPREF<T,ExtOps...>::_Iwk;
+  using MINLPREF<T,ExtOps...>::_CPbnd;
+  using MINLPREF<T,ExtOps...>::_IINF;
 
 
 protected:
-
-  //! @brief local copy of DAG (overides BASE_AE<DAG>::_dag)
-  //DAG*                      _dag;
 
   //! @brief environment for sparse quadratic form
   t_quad                    _SCQenv;
@@ -301,16 +295,16 @@ public:
 
   //! @brief MINLPBND options
   struct Options
-  : public MINLPREF<DAG,T>::Options
+  : public MINLPREF<T,ExtOps...>::Options
   {
-    using MINLPREF<DAG,T>::Options::TIMELIMIT;
-    using MINLPREF<DAG,T>::Options::DISPLEVEL;
-    using MINLPREF<DAG,T>::Options::PSDQUADCUTS;
-    using MINLPREF<DAG,T>::Options::DCQUADCUTS;
+    using MINLPREF<T,ExtOps...>::Options::TIMELIMIT;
+    using MINLPREF<T,ExtOps...>::Options::DISPLEVEL;
+    using MINLPREF<T,ExtOps...>::Options::PSDQUADCUTS;
+    using MINLPREF<T,ExtOps...>::Options::DCQUADCUTS;
     
     //! @brief Constructor
     Options():
-      MINLPREF<DAG,T>::Options(),
+      MINLPREF<T,ExtOps...>::Options(),
       RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCM(0), SUBSETISM(0),
       OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(true),
       ISMODEL(), ISMDIV(10), ISMCONT(true),
@@ -329,7 +323,7 @@ public:
         SCQUAD.REDUC            = false; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
-        MINLPREF<DAG,T>::options = options;
+        MINLPREF<T,ExtOps...>::options = options;
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
         SUBSETSCM     = options.SUBSETSCM;
@@ -468,7 +462,7 @@ public:
     ( T const* X=nullptr, double const* Finc=nullptr, const bool resetbnd=true,
       std::ostream& os=std::cout )
     { auto tstart = stats.start();
-      bool flag = MINLPREF<DAG,T>::propagate_bounds( X, Finc, resetbnd, os );
+      bool flag = MINLPREF<T,ExtOps...>::propagate_bounds( X, Finc, resetbnd, os );
       stats.walltime_cprop += stats.walltime( tstart );
       return flag; }
 
@@ -620,33 +614,33 @@ private:
 
   //! @brief Private methods to block default compiler methods
   MINLPBND
-    ( MINLPBND<DAG,T,MIP> const& );
-  MINLPBND<DAG,T,MIP>& operator=
-    ( MINLPBND<DAG,T,MIP> const& );
+    ( MINLPBND<T,MIP,ExtOps...> const& );
+  MINLPBND<T,MIP,ExtOps...>& operator=
+    ( MINLPBND<T,MIP,ExtOps...> const& );
 };
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::setup
+MINLPBND<T,MIP,ExtOps...>::setup
 ( std::ostream& os )
 {
-  MINLPREF<DAG,T>::options = options;
-  MINLPREF<DAG,T>::setup( os );
+  MINLPREF<T,ExtOps...>::options = options;
+  MINLPREF<T,ExtOps...>::setup( os );
   stats.reset();
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::update
+MINLPBND<T,MIP,ExtOps...>::update
 ()
 {
-  MINLPREF<DAG,T>::options = options;
+  MINLPREF<T,ExtOps...>::options = options;
   stats.reset();
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline bool
-MINLPBND<DAG,T,MIP>::bounded_domain
+MINLPBND<T,MIP,ExtOps...>::bounded_domain
 ( double const& maxdiam, FFDep::TYPE const type )
 const
 {
@@ -660,13 +654,13 @@ const
   return true;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline int
-MINLPBND<DAG,T,MIP>::relax_model
+MINLPBND<T,MIP,ExtOps...>::relax_model
 ( T const* X, double const* Finc, double const* Xinc, const unsigned nref,
   const bool resetbnd, bool const reinit, std::string const gmsfile )
 {
-  if( !_issetup ) throw typename MINLPREF<DAG,T>::Exceptions( MINLPREF<DAG,T>::Exceptions::SETUP );
+  if( !_issetup ) throw typename MINLPREF<T,ExtOps...>::Exceptions( MINLPREF<T,ExtOps...>::Exceptions::SETUP );
   _tstart = stats.start();
 
   // Update variable bounds
@@ -684,7 +678,7 @@ MINLPBND<DAG,T,MIP>::relax_model
 
   // Write relaxed model to GAMS file
   if( !gmsfile.empty() ){
-    GAMSWRITER<DAG,T> GMS;
+    GAMSWRITER<T,ExtOps...> GMS;
     GMS.set_cuts( &_POLenv, true );
     for( unsigned i=0; i<_nX0; i++ )
       GMS.set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr );
@@ -725,9 +719,9 @@ MINLPBND<DAG,T,MIP>::relax_model
   return _MIPSLV->get_status();
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline int
-MINLPBND<DAG,T,MIP>::_reduce
+MINLPBND<T,MIP,ExtOps...>::_reduce
 ( unsigned const ix, bool const uplo )
 {
 #ifdef MC__MINLPBND_DEBUG
@@ -745,9 +739,9 @@ MINLPBND<DAG,T,MIP>::_reduce
   return _MIPSLV->get_status();
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline bool
-MINLPBND<DAG,T,MIP>::_tight
+MINLPBND<T,MIP,ExtOps...>::_tight
 ()
 {
   // test if current bounds are tight
@@ -756,9 +750,9 @@ MINLPBND<DAG,T,MIP>::_tight
   return true;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline int
-MINLPBND<DAG,T,MIP>::_reduce
+MINLPBND<T,MIP,ExtOps...>::_reduce
 ()
 {
   // solve reduction subproblems from closest to farthest from bounds
@@ -845,13 +839,13 @@ MINLPBND<DAG,T,MIP>::_reduce
   return _MIPSLV->get_status();
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline int
-MINLPBND<DAG,T,MIP>::reduce_bounds
+MINLPBND<T,MIP,ExtOps...>::reduce_bounds
 ( unsigned& nred, T* X, double const* Finc, const bool resetbnd,
   bool const reinit )
 {
-  if( !_issetup ) throw typename MINLPREF<DAG,T>::Exceptions( MINLPREF<DAG,T>::Exceptions::SETUP );
+  if( !_issetup ) throw typename MINLPREF<T,ExtOps...>::Exceptions( MINLPREF<T,ExtOps...>::Exceptions::SETUP );
   _tstart = stats.start();
     
   // Update variable bounds
@@ -955,9 +949,9 @@ MINLPBND<DAG,T,MIP>::reduce_bounds
   return flag;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::init_polrelax
+MINLPBND<T,MIP,ExtOps...>::init_polrelax
 ()
 {
   auto tstart = stats.start();
@@ -1031,9 +1025,9 @@ MINLPBND<DAG,T,MIP>::init_polrelax
   stats.walltime_polimg += stats.walltime( tstart );
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::update_polrelax
+MINLPBND<T,MIP,ExtOps...>::update_polrelax
 ( unsigned const addcuts, bool const contcuts, bool const resetcuts )
 {
   auto tstart = stats.start();
@@ -1108,9 +1102,9 @@ MINLPBND<DAG,T,MIP>::update_polrelax
   _MIPSLV->options.CONTRELAX = CONTRELAX;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::refine_polrelax
+MINLPBND<T,MIP,ExtOps...>::refine_polrelax
 ( double const* Xinc, bool const resetcuts )
 {
   auto tstart = stats.start();
@@ -1149,9 +1143,9 @@ MINLPBND<DAG,T,MIP>::refine_polrelax
   stats.walltime_polimg += stats.walltime( tstart );
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_LIN
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_LIN
 ()
 {
  // Add polyhedral cuts for each linear function
@@ -1179,9 +1173,9 @@ MINLPBND<DAG,T,MIP>::_set_cuts_LIN
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_ISM
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_ISM
 ()
 {
   // Subset of functions to be relaxed
@@ -1232,9 +1226,9 @@ MINLPBND<DAG,T,MIP>::_set_cuts_ISM
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_ISM
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_ISM
 ( std::set<unsigned> const& ndxF )
 {
   // Auxiliary variables in polyhedral image are defined locally 
@@ -1248,8 +1242,8 @@ MINLPBND<DAG,T,MIP>::_set_cuts_ISM
 
     // Polyhedral cut generation
     T rhs = ( !_ISMFvar[j].ndep()? _ISMFvar[j].cst(): 0. );
-    auto cutF1 = *_POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(rhs), _POLFvar[j], -1. );
-    auto cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(rhs), _POLFvar[j], -1. );
+    auto cutF1 = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Op<T>::l(rhs), _POLFvar[j], -1. );
+    auto cutF2 = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Op<T>::u(rhs), _POLFvar[j], -1. );
     for( unsigned i=0; i<_nX; ++i ){
       auto&& ISMFji = _ISMFvar[j].C()[i];
       if( ISMFji.empty() ) continue;
@@ -1273,7 +1267,7 @@ MINLPBND<DAG,T,MIP>::_set_cuts_ISM
     // Auxiliaries add up to 1
     for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ )
       DL_ISMaux[jsub] = 1.;
-    _POLenv.add_cut( PolCut<T>::EQ, 1., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data() );
+    _POLenv.add_cut( nullptr, PolCut<T>::EQ, 1., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data() );
     // Relationship between variables and auxiliaries
     PolVar<T> POLvarL( 0. ), POLvarU( 0. );
     auto&& ISMXi = _ISMXvar[i].C()[i];
@@ -1284,14 +1278,14 @@ MINLPBND<DAG,T,MIP>::_set_cuts_ISM
       DL_ISMaux[k] = Op<T>::l(ISMXi[k]);
       DU_ISMaux[k] = Op<T>::u(ISMXi[k]);
     }
-    _POLenv.add_cut( PolCut<T>::LE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data(), _POLXvar[i], -1. );
-    _POLenv.add_cut( PolCut<T>::GE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DU_ISMaux.data(), _POLXvar[i], -1. );
+    _POLenv.add_cut( nullptr, PolCut<T>::LE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data(), _POLXvar[i], -1. );
+    _POLenv.add_cut( nullptr, PolCut<T>::GE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DU_ISMaux.data(), _POLXvar[i], -1. );
   }
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_DRL
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_DRL
 ( bool const SQuadCuts )
 {
   // Subset of functions to be relaxed
@@ -1353,9 +1347,9 @@ MINLPBND<DAG,T,MIP>::_set_cuts_DRL
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_SCM
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_SCM
 ( bool const SQuadCuts )
 {
   // Subset of functions to be relaxed
@@ -1464,17 +1458,17 @@ MINLPBND<DAG,T,MIP>::_set_cuts_SCM
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_SCDRL
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_SCDRL
 ( std::set<unsigned> const& ndxF )
 {
   // Add Chebyshev-derived cuts for selected expressions
   for( unsigned j : ndxF ){
     T Rj = _SCMFvar[j].R();
     double aj0 = _SCMFvar[j].constant( true ); // get constant coefficient and remove it from model
-    _POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(Rj)-aj0, _POLXmon, _SCMFvar[j].coefmon(), _POLFvar[j],  -1. );
-    _POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(Rj)-aj0, _POLXmon, _SCMFvar[j].coefmon(), _POLFvar[j],  -1. );
+    _POLenv.add_cut( nullptr, PolCut<T>::GE, -Op<T>::u(Rj)-aj0, _POLXmon, _SCMFvar[j].coefmon(), _POLFvar[j],  -1. );
+    _POLenv.add_cut( nullptr, PolCut<T>::LE, -Op<T>::l(Rj)-aj0, _POLXmon, _SCMFvar[j].coefmon(), _POLFvar[j],  -1. );
   }
 
 #ifdef MC__MINLPBND_DEBUG_SCDRL
@@ -1483,9 +1477,9 @@ MINLPBND<DAG,T,MIP>::_set_cuts_SCDRL
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_mon_SQ
+MINLPBND<T,MIP,ExtOps...>::_set_mon_SQ
 ( t_quad const& SQenv, int const BASIS, bool const SCALED,
   bool const DAGINSERT )
 {
@@ -1521,9 +1515,9 @@ MINLPBND<DAG,T,MIP>::_set_mon_SQ
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_mon_SCDRL
+MINLPBND<T,MIP,ExtOps...>::_set_mon_SCDRL
 ( std::set<unsigned> const& ndxF, int const BASIS, bool const SCALED,
   bool const DAGINSERT )
 {
@@ -1560,9 +1554,9 @@ MINLPBND<DAG,T,MIP>::_set_mon_SCDRL
 }
 
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_add_mon_DRL
+MINLPBND<T,MIP,ExtOps...>::_add_mon_DRL
 ()
 {
   // Gather DAG variables participating in monomials
@@ -1591,9 +1585,9 @@ MINLPBND<DAG,T,MIP>::_add_mon_DRL
 #endif
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_mon_DRL
+MINLPBND<T,MIP,ExtOps...>::_set_mon_DRL
 ( t_mon const& mon, int const BASIS, bool const SCALED, bool const DAGINSERT )
 {
   if( !mon.tord || _POLXmon.find( mon ) != _POLXmon.end() ) return;
@@ -1651,19 +1645,19 @@ MINLPBND<DAG,T,MIP>::_set_mon_DRL
   if( mon.tord == 1 ){
     auto const& ivar = mon.expr.begin()->first;
 #ifndef MC__MINLPBND_DEBUG_MONDRL
-    _POLenv.add_cut( PolCut<T>::EQ, _SCMenv->refvar().at(ivar), _POLXvar[ivar],  1.,
+    _POLenv.add_cut( nullptr, PolCut<T>::EQ, _SCMenv->refvar().at(ivar), _POLXvar[ivar],  1.,
                      _POLXmon[mon], -_SCMenv->scalvar().at(ivar) );
 #else
-    auto cutX = _POLenv.add_cut( PolCut<T>::EQ, _SCMenv->refvar().at(ivar), _POLXvar[ivar],  1.,
+    auto cutX = _POLenv.add_cut( nullptr, PolCut<T>::EQ, _SCMenv->refvar().at(ivar), _POLXvar[ivar],  1.,
                                  _POLXmon[mon], -_SCMenv->scalvar().at(ivar) );
     std::cout << "Scaling cut for variable X[" << ivar << "]: " << **cutX << std::endl;
 #endif
   }
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_set_cuts_SQ
+MINLPBND<T,MIP,ExtOps...>::_set_cuts_SQ
 ( t_quad& SQenv, std::set<unsigned> const& ndxF, bool const chkrem )
 {
   // Add cuts for entries in MatFct
@@ -1672,11 +1666,11 @@ MINLPBND<DAG,T,MIP>::_set_cuts_SQ
     assert( itF != ndxF.cend() );
     PolCut<T> *cutF1 = nullptr, *cutF2 = nullptr;
     if( !chkrem || Op<T>::diam(_SCMFvar[*itF].R()) == 0. ){
-      cutF1 = *_POLenv.add_cut( PolCut<T>::EQ, 0., _POLFvar[*itF], -1. );
+      cutF1 = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, 0., _POLFvar[*itF], -1. );
     }
     else{
-      cutF1 = *_POLenv.add_cut( PolCut<T>::LE, -Op<T>::l(_SCMFvar[*itF].R()), _POLFvar[*itF], -1. );
-      cutF2 = *_POLenv.add_cut( PolCut<T>::GE, -Op<T>::u(_SCMFvar[*itF].R()), _POLFvar[*itF], -1. );
+      cutF1 = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Op<T>::l(_SCMFvar[*itF].R()), _POLFvar[*itF], -1. );
+      cutF2 = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Op<T>::u(_SCMFvar[*itF].R()), _POLFvar[*itF], -1. );
     }
     // Separate quadratic term
     _add_to_cuts( SQenv, mat, cutF1, cutF2 );
@@ -1692,7 +1686,7 @@ MINLPBND<DAG,T,MIP>::_set_cuts_SQ
   unsigned ired = 0;
 #endif
   for( auto const& mat : SQenv.MatRed() ){
-    PolCut<T> *cutR = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
+    PolCut<T> *cutR = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, 0. );
     //_add_to_cuts( mat, cutR );
     _add_to_cuts( SQenv, mat, cutR );
 #ifdef MC__MINLPBND_DEBUG_SQ
@@ -1707,7 +1701,7 @@ MINLPBND<DAG,T,MIP>::_set_cuts_SQ
 #endif
     SQenv.tighten( options.PSDQUADCUTS>1? true: false );
     for( auto const& mat : SQenv.MatPSD() ){
-      PolCut<T> *cutP = *_POLenv.add_cut( PolCut<T>::GE, 0. );
+      PolCut<T> *cutP = *_POLenv.add_cut( nullptr, PolCut<T>::GE, 0. );
       _add_to_cuts( mat, cutP );
 #ifdef MC__MINLPBND_DEBUG_SQ
       std::cout << "PSD cuts #" << ++ipsd << ": " << *cutP << std::endl;
@@ -1716,9 +1710,9 @@ MINLPBND<DAG,T,MIP>::_set_cuts_SQ
   }
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline T
-MINLPBND<DAG,T,MIP>::_bnd_cheb
+MINLPBND<T,MIP,ExtOps...>::_bnd_cheb
 ( T const& x, const unsigned n )
 const
 {
@@ -1732,9 +1726,9 @@ const
   }
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline T
-MINLPBND<DAG,T,MIP>::_bnd_mon
+MINLPBND<T,MIP,ExtOps...>::_bnd_mon
 ( t_mon const& mon, int const BASIS )
 const
 {
@@ -1755,9 +1749,9 @@ const
   return bndmon;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline FFVar const&
-MINLPBND<DAG,T,MIP>::_get_mon
+MINLPBND<T,MIP,ExtOps...>::_get_mon
 ( t_mon const& mon, int const BASIS, bool const DAGINSERT )
 {
   assert( mon.tord );
@@ -1796,9 +1790,9 @@ MINLPBND<DAG,T,MIP>::_get_mon
   return **itXmon;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_add_to_cuts
+MINLPBND<T,MIP,ExtOps...>::_add_to_cuts
 ( t_quad const& SQenv, t_quad::map_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   // DC decomposition not required
@@ -1818,11 +1812,11 @@ MINLPBND<DAG,T,MIP>::_add_to_cuts
     PolVar<T> POLsep( &_POLenv, _get_range( matsep ), true );
     if( cut1 ) cut1->append( POLsep, 1. );
     if( cut2 ) cut2->append( POLsep, 1. );
-    PolCut<T> *cutR = *_POLenv.add_cut( PolCut<T>::EQ, 0., POLsep, -1. );
+    PolCut<T> *cutR = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, 0., POLsep, -1. );
     _add_to_cuts( matsep, cutR );
 
     // Introduce auxiliary cuts for DC factorization
-    PolCut<T> *cutDC = *_POLenv.add_cut( PolCut<T>::EQ, 0., POLsep, -1. );
+    PolCut<T> *cutDC = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, 0., POLsep, -1. );
     for( auto const& [eigval,eigterm] : SQenv.factorize( matsep ) ){
       auto const& POLEVSQ = _append_cuts_dcdec( eigterm );
       cutDC->append( POLEVSQ, eigval );
@@ -1830,9 +1824,9 @@ MINLPBND<DAG,T,MIP>::_add_to_cuts
   }
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<DAG,T,MIP>::_add_to_cuts
+MINLPBND<T,MIP,ExtOps...>::_add_to_cuts
 ( t_quad::map_SQuad const& mat, PolCut<T>* cut1, PolCut<T>* cut2 )
 {
   for( auto const& [ijmon,coef] : mat ){
@@ -1851,7 +1845,7 @@ MINLPBND<DAG,T,MIP>::_add_to_cuts
       if( cut2 ) cut2->append( _POLXmon[*ijmon.first], coef );
     }
     // Quadratic term
-    else if( options.POLIMG.AGGREG_LQ && !options.POLIMG.RELAX_QUAD ){
+    else if( options.POLIMG.AGGREG_LQ && options.POLIMG.ALLOW_QUAD ){
       if( cut1 ) cut1->append( _POLXmon[*ijmon.first], _POLXmon[*ijmon.second], coef );
       if( cut2 ) cut2->append( _POLXmon[*ijmon.first], _POLXmon[*ijmon.second], coef );
     }
@@ -1863,9 +1857,9 @@ MINLPBND<DAG,T,MIP>::_add_to_cuts
   }
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline T
-MINLPBND<DAG,T,MIP>::_get_range
+MINLPBND<T,MIP,ExtOps...>::_get_range
 ( t_quad::map_SQuad const& mat )
 {
   T range = 0.;
@@ -1885,13 +1879,13 @@ MINLPBND<DAG,T,MIP>::_get_range
   return range;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline PolVar<T>
-MINLPBND<DAG,T,MIP>::_append_cuts_dcdec
+MINLPBND<T,MIP,ExtOps...>::_append_cuts_dcdec
 ( t_quad::map_SPoly const& eigterm )
 {
   // New auxiliary variable and cut for linear combition of monomials
-  PolCut<T> *cutEV = *_POLenv.add_cut( PolCut<T>::EQ, 0. );
+  PolCut<T> *cutEV = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, 0. );
   T rangeEV = 0.;
   for( auto const& [mon,coef] : eigterm ){
     if( !mon.tord ){
@@ -1912,9 +1906,9 @@ MINLPBND<DAG,T,MIP>::_append_cuts_dcdec
   return POLEVSQ;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline PolVar<T>
-MINLPBND<DAG,T,MIP>::_append_cuts_monprod
+MINLPBND<T,MIP,ExtOps...>::_append_cuts_monprod
 ( t_quad::key_SQuad const& ijmon )
 {
   // Seach for pair ijmon in _POLXprodmon
@@ -1948,20 +1942,20 @@ MINLPBND<DAG,T,MIP>::_append_cuts_monprod
   return itijmon->second;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 template <typename U>
 inline double
-MINLPBND<DAG,T,MIP>::_dH
+MINLPBND<T,MIP,ExtOps...>::_dH
 ( U const& X, U const& Y )
 {
   return std::max( std::fabs(Op<U>::l(X)-Op<U>::l(Y)),
                    std::fabs(Op<U>::u(X)-Op<U>::u(Y)) );
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 template <typename U>
 inline double
-MINLPBND<DAG,T,MIP>::_reducrel
+MINLPBND<T,MIP,ExtOps...>::_reducrel
 ( unsigned const n, U const* Xred, U const* X )
 {
   double drel = 0.;
@@ -1970,10 +1964,10 @@ MINLPBND<DAG,T,MIP>::_reducrel
   return drel;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 template <typename U>
 inline double
-MINLPBND<DAG,T,MIP>::_reducrel
+MINLPBND<T,MIP,ExtOps...>::_reducrel
 ( unsigned const n, U const* Xred, U const* X, U const* X0 )
 {
   double drel = 0.;
@@ -1982,15 +1976,15 @@ MINLPBND<DAG,T,MIP>::_reducrel
   return drel;
 }
 
-template <typename DAG, typename T, typename MIP>
+template <typename T, typename MIP, typename... ExtOps>
 inline
 void
-MINLPBND<DAG,T,MIP>::Options::display
+MINLPBND<T,MIP,ExtOps...>::Options::display
 ( std::ostream& out )
 const
 {
   // Display MINLPREF Options
-  MINLPREF<DAG,T>::display( out );
+  MINLPREF<T,ExtOps...>::display( out );
   
   // Display MINLPBND Options
   out << std::left;

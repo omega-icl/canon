@@ -108,12 +108,12 @@ namespace mc
 ////////////////////////////////////////////////////////////////////////
 //! mc::WORKER_IPOPT is a C++ class for calling IPOPT on local threads
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG >
+template <typename... ExtOps>
 struct WORKER_IPOPT:
   public Ipopt::TNLP
 {
   //! @brief local copy of DAG
-  DAG dag;
+  FFGraph<ExtOps...> dag;
   //! @brief vector of parameters in DAG
   std::vector<FFVar>  Pvar;
   //! @brief vector of decision variables in DAG
@@ -255,14 +255,14 @@ struct WORKER_IPOPT:
     ( double const GRADTOL, int const nX, int const nG );
 };
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-WORKER_IPOPT<DAG>::update
+WORKER_IPOPT<ExtOps...>::update
 ( int const nX, double const* Xl, double const* Xu, int const nP, double const* Pval )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::initialize  " << warm << std::endl;
+    std::cout << "  WORKER_IPOPT::update  " << warm << std::endl;
 #endif
 
   // variable bounds
@@ -283,14 +283,14 @@ WORKER_IPOPT<DAG>::update
   }
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-WORKER_IPOPT<DAG>::initialize
+WORKER_IPOPT<ExtOps...>::initialize
 ( int const nX, double const* Xini )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::initialize  " << std::endl;
+    std::cout << "  WORKER_IPOPT::initialize  " << std::endl;
 #endif
 
   // initial starting point
@@ -302,15 +302,15 @@ WORKER_IPOPT<DAG>::initialize
 #endif
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::get_nlp_info
+WORKER_IPOPT<ExtOps...>::get_nlp_info
 ( Ipopt::Index& n, Ipopt::Index& m, Ipopt::Index& nnz_jac_g,
   Ipopt::Index& nnz_h_lag, IndexStyleEnum& index_style )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::get_nlp_info\n";
+    std::cout << "  WORKER_IPOPT::get_nlp_info\n";
 #endif
 
   // set size
@@ -332,15 +332,15 @@ WORKER_IPOPT<DAG>::get_nlp_info
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::get_bounds_info
+WORKER_IPOPT<ExtOps...>::get_bounds_info
 ( Ipopt::Index n, Ipopt::Number* x_l, Ipopt::Number* x_u,
   Ipopt::Index m, Ipopt::Number* g_l, Ipopt::Number* g_u )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::get_bounds_info\n";
+    std::cout << "  WORKER_IPOPT::get_bounds_info\n";
 #endif
 
   // set variable bounds
@@ -365,16 +365,16 @@ WORKER_IPOPT<DAG>::get_bounds_info
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::get_starting_point
+WORKER_IPOPT<ExtOps...>::get_starting_point
 ( Ipopt::Index n, bool init_x, Ipopt::Number* x, bool init_z,
   Ipopt::Number* z_L, Ipopt::Number* z_U, Ipopt::Index m,
   bool init_lambda, Ipopt::Number* lambda )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::get_starting_point  "
+    std::cout << "  WORKER_IPOPT::get_starting_point  "
               << init_x << init_z << init_lambda << std::endl;
 #endif
 
@@ -393,14 +393,14 @@ WORKER_IPOPT<DAG>::get_starting_point
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::eval_f
+WORKER_IPOPT<ExtOps...>::eval_f
 ( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Number& f )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT<DAG>::eval_f  " << new_x << std::endl;
+  std::cout << "  WORKER_IPOPT::eval_f  " << new_x << std::endl;
   for( Ipopt::Index i=0; i<n; i++ )
     std::cout << "  x[" << i << "] = " << x[i] << std::endl;
 #endif
@@ -419,14 +419,14 @@ WORKER_IPOPT<DAG>::eval_f
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::eval_grad_f
+WORKER_IPOPT<ExtOps...>::eval_grad_f
 ( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Number* df )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT<DAG>::eval_grad_f  " << new_x << std::endl;
+  std::cout << "  WORKER_IPOPT::eval_grad_f  " << new_x << std::endl;
   for( Ipopt::Index i=0; i<n; i++ )
     std::cout << "  x[" << i << "] = " << x[i] << std::endl;
 #endif
@@ -445,15 +445,15 @@ WORKER_IPOPT<DAG>::eval_grad_f
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::eval_g
+WORKER_IPOPT<ExtOps...>::eval_g
 ( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Index m,
   Ipopt::Number* g )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT<DAG>::eval_g  " << new_x << std::endl;
+  std::cout << "  WORKER_IPOPT::eval_g  " << new_x << std::endl;
   for( Ipopt::Index i=0; i<n; i++ )
     std::cout << "  x[" << i << "] = " << x[i] << std::endl;
 #endif
@@ -472,16 +472,16 @@ WORKER_IPOPT<DAG>::eval_g
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::eval_jac_g
+WORKER_IPOPT<ExtOps...>::eval_jac_g
 ( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Index m,
   Ipopt::Index nele_jac, Ipopt::Index* iRow, Ipopt::Index *jCol,
   Ipopt::Number* dg )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT<DAG>::eval_jac_g  " << new_x << std::endl;
+  std::cout << "  WORKER_IPOPT::eval_jac_g  " << new_x << std::endl;
 #endif
  
   // return the constraint Jacobian structure
@@ -510,17 +510,17 @@ WORKER_IPOPT<DAG>::eval_jac_g
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::eval_h
+WORKER_IPOPT<ExtOps...>::eval_h
 ( Ipopt::Index n, const Ipopt::Number* x, bool new_x,
   Ipopt::Number obj_factor, Ipopt::Index m, const Ipopt::Number* lambda,
   bool new_lambda, Ipopt::Index nele_hess, Ipopt::Index* iRow,
   Ipopt::Index* jCol, Ipopt::Number* d2L )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT<DAG>::eval_h  " << new_x  << new_lambda << std::endl;
+  std::cout << "  WORKER_IPOPT::eval_h  " << new_x  << new_lambda << std::endl;
 #endif
 
   // return the Lagrangian Hessian structure
@@ -550,17 +550,17 @@ WORKER_IPOPT<DAG>::eval_h
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-WORKER_IPOPT<DAG>::finalize_solution
+WORKER_IPOPT<ExtOps...>::finalize_solution
 ( Ipopt::SolverReturn status, Ipopt::Index n, const Ipopt::Number* p,
   const Ipopt::Number* upL, const Ipopt::Number* upU, Ipopt::Index m,
   const Ipopt::Number* g, const Ipopt::Number* ug, Ipopt::Number f,
   const Ipopt::IpoptData* ip_data, Ipopt::IpoptCalculatedQuantities* ip_cq )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::finalize_solution\n";
+    std::cout << "  WORKER_IPOPT::finalize_solution\n";
 #endif
   solution.stat    = status;
   solution.x.assign( p, p+n );
@@ -573,10 +573,10 @@ WORKER_IPOPT<DAG>::finalize_solution
   for( int j=0; j<m; j++ ) solution.uf[1+j] = - ug[j];
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::intermediate_callback
+WORKER_IPOPT<ExtOps...>::intermediate_callback
 ( Ipopt::AlgorithmMode mode, Ipopt::Index iter, Ipopt::Number obj_value,
   Ipopt::Number inf_pr, Ipopt::Number inf_du, Ipopt::Number mu,
   Ipopt::Number d_norm, Ipopt::Number regularization_size,
@@ -584,15 +584,15 @@ WORKER_IPOPT<DAG>::intermediate_callback
   const Ipopt::IpoptData* ip_data, Ipopt::IpoptCalculatedQuantities* ip_cq )
 {
 #ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT<DAG>::intermediate_callback\n";
+    std::cout << "  WORKER_IPOPT::intermediate_callback\n";
 #endif
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::feasible
+WORKER_IPOPT<ExtOps...>::feasible
 ( double const CTRTOL, int const nF, int const nX )
 {
   double maxinfeas = 0.;
@@ -625,10 +625,10 @@ WORKER_IPOPT<DAG>::feasible
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-WORKER_IPOPT<DAG>::stationary
+WORKER_IPOPT<ExtOps...>::stationary
 ( double const GRADTOL, int const nX, int const nG )
 {
   try{
@@ -660,67 +660,67 @@ WORKER_IPOPT<DAG>::stationary
 //! mc::NLPSLV_IPOPT is a C++ class for solving NLP problems
 //! using IPOPT and MC++
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG = mc::FFGraph<> >
+template <typename... ExtOps>
 class NLPSLV_IPOPT
 #if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<DAG>,
-  public virtual BASE_NLP<DAG>
+: protected virtual GAMSIO<ExtOps...>,
+  public virtual BASE_NLP<ExtOps...>
 #else
-: public virtual BASE_NLP<DAG>
+: public virtual BASE_NLP<ExtOps...>
 #endif
 {
 public:
 
-  using BASE_AE<DAG>::set;
-  using BASE_AE<DAG>::dag;
-  using BASE_AE<DAG>::set_dag;
-  using BASE_AE<DAG>::par;
-  using BASE_AE<DAG>::set_par;
-  using BASE_AE<DAG>::add_par;
-  using BASE_AE<DAG>::reset_par;
-  using BASE_AE<DAG>::var;
-  using BASE_AE<DAG>::set_var;
-  using BASE_AE<DAG>::add_var;
-  using BASE_AE<DAG>::reset_var;
-  using BASE_AE<DAG>::update_vartyp;
-  using BASE_AE<DAG>::dep;
-  using BASE_AE<DAG>::set_dep;
-  using BASE_AE<DAG>::add_dep;
-  using BASE_AE<DAG>::reset_dep;
-  using BASE_AE<DAG>::sys;
-  using BASE_AE<DAG>::add_sys;
-  using BASE_AE<DAG>::reset_sys;
+  using BASE_AE<ExtOps...>::set;
+  using BASE_AE<ExtOps...>::dag;
+  using BASE_AE<ExtOps...>::set_dag;
+  using BASE_AE<ExtOps...>::par;
+  using BASE_AE<ExtOps...>::set_par;
+  using BASE_AE<ExtOps...>::add_par;
+  using BASE_AE<ExtOps...>::reset_par;
+  using BASE_AE<ExtOps...>::var;
+  using BASE_AE<ExtOps...>::set_var;
+  using BASE_AE<ExtOps...>::add_var;
+  using BASE_AE<ExtOps...>::reset_var;
+  using BASE_AE<ExtOps...>::update_vartyp;
+  using BASE_AE<ExtOps...>::dep;
+  using BASE_AE<ExtOps...>::set_dep;
+  using BASE_AE<ExtOps...>::add_dep;
+  using BASE_AE<ExtOps...>::reset_dep;
+  using BASE_AE<ExtOps...>::sys;
+  using BASE_AE<ExtOps...>::add_sys;
+  using BASE_AE<ExtOps...>::reset_sys;
 
-  using BASE_NLP<DAG>::set_obj;
-  using BASE_NLP<DAG>::add_ctr;
+  using BASE_NLP<ExtOps...>::set_obj;
+  using BASE_NLP<ExtOps...>::add_ctr;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<DAG>::read;
+  using GAMSIO<ExtOps...>::read;
 #endif
 
 protected:
 
-  using BASE_AE<DAG>::_dag;
-  using BASE_AE<DAG>::_var;
-  using BASE_AE<DAG>::_vartyp;
-  using BASE_AE<DAG>::_varlb;
-  using BASE_AE<DAG>::_varlm;
-  using BASE_AE<DAG>::_varub;
-  using BASE_AE<DAG>::_varum;
-  using BASE_AE<DAG>::_dep;
-  using BASE_AE<DAG>::_deplb;
-  using BASE_AE<DAG>::_deplm;
-  using BASE_AE<DAG>::_depub;
-  using BASE_AE<DAG>::_depum;
-  using BASE_AE<DAG>::_sys;
-  using BASE_AE<DAG>::_sysm;
-  using BASE_AE<DAG>::_par;
+  using BASE_AE<ExtOps...>::_dag;
+  using BASE_AE<ExtOps...>::_var;
+  using BASE_AE<ExtOps...>::_vartyp;
+  using BASE_AE<ExtOps...>::_varlb;
+  using BASE_AE<ExtOps...>::_varlm;
+  using BASE_AE<ExtOps...>::_varub;
+  using BASE_AE<ExtOps...>::_varum;
+  using BASE_AE<ExtOps...>::_dep;
+  using BASE_AE<ExtOps...>::_deplb;
+  using BASE_AE<ExtOps...>::_deplm;
+  using BASE_AE<ExtOps...>::_depub;
+  using BASE_AE<ExtOps...>::_depum;
+  using BASE_AE<ExtOps...>::_sys;
+  using BASE_AE<ExtOps...>::_sysm;
+  using BASE_AE<ExtOps...>::_par;
 
-  using BASE_NLP<DAG>::_obj;
-  using BASE_NLP<DAG>::_ctr;
+  using BASE_NLP<ExtOps...>::_obj;
+  using BASE_NLP<ExtOps...>::_ctr;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<DAG>::_varini;
+  using GAMSIO<ExtOps...>::_varini;
 #endif
 
 public:
@@ -738,7 +738,7 @@ public:
 private:
 
   //! @brief vector of IPOPT workers
-  std::vector<Ipopt::SmartPtr<WORKER_IPOPT<DAG>>> _worker;
+  std::vector<Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>>> _worker;
 
   //! @brief number of parameters in problem
   int                 _nP;
@@ -1041,7 +1041,7 @@ protected:
 
   //! @brief set the worker internal variables
   void _set_worker
-    ( Ipopt::SmartPtr<WORKER_IPOPT<DAG>> & th );
+    ( Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>> & th );
 
   //! @brief resize the number of workers
   void _resize_workers
@@ -1057,14 +1057,14 @@ protected:
 private:
 
   //! @brief Private methods to block default compiler methods
-  NLPSLV_IPOPT(const NLPSLV_IPOPT<DAG>&);
-  NLPSLV_IPOPT<DAG>& operator=(const NLPSLV_IPOPT<DAG>&);
+  NLPSLV_IPOPT(const NLPSLV_IPOPT<ExtOps...>&);
+  NLPSLV_IPOPT<ExtOps...>& operator=(const NLPSLV_IPOPT<ExtOps...>&);
 };
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<DAG>::_set_options
+NLPSLV_IPOPT<ExtOps...>::_set_options
 ( Ipopt::SmartPtr<Ipopt::IpoptApplication> & IpoptApp )
 {
   IpoptApp->Options()->SetNumericValue( "constr_viol_tol",      options.FEASTOL<0.?  0.: options.FEASTOL );
@@ -1113,10 +1113,10 @@ NLPSLV_IPOPT<DAG>::_set_options
   IpoptApp->Options()->SetIntegerValue( "print_level",    options.DISPLEVEL<0? 0: (options.DISPLEVEL>12? 12: options.DISPLEVEL ) );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::setup
+NLPSLV_IPOPT<ExtOps...>::setup
 ()
 {
   // full set of parameters
@@ -1224,10 +1224,10 @@ NLPSLV_IPOPT<DAG>::setup
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::_record_model
+NLPSLV_IPOPT<ExtOps...>::_record_model
 ()
 {
   if( _rec_model ) return false;
@@ -1252,10 +1252,10 @@ NLPSLV_IPOPT<DAG>::_record_model
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::restore_model
+NLPSLV_IPOPT<ExtOps...>::restore_model
 ()
 {
   if( !_rec_model ) return false;
@@ -1281,10 +1281,10 @@ NLPSLV_IPOPT<DAG>::restore_model
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::set_obj_lazy
+NLPSLV_IPOPT<ExtOps...>::set_obj_lazy
 ( BASE_OPT::t_OBJ const& type, FFVar const& obj )
 {
   // Keep track of original model 
@@ -1332,10 +1332,10 @@ NLPSLV_IPOPT<DAG>::set_obj_lazy
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::add_ctr_lazy
+NLPSLV_IPOPT<ExtOps...>::add_ctr_lazy
 ( BASE_OPT::t_CTR const type, FFVar const& ctr )
 {
   // Keep track of original model 
@@ -1410,11 +1410,11 @@ NLPSLV_IPOPT<DAG>::add_ctr_lazy
   return true;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<DAG>::_set_worker
-( Ipopt::SmartPtr<WORKER_IPOPT<DAG>> & th )
+NLPSLV_IPOPT<ExtOps...>::_set_worker
+( Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>> & th )
 {
   th->Pvar.resize( _nP );
   th->Xvar.resize( _nX );
@@ -1446,22 +1446,22 @@ NLPSLV_IPOPT<DAG>::_set_worker
   th->tMAX  = userclock() + options.TIMELIMIT;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<DAG>::_resize_workers
+NLPSLV_IPOPT<ExtOps...>::_resize_workers
 ( int const noth )
 {
   while( (int)_worker.size() < noth ){
-    _worker.push_back( new WORKER_IPOPT<DAG> );
+    _worker.push_back( new WORKER_IPOPT<ExtOps...> );
   }
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 template <typename T>
 inline
 int
-NLPSLV_IPOPT<DAG>::solve
+NLPSLV_IPOPT<ExtOps...>::solve
 ( double const* Xini, T const* Xbnd, double const* Pval )
 {
   std::vector<double> Xlow(_nX), Xupp(_nX);
@@ -1472,10 +1472,10 @@ NLPSLV_IPOPT<DAG>::solve
   return solve( Xini, Xlow.data(), Xupp.data(), Pval );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 int
-NLPSLV_IPOPT<DAG>::solve
+NLPSLV_IPOPT<ExtOps...>::solve
 ( double const* Xini, double const* Xlow, double const* Xupp, double const* Pval )
 {
   // Set worker
@@ -1502,11 +1502,11 @@ NLPSLV_IPOPT<DAG>::solve
 }
 
 #ifdef MC__USE_SOBOL
-template <typename DAG>
+template <typename... ExtOps>
 template <typename T>
 inline
 int
-NLPSLV_IPOPT<DAG>::solve
+NLPSLV_IPOPT<ExtOps...>::solve
 ( unsigned const NSAM, T const* Xbnd, double const* Pval, bool const* logscal,
   bool const DISP )
 {
@@ -1518,10 +1518,10 @@ NLPSLV_IPOPT<DAG>::solve
   return solve( NSAM, Xlow.data(), Xupp.data(), Pval, logscal, DISP );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 int
-NLPSLV_IPOPT<DAG>::solve
+NLPSLV_IPOPT<ExtOps...>::solve
 ( unsigned const NSAM, double const* Xlow, double const* Xupp, double const* Pval,
   bool const* logscal, bool const DISP )
 {
@@ -1541,7 +1541,7 @@ NLPSLV_IPOPT<DAG>::solve
 
   // Run NLP solver on auxiliary threads
   for( unsigned th=1; th<NOTHREADS; th++ )
-    vth[th-1] = std::thread( &NLPSLV_IPOPT<DAG>::_mssolve, this, th, NOTHREADS, NSAM, logscal, DISP,
+    vth[th-1] = std::thread( &NLPSLV_IPOPT<ExtOps...>::_mssolve, this, th, NOTHREADS, NSAM, logscal, DISP,
                              std::ref(feasible[th]), std::ref(solution[th]) );
 
   // Run NLP solver on main thread
@@ -1582,10 +1582,10 @@ NLPSLV_IPOPT<DAG>::solve
   return _solution.stat;
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<DAG>::_mssolve
+NLPSLV_IPOPT<ExtOps...>::_mssolve
 ( int const th, unsigned const NOTHREADS, unsigned const NSAM,
   bool const* logscal, bool const DISP, int& feasible, SOLUTION_OPT& solution )
 {
@@ -1663,10 +1663,10 @@ NLPSLV_IPOPT<DAG>::_mssolve
 }
 #endif
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::is_feasible
+NLPSLV_IPOPT<ExtOps...>::is_feasible
 ( const double*x, const double CTRTOL )
 {
   // Initialize main thread
@@ -1676,10 +1676,10 @@ NLPSLV_IPOPT<DAG>::is_feasible
   return _worker[th]->feasible( CTRTOL, _nF, _nX );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::is_feasible
+NLPSLV_IPOPT<ExtOps...>::is_feasible
 ( const double CTRTOL )
 {
   // Initialize main thread
@@ -1689,10 +1689,10 @@ NLPSLV_IPOPT<DAG>::is_feasible
   return _worker[th]->feasible( CTRTOL, _nF, _nX );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::is_stationary
+NLPSLV_IPOPT<ExtOps...>::is_stationary
 ( const double*x, const double*ux, const double*uf, const double GRADTOL )
 {
   // Initialize main thread
@@ -1704,10 +1704,10 @@ NLPSLV_IPOPT<DAG>::is_stationary
   return _worker[th]->stationary( GRADTOL, _nX, _nG );
 }
 
-template <typename DAG>
+template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<DAG>::is_stationary
+NLPSLV_IPOPT<ExtOps...>::is_stationary
 ( const double GRADTOL )
 {
   // Initialize main thread

@@ -761,21 +761,21 @@ MIPSLV_GUROBI<T>::_add_cut
 
         switch( pCut->op()->type ){
           case FFOp::IPOW:{
-            unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
+            unsigned const ncoef = pCut->op()->varin[1]->num().n+1;
             std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
             options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
           case FFOp::DPOW:{
-            double const& dExp = pCut->op()->pops[1]->num().val();
+            double const& dExp = pCut->op()->varin[1]->num().val();
             if( dExp < 0 ) throw std::runtime_error("MIPSLV_GUROBI - Error: Nonlinear cut not yet implemented");
             options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], dExp, "", options.pwl() );
             break;}
 
           case FFOp::CHEB:{
-            unsigned const ncoef = pCut->op()->pops[1]->num().n+1;
+            unsigned const ncoef = pCut->op()->varin[1]->num().n+1;
             std::vector<double>&& coef = chebcoef( ncoef-1 );
             options.check_pwl( _cutvar[0], _cutvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );

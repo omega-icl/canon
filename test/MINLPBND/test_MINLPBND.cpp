@@ -23,7 +23,7 @@
    
 int main()
 {
-  mc::MINLPBND<mc::FFGraph<>,I> MINLP;
+  mc::MINLPBND<I> MINLP;
 
 /*
   mc::FFGraph DAG;
@@ -125,13 +125,13 @@ int main()
   // in the objective and constraints
   MINLP.options.RELAXMETH           = { MINLP.options.DRLQ };
   MINLP.options.LINCTRSEP           = 1;
-  MINLP.options.POLIMG.RELAX_QUAD   = 0;
-  MINLP.options.POLIMG.RELAX_NLIN   = 0;
-  MINLP.options.POLIMG.RELAX_MONOM  = 1;
+  MINLP.options.POLIMG.ALLOW_QUAD   = 1;
+  MINLP.options.POLIMG.ALLOW_NLIN   = {};
+  MINLP.options.POLIMG.ALLOW_DISJ   = {};
   MINLP.options.MIPSLV.PWLRELGAP    = 1e-6;
   MINLP.options.MIPSLV.FUNCMAXVAL   = 1e12;
   MINLP.options.MIPSLV.OUTPUTFILE   = "test_MINLPBND4.lp";
-  MINLP.options.MIPQUADCUTS         = 1;
+  MINLP.options.QUADOPTIM           = 1;
   MINLP.options.SQUAD.MIPFIXEDBASIS = 0;
 
   MINLP.setup();

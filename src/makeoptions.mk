@@ -1,6 +1,6 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp22 ; pwd)
+PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp23 ; pwd)
 #echo mcpp path is $(PATH_MC);
 include $(PATH_MC)/src/makeoptions.mk
 

@@ -1,4 +1,4 @@
-// Copyright (C) 2014 Benoit Chachuat, Imperial College London.
+// Copyright (C) Benoit Chachuat, Imperial College London.
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
@@ -15,30 +15,30 @@ namespace mc
 //! mc::BASE_NLP is a C++ base class for definition of the variables,
 //! objective and constraints participating in nonlinear programs.
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG >
+template <typename... ExtOps>
 class BASE_NLP:
   public virtual BASE_OPT,
-  public virtual BASE_AE< DAG >
+  public virtual BASE_AE<ExtOps...>
 {
 protected:
-  using BASE_AE<DAG>::_dag;
-  using BASE_AE<DAG>::_var;
-  using BASE_AE<DAG>::_varlb;
-  using BASE_AE<DAG>::_varlm;
-  using BASE_AE<DAG>::_varub;
-  using BASE_AE<DAG>::_varum;
-  using BASE_AE<DAG>::_dep;
-  using BASE_AE<DAG>::_deplb;
-  using BASE_AE<DAG>::_deplm;
-  using BASE_AE<DAG>::_depub;
-  using BASE_AE<DAG>::_depum;
-  using BASE_AE<DAG>::_sys;
-  using BASE_AE<DAG>::_sysm;
+  using BASE_AE<ExtOps...>::_dag;
+  using BASE_AE<ExtOps...>::_var;
+  using BASE_AE<ExtOps...>::_varlb;
+  using BASE_AE<ExtOps...>::_varlm;
+  using BASE_AE<ExtOps...>::_varub;
+  using BASE_AE<ExtOps...>::_varum;
+  using BASE_AE<ExtOps...>::_dep;
+  using BASE_AE<ExtOps...>::_deplb;
+  using BASE_AE<ExtOps...>::_deplm;
+  using BASE_AE<ExtOps...>::_depub;
+  using BASE_AE<ExtOps...>::_depum;
+  using BASE_AE<ExtOps...>::_sys;
+  using BASE_AE<ExtOps...>::_sysm;
 
 public:
   //! @brief Class constructor
   BASE_NLP()
-    : BASE_OPT(), BASE_AE<DAG>()
+    : BASE_OPT(), BASE_AE<ExtOps...>()
     {}
 
   //! @brief Class destructor
@@ -80,7 +80,7 @@ public:
   //! @brief Copy equations
   void set
     ( BASE_NLP const& nlp )
-    { BASE_AE<DAG>::set( nlp );
+    { BASE_AE<ExtOps...>::set( nlp );
       _ctr = nlp._ctr; _obj = nlp._obj; }
 
 protected:
@@ -109,13 +109,13 @@ protected:
     ( unsigned const* tvar=nullptr, bool const BADIFF=true );
 
   //! @brief Private methods to block default compiler methods
-  BASE_NLP( BASE_NLP<DAG> const& );
-  BASE_NLP<DAG>& operator=( BASE_NLP<DAG> const& );
+  BASE_NLP( BASE_NLP<ExtOps...> const& );
+  BASE_NLP<ExtOps...>& operator=( BASE_NLP<ExtOps...> const& );
 };
 
-template < typename DAG >
+template <typename... ExtOps>
 inline bool
-BASE_NLP<DAG>::set_nco
+BASE_NLP<ExtOps...>::set_nco
 ( const unsigned*tvar, bool const BADIFF )
 {
   reset_nco();

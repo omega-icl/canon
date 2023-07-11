@@ -19,22 +19,22 @@ int main()
 
   // Local optimization
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT<mc::FFGraph<>> NLP;
+  mc::NLPSLV_SNOPT NLP;
   NLP.options.DISPLEVEL = 0;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<mc::FFGraph<>>::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 8;
 #else
   //Ipopt::SmartPtr<mc::NLPSLV_IPOPT> NLP = new mc::NLPSLV_IPOPT;
-  mc::NLPSLV_IPOPT<mc::FFGraph<>> NLP;
+  mc::NLPSLV_IPOPT NLP;
   NLP.options.DISPLEVEL = 5;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT<mc::FFGraph<>>::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 8;
 #endif

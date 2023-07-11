@@ -61,20 +61,20 @@ int main()
 {
 
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT<mc::FFGraph<>> *NLP = new mc::NLPSLV_SNOPT<mc::FFGraph<>>;
+  mc::NLPSLV_SNOPT<>* NLP = new mc::NLPSLV_SNOPT;
   NLP->options.DISPLEVEL = 1;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<mc::FFGraph<>>::Options::FAD;
-  NLP->options.MAXTHREAD = 4;
+  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FAD;
+  NLP->options.MAXTHREAD = 1;
 #else
-  mc::NLPSLV_IPOPT *NLP = new mc::NLPSLV_IPOPT;
+  mc::NLPSLV_IPOPT<>* NLP = new mc::NLPSLV_IPOPT;
   NLP->options.DISPLEVEL = 1;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT::Options::FAD;
+  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::FAD;
   NLP->options.MAXTHREAD = 4;
 #endif
 

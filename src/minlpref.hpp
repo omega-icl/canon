@@ -104,7 +104,7 @@ Other options can be modified to tailor the relaxations, tune the MIP solver, se
 
 #include "squad.hpp"
 #include "selim.hpp"
-#include "rltred.hpp"
+#include "sred.hpp"
 
 #include "base_nlp.hpp"
 #include "aebnd.hpp"
@@ -122,21 +122,20 @@ namespace mc
 //! mc::MINLPREF is a C++ class for reformulation of factorable MINLP
 //! using MC++
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG,
-           typename T >
+template < typename T,
+           typename... ExtOps >
 class MINLPREF
 #if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<DAG>,
-  public virtual BASE_NLP<DAG>
+: protected virtual GAMSIO<ExtOps...>,
+  public virtual BASE_NLP<ExtOps...>
 #else
-: public virtual BASE_NLP<DAG>
+: public virtual BASE_NLP<ExtOps...>
 #endif
 {
 public:
 
   typedef SMon< unsigned, std::less<unsigned> > t_mon;
   typedef lt_SMon< std::less<unsigned> > lt_mon;
-  
   typedef SPoly< unsigned, std::less<unsigned> > t_poly;
   typedef std::map< t_mon, double, lt_mon > map_poly;
   typedef std::pair< t_mon const*, t_mon const* > t_prodmon;
@@ -144,67 +143,72 @@ public:
   typedef SQuad< unsigned, std::less<unsigned> > t_quad;
   typedef lt_SQuad< std::less<unsigned> > lt_quad;
 
-  typedef SLiftEnv<DAG> t_lift;
-  typedef SElimEnv<DAG> t_elim;
-  typedef AEBND<DAG,T> t_aebnd;
+  typedef SMon< mc::FFVar const*, mc::lt_FFVar > t_ffmon;
+  typedef lt_pSMon< mc::lt_FFVar > lt_ffmon;
+  typedef SPoly< mc::FFVar const*, mc::lt_FFVar > t_ffpoly;
+  typedef SRed< mc::FFVar const*, mc::lt_FFVar > t_red;
 
-  using BASE_AE<DAG>::set;
-  using BASE_AE<DAG>::dag;
-  using BASE_AE<DAG>::set_dag;
-  using BASE_AE<DAG>::par;
-  using BASE_AE<DAG>::set_par;
-  using BASE_AE<DAG>::add_par;
-  using BASE_AE<DAG>::reset_par;
-  using BASE_AE<DAG>::var;
-  using BASE_AE<DAG>::set_var;
-  using BASE_AE<DAG>::add_var;
-  using BASE_AE<DAG>::reset_var;
-  using BASE_AE<DAG>::update_vartyp;
-  using BASE_AE<DAG>::dep;
-  using BASE_AE<DAG>::set_dep;
-  using BASE_AE<DAG>::add_dep;
-  using BASE_AE<DAG>::reset_dep;
-  using BASE_AE<DAG>::sys;
-  using BASE_AE<DAG>::add_sys;
-  using BASE_AE<DAG>::reset_sys;
+  typedef SLiftEnv<ExtOps...> t_lift;
+  typedef SElimEnv<ExtOps...> t_elim;
+  typedef AEBND<T,ExtOps...> t_aebnd;
 
-  using BASE_NLP<DAG>::set_obj;
-  using BASE_NLP<DAG>::add_ctr;
+  using BASE_AE<ExtOps...>::set;
+  using BASE_AE<ExtOps...>::dag;
+  using BASE_AE<ExtOps...>::set_dag;
+  using BASE_AE<ExtOps...>::par;
+  using BASE_AE<ExtOps...>::set_par;
+  using BASE_AE<ExtOps...>::add_par;
+  using BASE_AE<ExtOps...>::reset_par;
+  using BASE_AE<ExtOps...>::var;
+  using BASE_AE<ExtOps...>::set_var;
+  using BASE_AE<ExtOps...>::add_var;
+  using BASE_AE<ExtOps...>::reset_var;
+  using BASE_AE<ExtOps...>::update_vartyp;
+  using BASE_AE<ExtOps...>::dep;
+  using BASE_AE<ExtOps...>::set_dep;
+  using BASE_AE<ExtOps...>::add_dep;
+  using BASE_AE<ExtOps...>::reset_dep;
+  using BASE_AE<ExtOps...>::sys;
+  using BASE_AE<ExtOps...>::add_sys;
+  using BASE_AE<ExtOps...>::reset_sys;
+
+  using BASE_NLP<ExtOps...>::set_obj;
+  using BASE_NLP<ExtOps...>::add_ctr;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<DAG>::read;
+  using GAMSIO<ExtOps...>::read;
 #endif
 
 protected:
 
-  // Do not use BASE_AE<DAG>::_dag since redefined locally
-  using BASE_AE<DAG>::_var;
-  using BASE_AE<DAG>::_vartyp;
-  using BASE_AE<DAG>::_varlb;
-  using BASE_AE<DAG>::_varlm;
-  using BASE_AE<DAG>::_varub;
-  using BASE_AE<DAG>::_varum;
-  using BASE_AE<DAG>::_dep;
-  using BASE_AE<DAG>::_deplb;
-  using BASE_AE<DAG>::_deplm;
-  using BASE_AE<DAG>::_depub;
-  using BASE_AE<DAG>::_depum;
-  using BASE_AE<DAG>::_sys;
-  using BASE_AE<DAG>::_sysm;
-  using BASE_AE<DAG>::_par;
+  // Do not use BASE_AE<ExtOps...>::_dag since redefined locally
+  using BASE_AE<ExtOps...>::_var;
+  using BASE_AE<ExtOps...>::_vartyp;
+  using BASE_AE<ExtOps...>::_varlb;
+  using BASE_AE<ExtOps...>::_varlm;
+  using BASE_AE<ExtOps...>::_varub;
+  using BASE_AE<ExtOps...>::_varum;
+  using BASE_AE<ExtOps...>::_dep;
+  using BASE_AE<ExtOps...>::_deplb;
+  using BASE_AE<ExtOps...>::_deplm;
+  using BASE_AE<ExtOps...>::_depub;
+  using BASE_AE<ExtOps...>::_depum;
+  using BASE_AE<ExtOps...>::_sys;
+  using BASE_AE<ExtOps...>::_sysm;
+  using BASE_AE<ExtOps...>::_par;
 
-  using BASE_NLP<DAG>::_obj;
-  using BASE_NLP<DAG>::_ctr;
-  using BASE_NLP<DAG>::_nco;
+  using BASE_NLP<ExtOps...>::_obj;
+  using BASE_NLP<ExtOps...>::_ctr;
+  using BASE_NLP<ExtOps...>::_nco;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<DAG>::_varini;
+  using GAMSIO<ExtOps...>::_varini;
 #endif
 
 protected:
 
-  //! @brief local copy of DAG (overides BASE_AE<DAG>::_dag)
-  DAG*                      _dag;
+  //! @brief local copy of DAG (overides BASE_AE<ExtOps...>::_dag)
+  FFGraph<ExtOps...>*       _dag;
 
   //! @brief environment for expression elimination
   t_elim                    _SEenv;
@@ -212,8 +216,8 @@ protected:
   t_lift                    _SLenv;
   //! @brief environment for sparse quadratic form
   t_quad                    _SQenv;
-  //! @brief environment for sparse quadratic form
-  //t_quad                    _SCQenv;
+  //! @brief environment for redundant constraints
+  t_red                     _SRenv;
   //! @brief environment for algebraic equation bounding
   t_aebnd                   _AEBND;
 
@@ -306,9 +310,9 @@ protected:
   std::vector<T>            _bndDep;
   
   //! @brief Storage vector for polynomial variables in flattening
-  std::vector<typename t_lift::t_poly> _SPXvar;
+  std::vector<t_ffpoly> _SPXvar;
   //! @brief Storage vector for polynomial functions in flattening
-  std::vector<typename t_lift::t_poly> _SPFvar;
+  std::vector<t_ffpoly> _SPFvar;
 
 public:
 
@@ -329,38 +333,45 @@ public:
     //! @brief Constructor
     Options():
       CPMAX(20), CPTHRES(1e-10),
-      RRLTCUTS(false), MIPQUADCUTS(false), PSDQUADCUTS(0), DCQUADCUTS(false), 
+      INVBNDGS(false), INVKEEPLIN(false), REDELIM(false),
+      QUADOPTIM(false), PSDQUADCUTS(0), DCQUADCUTS(false), 
       NCOCUTS(false), NCOADIFF(FSA), TIMELIMIT(6e2), DISPLEVEL(1),
-      SELIM(), SLIFT(), SQUAD(), RLTRED(), AEBND()
-      { SLIFT.LIFTDIV          = true;
-        SLIFT.LIFTIPOW         = false;
+      SELIM(), SLIFT(), SQUAD(), SRED(), AEBND()
+      { SLIFT.LIFTDIV          = 1;
+        SLIFT.LIFTIPOW         = 0;
         SELIM.MIPDISPLEVEL     = 0;
         SELIM.MIPTIMELIMIT     = TIMELIMIT;
         SQUAD.BASIS            = t_quad::Options::MONOM;
         SQUAD.ORDER            = t_quad::Options::INC;
-        SQUAD.REDUC            = false;
-        RLTRED.METHOD          = RLTRed::Options::ILP;
-        RLTRED.LEVEL           = RLTRed::Options::PRIMSIM;
-        RLTRED.TIMELIMIT       = TIMELIMIT;
+        SQUAD.REDUC            = 0;
+        SQUAD.MIPDISPLEVEL     = 0;
+        SQUAD.MIPTIMELIMIT     = TIMELIMIT;
+        SRED.ORDER             = 1;
+        SRED.DISPLEVEL         = 0;
+        SRED.MIPDISPLEVEL      = 0;
+        SRED.MIPTIMELIMIT      = TIMELIMIT;
+        AEBND.BOUNDER          = t_aebnd::Options::ALGORITHM::GS;
         AEBND.BLKDEC           = t_aebnd::Options::DECOMPOSITION::RECUR;
         AEBND.DISPLEVEL        = 0; }
     //! @brief Assignment operator
-    Options& operator= ( Options&options ){
-        CPMAX         = options.CPMAX;
-        CPTHRES       = options.CPTHRES;
-        RRLTCUTS      = options.RRLTCUTS;
-	MIPQUADCUTS   = options.MIPQUADCUTS;
-        PSDQUADCUTS   = options.PSDQUADCUTS;
-        DCQUADCUTS    = options.DCQUADCUTS;
-        NCOCUTS       = options.NCOCUTS;
-        NCOADIFF      = options.NCOADIFF;
-        TIMELIMIT     = options.TIMELIMIT;
-        DISPLEVEL     = options.DISPLEVEL;
-        SELIM         = options.SELIM;
-        SLIFT         = options.SLIFT;
-        SQUAD         = options.SQUAD;
-        RLTRED        = options.RLTRED;
-        AEBND         = options.AEBND;
+    Options& operator= ( Options const& opt ){
+        CPMAX         = opt.CPMAX;
+        CPTHRES       = opt.CPTHRES;
+        INVBNDGS      = opt.INVBNDGS;
+        INVKEEPLIN    = opt.INVKEEPLIN;
+        REDELIM       = opt.REDELIM;
+	QUADOPTIM     = opt.QUADOPTIM;
+        PSDQUADCUTS   = opt.PSDQUADCUTS;
+        DCQUADCUTS    = opt.DCQUADCUTS;
+        NCOCUTS       = opt.NCOCUTS;
+        NCOADIFF      = opt.NCOADIFF;
+        TIMELIMIT     = opt.TIMELIMIT;
+        DISPLEVEL     = opt.DISPLEVEL;
+        SELIM         = opt.SELIM;
+        SLIFT         = opt.SLIFT;
+        SQUAD         = opt.SQUAD;
+        SRED          = opt.SRED;
+        AEBND         = opt.AEBND;
         return *this ;
       }
     //! @brief Sensitivity strategy
@@ -372,10 +383,14 @@ public:
     unsigned CPMAX;
     //! @brief Threshold for repeating constraint propagation (minimum relative reduction in any variable)
     double CPTHRES;
-    //! @brief Whether to add reduced RLT cuts
-    bool RRLTCUTS;
+    //! @brief Whether to bound eliminated variables and check invertibility using interval Gauss-Siedel method
+    bool INVBNDGS;
+    //! @brief Whether to keep auxiliary linear variables for enforcing eliminated variable bounds
+    bool INVKEEPLIN;
+    //! @brief Whether to eliminate monomials through exact linearization from reduction constraints
+    bool REDELIM;
     //! @brief Whether to minimize the number of auxiliary variables in quadratisation using MIP
-    bool MIPQUADCUTS;
+    bool QUADOPTIM;
     //! @brief Whether to add PSD cuts within quadratisation (0: none; 1: 2-by-2; >1: 3-by-3)
     unsigned PSDQUADCUTS;
     //! @brief Whether to add DC cuts within quadratisation
@@ -395,7 +410,7 @@ public:
     //! @brief SQuad options for quadratization of sparse polynomial expressions
     typename t_quad::Options SQUAD;
     //! @brief RLTRed options for reduced RLT search
-    typename RLTRed::Options RLTRED;
+    typename t_red::Options  SRED;
     //! @brief AEBND options for implicit equation bounds
     typename t_aebnd::Options AEBND;
     //! @brief Display
@@ -443,7 +458,7 @@ public:
     { return _pbclass; }
 
   //! @brief Get pointer to DAG
-  DAG* dag
+  FFGraph<ExtOps...>* dag
     ()
     const
     { return _dag; }
@@ -502,9 +517,13 @@ public:
   bool quadratize_polynomial_functions
     ( bool const add2dag, std::ostream& os = std::cout );
 
+  //! @brief Append reduction polynomial constraints
+  bool append_reduction_constraints
+    ( bool const add2dag, std::ostream& os = std::cout );
+
   //! @brief Eliminate variables from invertible equality constraints
   bool eliminate_invertible_constraints
-    ( bool const bndinv, bool const add2dag, std::ostream& os = std::cout );
+    ( bool const add2dag, std::ostream& os = std::cout );
 
   //! @brief export reformulated optimization model to GAMS file
   bool export_model
@@ -549,6 +568,16 @@ private:
   bool _flatten_functions
     ( std::set<unsigned> const& Fndx, bool const add2dag );
 
+  //! @brief Create DAG variable for given sparse polynomial
+  FFVar _insert_ffpol
+    ( t_ffpoly const& pol )
+    const;
+    
+  //! @brief Create DAG variable and auxiliary for given high-order monomial 
+  std::pair< FFVar const*, FFVar const* > _insert_ffmon
+    ( t_ffmon const& mon, int const BASIS, bool const noaux=false )
+    const;
+
   //! @brief Create DAG variable for given quadratic form
   FFVar _insert_quad
     ( t_quad::map_SQuad const& quad, std::map< t_mon, FFVar, lt_mon >& mapmon )
@@ -561,7 +590,7 @@ private:
     
   //! @brief Create DAG variable and auxiliary for given high-order monomial 
   std::pair< FFVar const*, FFVar const* > _insert_mon
-    ( t_mon const& mon )
+    ( t_mon const& mon, int const BASIS )
     const;
 
   //! @brief Search for invertible equality constraints and form correspond triangular constraint subsystem
@@ -572,16 +601,20 @@ private:
   bool _bound_invertible_constraints
     ();
 
+  //! @brief Search for reduction polynomial constraints and identify linearizable monomials
+  unsigned _search_reduction_constraints
+    ( std::set<unsigned> Ftpol, std::ostream& os );
+
   //! @brief Private methods to block default compiler methods
   MINLPREF
-    ( MINLPREF<DAG,T> const& );
-  MINLPREF<DAG,T>& operator=
-    ( MINLPREF<DAG,T> const& );
+    ( MINLPREF<T,ExtOps...> const& );
+  MINLPREF<T,ExtOps...>& operator=
+    ( MINLPREF<T,ExtOps...> const& );
 };
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline void
-MINLPREF<DAG,T>::setup
+MINLPREF<T,ExtOps...>::setup
 ( std::ostream& os )
 {
   _issetup = false;
@@ -647,13 +680,13 @@ MINLPREF<DAG,T>::setup
 
   // local DAG copy
   if( _dag ) delete _dag;
-  _dag = new DAG;
+  _dag = new FFGraph<ExtOps...>;
   _nP = Pvar.size(); _Pvar.resize( _nP );
-  _dag->insert( BASE_NLP<DAG>::_dag, _nP, Pvar.data(), _Pvar.data() );
+  _dag->insert( BASE_NLP<ExtOps...>::_dag, _nP, Pvar.data(), _Pvar.data() );
   _nX = _nX1 = Xvar.size(); _Xvar.resize( _nX );
-  _dag->insert( BASE_NLP<DAG>::_dag, _nX, Xvar.data(), _Xvar.data() );
+  _dag->insert( BASE_NLP<ExtOps...>::_dag, _nX, Xvar.data(), _Xvar.data() );
   _nF = Fvar.size(); _Fvar.resize( _nF );
-  _dag->insert( BASE_NLP<DAG>::_dag, _nF, Fvar.data(), _Fvar.data() );
+  _dag->insert( BASE_NLP<ExtOps...>::_dag, _nF, Fvar.data(), _Fvar.data() );
 #ifdef MC__MINLPREF_DEBUG  
   _dag->output( _dag->subgraph( 1, _Fvar.data() ), " objective" );
 #endif
@@ -671,27 +704,21 @@ MINLPREF<DAG,T>::setup
   _Fbnd.resize( _nF );
   for( unsigned i=0; i<_nF; i++ ) _Fbnd[i] = T( _Flow[i], _Fupp[i] );
 
-#if 0
-  // search for reduced RLT cuts
-  if( options.RRLTCUTS ) _search_reduction_constraints();
-#endif
-
-
   //stats.reset();
   _issetup = true;
   if( options.DISPLEVEL ) _display_model( os );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 bool
-MINLPREF<DAG,T>::_set_optimality_cuts
+MINLPREF<T,ExtOps...>::_set_optimality_cuts
 ( std::vector<FFVar>& Xvar, std::vector<FFVar>& Fvar, std::ostream& os )
 {
   if( options.DISPLEVEL )
     os << "# APPENDING FIRST-ORDER OPTIMALITY CONDITIONS" << std::endl;
 
-  if( !BASE_NLP<DAG>::set_nco( _Xtyp.data(), options.NCOADIFF==Options::ASA ) )
+  if( !BASE_NLP<ExtOps...>::set_nco( _Xtyp.data(), options.NCOADIFF==Options::ASA ) )
     return false;
 
   // cost multiplier
@@ -731,7 +758,7 @@ MINLPREF<DAG,T>::_set_optimality_cuts
   for( unsigned i=0; i<std::get<0>(_nco).size(); ++i ){
     Fvar.push_back( std::get<1>(_nco)[i] );
 #ifdef MC__MINLPREF_DEBUG_NCOCUTS
-    BASE_NLP<DAG>::_dag->output( BASE_NLP<DAG>::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
+    BASE_NLP<ExtOps...>::_dag->output( BASE_NLP<ExtOps...>::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
 #endif
     switch( std::get<0>(_nco)[i] ){
       case BASE_OPT::EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
@@ -742,10 +769,10 @@ MINLPREF<DAG,T>::_set_optimality_cuts
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 void
-MINLPREF<DAG,T>::_update_model
+MINLPREF<T,ExtOps...>::_update_model
 ()
 {
   // update variable and function size and type
@@ -755,10 +782,10 @@ MINLPREF<DAG,T>::_update_model
   _set_function_class();
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 void
-MINLPREF<DAG,T>::_display_model
+MINLPREF<T,ExtOps...>::_display_model
 ( std::ostream& os )
 {
   os << std::endl
@@ -771,9 +798,9 @@ MINLPREF<DAG,T>::_display_model
      << std::endl;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline void
-MINLPREF<DAG,T>::_set_variable_class
+MINLPREF<T,ExtOps...>::_set_variable_class
 ()
 {
   FFDep Fworst( 0. );
@@ -781,7 +808,6 @@ MINLPREF<DAG,T>::_set_variable_class
     Fworst += Fj.dep();
 #ifdef MC__MINLPREF_DEBUG
   std::cout << "DEPS <- " << Fworst << std::endl;
-  //int dum; std::cin >> dum;
 #endif
 
   _Xlin.clear();
@@ -802,9 +828,9 @@ MINLPREF<DAG,T>::_set_variable_class
   }
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline void
-MINLPREF<DAG,T>::_set_function_class
+MINLPREF<T,ExtOps...>::_set_function_class
 ()
 {
   _Flin.clear();
@@ -829,9 +855,9 @@ MINLPREF<DAG,T>::_set_function_class
 }
 
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline void
-MINLPREF<DAG,T>::_set_subgraph
+MINLPREF<T,ExtOps...>::_set_subgraph
 ( std::ostream& os )
 {
   if( !_sgupdt ) return;
@@ -850,43 +876,10 @@ MINLPREF<DAG,T>::_set_subgraph
   _sgupdt = false;
 }
 
-#if 0
-template <typename DAG, typename T>
-inline
-void
-MINLPREF<DAG,T>::_search_reduction_constraints
-()
-{
-  if( _Fctreq.empty() ) return;
-
-  // search for reduced RLT cuts
-  RLTRed RRLT( _dag );
-  RRLT.options = options.RLTRED;
-  RRLT.search( _Fctreq, _Fvar.data() );
-
-  // append any reduced RLT cuts
-  for( auto const& pFred : RRLT.constraints() ){
-#ifdef MC__MINLPREF_DEBUG_RRLTCUTS
-    std::ostringstream ostr; ostr << " OF REDUCTION CONSTRAINT " << *pFred;
-    _dag->output( _dag->subgraph( 1, pFred ), ostr.str() );
-#endif
-    _Fvar.push_back( *pFred );
-    _Flow.push_back( 0. );
-    _Fupp.push_back( 0. );
-  }
-
-  // update variable and function size and type
-  _nX = _Xvar.size();
-  _nF = _Fvar.size();
-  _set_variable_class();    
-  _set_function_class();    
-}
-#endif
-
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 bool
-MINLPREF<DAG,T>::lift_polynomial_subexpressions
+MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
 ( bool const add2dag, std::ostream& os )
 {
   if( _Fgal.empty() ) return false;
@@ -907,7 +900,7 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
   auto itgal = _Fgal.begin();
   for( auto const& expr : _SLenv.Dep() ){
     // Earmark constraint if expression matches a variable
-    if( *itgal && expr.ops().first->type == FFOp::VAR )
+    if( *itgal && expr.opdef().first->type == FFOp::VAR )
       Frem[&expr] = *itgal;
     else
       _Fvar[*itgal] = expr;
@@ -923,6 +916,7 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
     // Inherit function bounds in case the lifted constraint corresponds to current auxiliary variable 
     _Xlow.push_back( itVar != Frem.end()? _Flow[itVar->second]: -BASE_OPT::INF );
     _Xupp.push_back( itVar != Frem.end()? _Fupp[itVar->second]:  BASE_OPT::INF );
+    //_Xbnd.push_back( T( _Xlow.back(), _Xupp.back() ) );
     _Xtyp.push_back( 0 );
   }
 
@@ -933,6 +927,7 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
     auto itFvar = _Fvar.begin(); std::advance( itFvar, i ); _Fvar.erase( itFvar );
     auto itFlow = _Flow.begin(); std::advance( itFlow, i ); _Flow.erase( itFlow );
     auto itFupp = _Fupp.begin(); std::advance( itFupp, i ); _Fupp.erase( itFupp );
+    auto itFbnd = _Fbnd.begin(); std::advance( itFbnd, i ); _Fbnd.erase( itFbnd );
   }
 
   // append auxiliary polynomial constraints
@@ -940,6 +935,7 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
     _Fvar.push_back( poly );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
+    //_Fbnd.push_back( T( _Flow.back(), _Fupp.back() ) );
   }
 
   // append auxiliary non-polynomial constraints
@@ -947,6 +943,7 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
     _Fvar.push_back( trans );
     _Flow.push_back( 0. );
     _Fupp.push_back( 0. );
+    //_Fbnd.push_back( T( _Flow.back(), _Fupp.back() ) );
   }
 
 
@@ -960,9 +957,9 @@ MINLPREF<DAG,T>::lift_polynomial_subexpressions
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline bool
-MINLPREF<DAG,T>::_flatten_functions
+MINLPREF<T,ExtOps...>::_flatten_functions
 ( std::set<unsigned> const& Fndx, bool const add2dag )
 {
   if( Fndx.empty() ) return false;
@@ -970,7 +967,10 @@ MINLPREF<DAG,T>::_flatten_functions
   // Create vector of all semi-algebraic expressions
   t_poly::options.BASIS = t_poly::Options::MONOM;
   _SPXvar.resize( _nX );
-  for( unsigned ix=0; ix<_nX; ix++ ) _SPXvar[ix].var( &_Xvar[ix] );
+  for( unsigned ix=0; ix<_nX; ix++ ){
+    auto itXvar = _dag->Vars().find( &_Xvar[ix] );
+    _SPXvar[ix].var( *itXvar ); // vector _Xvar may be resized!
+  }
   _SPFvar.resize( _nF );
   try{
     _dag->eval( Fndx, _Fvar.data(), _SPFvar.data(), _nX, _Xvar.data(), _SPXvar.data() );
@@ -1001,33 +1001,33 @@ MINLPREF<DAG,T>::_flatten_functions
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline bool
-MINLPREF<DAG,T>::flatten_linear_functions
+MINLPREF<T,ExtOps...>::flatten_linear_functions
 ( bool const add2dag )
 {
   return _flatten_functions( _Flin, add2dag );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline bool
-MINLPREF<DAG,T>::flatten_quadratic_functions
+MINLPREF<T,ExtOps...>::flatten_quadratic_functions
 ( bool const add2dag )
 {
   return _flatten_functions( _Fquad, add2dag );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline bool
-MINLPREF<DAG,T>::flatten_polynomial_functions
+MINLPREF<T,ExtOps...>::flatten_polynomial_functions
 ( bool const add2dag )
 {
   return _flatten_functions( _Fpol, add2dag );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline bool
-MINLPREF<DAG,T>::quadratize_polynomial_functions
+MINLPREF<T,ExtOps...>::quadratize_polynomial_functions
 ( bool const add2dag, std::ostream& os )
 {
   // Flatten quadratic and polynomial expressions
@@ -1055,7 +1055,7 @@ MINLPREF<DAG,T>::quadratize_polynomial_functions
   if( options.DISPLEVEL )
     os << "# PERFORMING QUADRATIC DECOMPOSITION" << std::endl;
   _SQenv.process( SPol.size(), SPol.data(), &t_poly::mapmon, t_quad::Options::MONOM );
-  if( options.MIPQUADCUTS ){
+  if( options.QUADOPTIM ){
     if( options.DISPLEVEL )
       os << "# OPTIMIZING QUADRATIC DECOMPOSITION" << std::endl;
     _SQenv.optimize( true );
@@ -1072,7 +1072,7 @@ MINLPREF<DAG,T>::quadratize_polynomial_functions
   for( auto const& mon : _SQenv.SetMon() ){
     if( mon.tord == 1 ) mapmon[mon] = _Xvar[mon.expr.cbegin()->first];
     if( mon.tord <= 1 ) continue;
-    auto [pAux,pVar] = _insert_mon( mon );
+    auto [pAux,pVar] = _insert_mon( mon, options.SQUAD.BASIS );
     _Xlift[_Xvar.size()] = *pAux; // <- stores monomial DAG expression
     _Xvar.push_back( *pVar );
     _Xlow.push_back( -BASE_OPT::INF );
@@ -1129,14 +1129,69 @@ MINLPREF<DAG,T>::quadratize_polynomial_functions
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 FFVar
-MINLPREF<DAG,T>::_insert_quad
+MINLPREF<T,ExtOps...>::_insert_ffpol
+( t_ffpoly const& pol )
+const
+{
+  FFVar varpol( 0. );
+  std::cout << "inserting: " << pol.display( pol.mapmon(), pol.options.BASIS, pol.options.DISPLEN, true ) << std::endl;
+  for( auto const& [mon,coef] : pol.mapmon() ){
+    if( mon.tord ){
+      auto [pAux,pVar] = _insert_ffmon( mon, pol.options.BASIS, true );
+      varpol += coef * (*pAux);
+    }
+    else
+      varpol += coef;
+  }
+  return varpol;
+}
+
+template <typename T, typename... ExtOps>
+inline
+std::pair< FFVar const*, FFVar const* >
+MINLPREF<T,ExtOps...>::_insert_ffmon
+( t_ffmon const& mon, int const BASIS, bool const noaux )
+const
+{
+  // define power monomial expression
+  FFVar Xlift( 1e0 );
+  for( auto const& [pvar,iord] : mon.expr ){
+    switch( BASIS ){
+     // Monomial basis
+     case t_ffpoly::Options::MONOM:
+      Xlift *= pow( *pvar, (int)iord );
+      break;
+     // Chebyshev basis
+     case t_ffpoly::Options::CHEB:
+      Xlift *= _insert_cheb( *pvar, iord );
+      break;
+    }
+  }
+#ifdef MC__MINLPBND_DEBUG_RED
+  std::ostringstream ostr; ostr << " of lifted monomial";
+  _dag->output( _dag->subgraph( 1, &Xlift ), ostr.str() );
+#endif
+  auto itXlift = _dag->Vars().find( &Xlift );
+  assert( itXlift != _dag->Vars().end() );
+  if( noaux ) return std::make_pair( *itXlift, nullptr );
+
+  // define power monomial variable
+  FFVar Xmon( _dag );
+  auto itXmon = _dag->Vars().find( &Xmon );
+  return std::make_pair( *itXlift, *itXmon );
+}
+
+template <typename T, typename... ExtOps>
+inline
+FFVar
+MINLPREF<T,ExtOps...>::_insert_quad
 ( t_quad::map_SQuad const& quad, std::map< t_mon, FFVar, lt_mon >& mapmon )
 const
 {
-  FFVar varpol = 0.;
+  FFVar varpol( 0. );
   for( auto const& [ijmon,coef] : quad ){
     if( !ijmon.first->tord && !ijmon.second->tord )
       varpol += coef;
@@ -1162,23 +1217,23 @@ const
   return varpol;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 std::pair< FFVar const*, FFVar const* >
-MINLPREF<DAG,T>::_insert_mon
-( t_mon const& mon )
+MINLPREF<T,ExtOps...>::_insert_mon
+( t_mon const& mon, int const BASIS )
 const
 {
   // define power monomial expression
   FFVar Xlift( 1e0 );
   for( auto const& [ivar,iord] : mon.expr ){
-    switch( options.SQUAD.BASIS ){
+    switch( BASIS ){
      // Monomial basis
-     case t_quad::Options::MONOM:
+     case t_ffpoly::Options::MONOM:
       Xlift *= pow( _Xvar[ivar], (int)iord );
       break;
      // Chebyshev basis
-     case t_quad::Options::CHEB:
+     case t_ffpoly::Options::CHEB:
       Xlift *= _insert_cheb( _Xvar[ivar], iord );
       break;
     }
@@ -1192,10 +1247,10 @@ const
   return std::make_pair( *itXlift, *itXmon );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 FFVar
-MINLPREF<DAG,T>::_insert_cheb
+MINLPREF<T,ExtOps...>::_insert_cheb
 ( FFVar const& x, const unsigned n )
 const
 {
@@ -1209,9 +1264,9 @@ const
   }
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline bool
-MINLPREF<DAG,T>::update_bounds
+MINLPREF<T,ExtOps...>::update_bounds
 ( T const* X, double const* Finc, bool const resetbnd, std::ostream& os )
 {
   // Variable bounds
@@ -1264,10 +1319,10 @@ MINLPREF<DAG,T>::update_bounds
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 int
-MINLPREF<DAG,T>::_propagate_bounds
+MINLPREF<T,ExtOps...>::_propagate_bounds
 ()
 {
 #ifdef MC__MINLPREF_DEBUG_CP
@@ -1294,10 +1349,10 @@ MINLPREF<DAG,T>::_propagate_bounds
   return flag;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 bool
-MINLPREF<DAG,T>::propagate_bounds
+MINLPREF<T,ExtOps...>::propagate_bounds
 ( T const* X, double const* Finc, const bool resetbnd, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1319,10 +1374,10 @@ MINLPREF<DAG,T>::propagate_bounds
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 void
-MINLPREF<DAG,T>::_search_invertible_constraints
+MINLPREF<T,ExtOps...>::_search_invertible_constraints
 ( std::ostream& os )
 {
   if( _Fctreq.empty() ) return;
@@ -1363,9 +1418,9 @@ MINLPREF<DAG,T>::_search_invertible_constraints
 
     // track other participating variables in _Xvar
     auto sgsys = _dag->subgraph( 1, &_Fvar[*ite] );
-    for( auto const& [Op,mov] : sgsys.l_op ){
-      if( Op->type != FFOp::VAR || Op->pres->id().second == _Xvar[i].id().second ) continue;
-      setVar.insert( Op->pres );
+    for( auto const& Op : sgsys.l_op ){
+      if( Op->type != FFOp::VAR || Op->varout[0]->id().second == _Xvar[i].id().second ) continue;
+      setVar.insert( Op->varout[0] );
     }
   }
 
@@ -1389,10 +1444,10 @@ MINLPREF<DAG,T>::_search_invertible_constraints
   _AEBND.setup( nDep, nullptr, nullptr, nullptr, os );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 bool
-MINLPREF<DAG,T>::_bound_invertible_constraints
+MINLPREF<T,ExtOps...>::_bound_invertible_constraints
 ()
 {
   std::vector<T> _bndIndep, _bndDep;
@@ -1403,11 +1458,11 @@ MINLPREF<DAG,T>::_bound_invertible_constraints
   return( _AEBND.solve( _bndIndep.data(), _bndDep.data(), _bndDep.data() ) == t_aebnd::NORMAL );
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 bool
-MINLPREF<DAG,T>::eliminate_invertible_constraints
-( bool const bndinv, bool const add2dag, std::ostream& os )
+MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
+( bool const add2dag, std::ostream& os )
 {
   if( options.DISPLEVEL )
     os << "# SEARCHING INVERTIBLE CONSTRAINTS" << std::endl;
@@ -1419,11 +1474,11 @@ MINLPREF<DAG,T>::eliminate_invertible_constraints
 
   if( options.DISPLEVEL )
     os << "# ELIMINATING INVERTIBLE CONSTRAINTS" << std::endl;
-  std::set<unsigned> Fremain;
+  std::set<unsigned> Xelim, Fremain;
   for( unsigned j=0; j<_nF; ++j ) Fremain.insert( j );
 
   // Bound dependent variables of invertible equality constraints using Gauss-Siedel interval methods
-  if( bndinv && !_bound_invertible_constraints() ) return false;
+  if( options.INVBNDGS && !_bound_invertible_constraints() ) return false;
 
   // iterate over set of eliminated variables
   std::vector<FFVar>::const_reverse_iterator itvar=vVar.crbegin(), itaux=vAux.crbegin();
@@ -1431,7 +1486,7 @@ MINLPREF<DAG,T>::eliminate_invertible_constraints
   for( unsigned iblk=0; itvar!=vVar.rend(); ++itvar, ++itaux, ++itndx, ++iblk ){
 
     // check uniqueness of inverted constraint for current variable ranges
-    if( bndinv && !_AEBND.uniblk( iblk ) ) continue;
+    if( options.INVBNDGS && !_AEBND.uniblk( iblk ) ) continue;
 
     // track inverted variable/constraint in _Xvar and _Fvar
     auto const& [i,j] = *itndx;
@@ -1451,8 +1506,18 @@ MINLPREF<DAG,T>::eliminate_invertible_constraints
     
     // substitute equality constraint with inverted expression and corresponding bounds
     if( _Xlow[i] > -0.999*BASE_OPT::INF || _Xupp[i] < 0.999*BASE_OPT::INF ){
-      _Fvar[j] = *itaux - *itvar;
-      _Flow[j] = _Fupp[j] = 0;
+      if( options.INVKEEPLIN ){
+        _Fvar[j] = *itaux - *itvar;
+        _Flow[j] = _Fupp[j] = 0;
+        _Fbnd[j] = T( 0 );
+      }
+      else{
+        _Fvar[j] = *itaux;
+        _Flow[j] = _Xlow[i];
+        _Fupp[j] = _Xupp[i];
+        _Fbnd[j] = T( _Xlow[i], _Xupp[i] );
+        Xelim.insert( i ); // Mark var i for elimination
+      }
       Fremain.insert( j ); // Reinsert j
 #ifdef MC__MINLPREF_DEBUG_ELIM
       std::ostringstream ostr;
@@ -1466,6 +1531,7 @@ MINLPREF<DAG,T>::eliminate_invertible_constraints
   auto itFvar = _Fvar.begin();
   auto itFlow = _Flow.begin();
   auto itFupp = _Fupp.begin();
+  auto itFbnd = _Fbnd.begin();
   for( unsigned j=0; j<_nF; ++j ){
     if( !Fremain.count( j ) ){
 #ifdef MC__MINLPREF_DEBUG_ELIM
@@ -1474,22 +1540,202 @@ MINLPREF<DAG,T>::eliminate_invertible_constraints
       itFvar = _Fvar.erase( itFvar ); 
       itFlow = _Flow.erase( itFlow ); 
       itFupp = _Fupp.erase( itFupp );
+      itFbnd = _Fbnd.erase( itFbnd );
       continue;
     }
-    ++itFvar; ++itFlow; ++itFupp;
+#ifdef MC__MINLPREF_DEBUG_ELIM
+    std::cout << "KEEPING CONSTRAINT " << *itFvar << " IN [" << *itFlow << "," << *itFupp << "]" << std::endl;
+#endif
+    ++itFvar; ++itFlow; ++itFupp; ++itFbnd;
+  }
+
+  // erase unused variables and corresponding bounds
+  auto itXvar = _Xvar.begin();
+  auto itXlow = _Xlow.begin();
+  auto itXupp = _Xupp.begin();
+  auto itXbnd = _Xbnd.begin();
+  for( unsigned i=0; i<_nX; ++i ){
+    if( Xelim.count( i ) ){
+#ifdef MC__MINLPREF_DEBUG_ELIM
+      std::cout << "REMOVING VARIABLE " << *itXvar << " IN [" << *itXlow << "," << *itXupp << "]" << std::endl;
+#endif
+      itXvar = _Xvar.erase( itXvar ); 
+      itXlow = _Xlow.erase( itXlow ); 
+      itXupp = _Xupp.erase( itXupp );
+      itXbnd = _Xbnd.erase( itXbnd );
+      continue;
+    }
+#ifdef MC__MINLPREF_DEBUG_ELIM
+    std::cout << "KEEPING VARIABLE " << *itXvar << " IN [" << *itXlow << "," << *itXupp << "]" << std::endl;
+#endif
+    ++itXvar; ++itXlow; ++itXupp; ++itXbnd;
   }
 
   // update variable and function size and type
   _sgupdt = true;
   _update_model();
   if( options.DISPLEVEL ) _display_model( os );
+
+#ifdef MC__MINLPREF_DEBUG_ELIM
+  for( unsigned i=0; i<_nX; ++i )
+    std::cout << "VARIABLE " << _Xvar[i] << " IN [" << _Xlow[i] << "," << _Xupp[i] << "]" << std::endl;
+  for( unsigned j=0; j<_nF; ++j )
+    std::cout << "CONSTRAINT " << _Fvar[j] << " IN [" << _Flow[j] << "," << _Fupp[j] << "]" << std::endl;
+#endif
+
+
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
+inline
+unsigned
+MINLPREF<T,ExtOps...>::_search_reduction_constraints
+( std::set<unsigned> Ftpol, std::ostream& os )
+{
+  if( _Fctreq.empty() ) return 0;
+
+  // Flatten linear, quadratic and polynomial expressions
+  std::set<unsigned> Ftpoleq = Ftpol;
+  for( auto itpol=Ftpoleq.begin(); itpol!=Ftpoleq.end(); ){
+    if( _Fctreq.count(*itpol) ){
+      ++itpol;
+      continue;
+    }
+    itpol = Ftpoleq.erase( itpol );
+  }
+
+  // Populate polynomial reduction problem and search
+  _SRenv.options = options.SRED;
+  _SRenv.set_monomials( Ftpol, _SPFvar.data(), &t_ffpoly::mapmon );
+  unsigned nred = _SRenv.search_reductions( Ftpoleq, _SPFvar.data(), &t_ffpoly::mapmon, options.REDELIM );
+//#ifdef MC__MINLPREF_DEBUG_RED
+  std::cout << _SRenv;
+  {std::cout << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
+//#endif
+  return nred;
+}
+
+template <typename T, typename... ExtOps>
 inline
 bool
-MINLPREF<DAG,T>::export_model
+MINLPREF<T,ExtOps...>::append_reduction_constraints
+( bool const add2dag, std::ostream& os )
+{
+  if( options.DISPLEVEL )
+    os << "# SEARCHING REDUCTION CONSTRAINTS" << std::endl;
+
+  std::set<unsigned> Ftpol = _Fpol;
+  Ftpol.insert( _Fquad.cbegin(), _Fquad.cend() );
+  Ftpol.insert( _Flin.cbegin(), _Flin.cend() );
+  if( !_flatten_functions( Ftpol, false ) ) return false;
+
+  unsigned nred = _search_reduction_constraints( Ftpol, os );
+  if( !nred || !add2dag ) return true;
+
+  // Substitute linearized monomials
+  if( options.REDELIM ){
+    // append auxiliary variables for linearized monomials
+    std::map< t_ffmon const*, FFVar const*, lt_ffmon > mapmonlin; 
+    for( auto const& monlin : _SRenv.ElimMon() ){
+      auto [pauxlin,pvarlin] = _insert_ffmon( monlin, t_ffpoly::Options::MONOM, false );
+      _Xlift[_Xvar.size()] = *pauxlin; // <- stores monomial DAG expression
+      _Xvar.push_back( *pvarlin );
+      _Xlow.push_back( -BASE_OPT::INF );
+      _Xupp.push_back(  BASE_OPT::INF );
+      //_Xbnd.push_back( T( -BASE_OPT::INF, BASE_OPT::INF ) );
+      _Xtyp.push_back( 0 );
+      mapmonlin[&monlin] = pvarlin;
+#ifdef MC__MINLPBND_DEBUG_RED
+      std::cout << "Linearized monomial " << *pvarlin << " := " << monlin.display(t_ffpoly::Options::MONOM) << std::endl;
+      _dag->output( _dag->subgraph( 1, pauxlin ) );
+#endif
+    }
+
+    // substitute auxiliary variables in existing polynomial expressions
+    for( auto const& i : Ftpol ){
+      // start with substituting most complex monomial
+      for( auto itmonlin=mapmonlin.rbegin(); itmonlin!=mapmonlin.rend(); ++itmonlin ){
+        auto const& [pmonlin,pvarlin] = *itmonlin;
+        for( auto itmon=_SPFvar[i].mapmon().begin(); itmon!=_SPFvar[i].mapmon().end(); ){
+          auto const& [mon,coef] = *itmon;
+          if( !pmonlin->subseteq( mon ) ){
+            ++itmon;
+            continue;
+          }
+          t_ffmon newmon( mon );
+          newmon -= *pmonlin;
+          newmon += t_ffmon( pvarlin );
+          _SPFvar[i].mapmon().insert( std::make_pair( newmon, coef ) );
+          itmon = _SPFvar[i].mapmon().erase( itmon );
+        }
+      }
+      // substitute existing DAG expression
+      _Fvar[i] = _insert_ffpol( _SPFvar[i] );
+#ifdef MC__MINLPBND_DEBUG_RED
+      std::ostringstream ostr; ostr << " of polynomial expression F[" << i << "]";
+      _dag->output( _dag->subgraph( 1, &_Fvar[i] ), ostr.str() );
+#endif
+    }
+
+    // substitute auxiliary variables in reduction polynomial expressions
+    _SPFvar = _SRenv.RedCtr(); // local copy
+    for( unsigned i=0; i<_SPFvar.size(); ++i ){
+      // start with substituting most complex monomial
+      for( auto itmonlin=mapmonlin.rbegin(); itmonlin!=mapmonlin.rend(); ++itmonlin ){
+        auto const& [pmonlin,pvarlin] = *itmonlin;
+        for( auto itmon=_SPFvar[i].mapmon().begin(); itmon!=_SPFvar[i].mapmon().end(); ){
+          auto const& [mon,coef] = *itmon;
+          if( !pmonlin->subseteq( mon ) ){
+            ++itmon;
+            continue;
+          }
+          t_ffmon newmon( mon );
+          newmon -= *pmonlin;
+          newmon += t_ffmon( pvarlin );
+          _SPFvar[i].mapmon().insert( std::make_pair( newmon, coef ) );
+          itmon = _SPFvar[i].mapmon().erase( itmon );
+        }
+      }
+      // append new DAG expression and bounds
+      _Fvar.push_back( _insert_ffpol( _SPFvar[i] ) );
+      _Flow.push_back( 0. );
+      _Fupp.push_back( 0. );
+#ifdef MC__MINLPBND_DEBUG_RED
+      std::ostringstream ostr; ostr << " of reduction polynomial cut F[" << _Fvar.size()-1 << "]";
+      _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
+#endif
+    }
+  }
+  
+  // Append reduction polynomial cuts without linearization
+  else{
+    // Append reduction polynomial cuts
+    for( auto const& red : _SRenv.RedCtr() ){
+      _Fvar.push_back( _insert_ffpol( red ) );
+      _Flow.push_back( 0. );
+      _Fupp.push_back( 0. );
+#ifdef MC__MINLPBND_DEBUG_RED
+      std::ostringstream ostr; ostr << " of reduction polynomial cut F[" << _Fvar.size()-1 << "]";
+      _dag->output( _dag->subgraph( 1, &_Fvar.back() ), ostr.str() );
+#endif
+    }
+  }
+
+  // update variable and function size and type
+  assert( _Fvar.size() == _Flow.size() && _Fvar.size() == _Fupp.size() ); 
+  _sgupdt = true;
+  _update_model();
+  update_bounds( nullptr, nullptr, false, os );
+  if( options.DISPLEVEL ) _display_model( os );
+  
+  return true;
+}
+
+template <typename T, typename... ExtOps>
+inline
+bool
+MINLPREF<T,ExtOps...>::export_model
 ( std::string const gmsfile, double const* Xinc )
 {
   if( gmsfile.empty() ){
@@ -1501,7 +1747,7 @@ MINLPREF<DAG,T>::export_model
   // Write relaxed model to GAMS file
   if( options.DISPLEVEL > 0 )
     std::cout << std::endl << "# WRITING MODEL TO FILE: " << gmsfile << std::endl;
-  GAMSWRITER<DAG,T> GMS;
+  GAMSWRITER<T,ExtOps...> GMS;
   for( unsigned i=0; i<_nX; i++ ){
     if( Xinc && i<_nX0 )
       GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], &Xinc[i] );
@@ -1510,13 +1756,10 @@ MINLPREF<DAG,T>::export_model
     else
       GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
   }
-  typename GAMSWRITER<DAG,T>::MODELTYPE type = (_Fgal.empty()&&_Fpol.empty()?
-                                               (_Fquad.empty()? GAMSWRITER<DAG,T>::MODELTYPE::LIN:
-                                                                GAMSWRITER<DAG,T>::MODELTYPE::QUAD):
-                                                                GAMSWRITER<DAG,T>::MODELTYPE::NLIN);
-  //_Fquad.clear();
-  //_Fpol.clear();
-  //_Fgal.clear();
+  typename GAMSWRITER<T,ExtOps...>::MODELTYPE type = (_Fgal.empty()&&_Fpol.empty()?
+                                               (_Fquad.empty()? GAMSWRITER<T,ExtOps...>::MODELTYPE::LIN:
+                                                                GAMSWRITER<T,ExtOps...>::MODELTYPE::QUAD):
+                                                                GAMSWRITER<T,ExtOps...>::MODELTYPE::NLIN);
 
   GMS.set_functions( _dag, type, _nF, _Fvar.data(), _nX, _Xvar.data() );
   GMS.set_objective( 0, _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
@@ -1525,10 +1768,10 @@ MINLPREF<DAG,T>::export_model
   return true;
 }
 
-template <typename DAG, typename T>
+template <typename T, typename... ExtOps>
 inline
 void
-MINLPREF<DAG,T>::Options::display
+MINLPREF<T,ExtOps...>::Options::display
 ( std::ostream& out )
 const
 {

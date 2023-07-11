@@ -17,13 +17,13 @@ namespace mc
 //! equations, distinguishing between independent and dependent
 //! variables
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG >
+template <typename... ExtOps>
 class BASE_AE:
   protected virtual BASE_OPT
 {
 protected:
   //! @brief pointer to DAG of equation
-  DAG* _dag;
+  FFGraph<ExtOps...>* _dag;
 
   //! @brief parameters
   std::vector<FFVar> _par;
@@ -134,16 +134,18 @@ public:
     {}
 
   //! @brief Get pointer to DAG
-  DAG* dag() const
+  FFGraph<ExtOps...>* dag()
+    const
     { return _dag; }
 
   //! @brief Set pointer to DAG
   void set_dag
-    ( DAG* dag )
+    ( FFGraph<ExtOps...>* dag )
     { _dag = dag; }
 
   //! @brief Get parameters
-  std::vector<FFVar> const& par() const
+  std::vector<FFVar> const& par()
+    const
     { return _par; }
 
   //! @brief Set parameters
@@ -539,13 +541,14 @@ public:
 protected:
 
   //! @brief Private methods to block default compiler methods
-  BASE_AE( BASE_AE const& );
-  BASE_AE& operator=( BASE_AE const& );
+  BASE_AE( BASE_AE<ExtOps...> const& );
+  BASE_AE<ExtOps...>& operator=( BASE_AE<ExtOps...> const& );
 };
 
-template < typename DAG >
-inline bool
-BASE_AE<DAG>::reset_block
+template <typename... ExtOps>
+inline
+bool
+BASE_AE<ExtOps...>::reset_block
 ()
 {
   const unsigned int ndep = _dep.size();
@@ -558,9 +561,10 @@ BASE_AE<DAG>::reset_block
   return true;
 }
 
-template < typename DAG >
-inline bool
-BASE_AE<DAG>::set_block
+template <typename... ExtOps>
+inline
+bool
+BASE_AE<ExtOps...>::set_block
 ( const bool disp, std::ostream&os )
 {
   const unsigned int ndep = _dep.size();
@@ -578,9 +582,10 @@ BASE_AE<DAG>::set_block
   return set_block( NB, IOR.data(), IB.data(), IPERM.data() );
 }
 
-template < typename DAG >
-inline bool
-BASE_AE<DAG>::set_block
+template <typename... ExtOps>
+inline
+bool
+BASE_AE<ExtOps...>::set_block
 ( int const NB, int const* IOR, int const* IB, int const* IPERM,
   const bool disp, std::ostream&os )
 {

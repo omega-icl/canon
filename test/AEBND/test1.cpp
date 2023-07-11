@@ -34,12 +34,14 @@ const unsigned int NPM   = 5;	// <- Order of Taylor/Chebyshev model
 #endif
 
 #include "aebnd.hpp"
-typedef mc::FFGraph<> DAG;
+typedef mc::FFGraph<> t_DAG;
+typedef mc::AEBND<I,PM,PV> t_AEBND;
+
   
 int main()
 {
  try{
-  DAG NLE;  // DAG describing the problem
+  t_DAG NLE;  // DAG describing the problem
 
   const unsigned NP = 1;  // Parameter dimension
   const unsigned NX = 3;  // State dimension
@@ -70,7 +72,7 @@ int main()
 
   /////////////////////////////////////////////////////////////////////////
   // Bound AE solution set
-  mc::AEBND<DAG,I,PM,PV> BND;
+  t_AEBND BND;
 
   BND.set_dag( &NLE );
   BND.set_var( NP, P );
@@ -81,36 +83,35 @@ int main()
   BND.options.MAXIT     = 20;
   BND.options.RTOL      =
   BND.options.ATOL      = 1e-7;
-  BND.options.BOUNDER   = mc::AEBND<DAG,I,PM,PV>::Options::ALGORITHM::AUTO;//GE;//KRAW;//GS;
-  BND.options.PRECOND   = mc::AEBND<DAG,I,PM,PV>::Options::PRECONDITIONING::INVMD;//QRMD;//NONE;
-  BND.options.AUTODIFF  = mc::AEBND<DAG,I,PM,PV>::Options::DIFFERENTIATION::ASA;//FSA;
+  BND.options.BOUNDER   = t_AEBND::Options::ALGORITHM::AUTO;//GE;//KRAW;//GS;
+  BND.options.PRECOND   = t_AEBND::Options::PRECONDITIONING::INVMD;//QRMD;//NONE;
+  BND.options.AUTODIFF  = t_AEBND::Options::DIFFERENTIATION::ASA;//FSA;
   BND.setup();
 
-  BND.options.BLKDEC = mc::AEBND<DAG,I,PM,PV>::Options::DECOMPOSITION::NONE;
+  BND.options.BLKDEC    = t_AEBND::Options::DECOMPOSITION::NONE;
   BND.setup();
   std::cout << "\nDECOMPOSITION: NONE\n";
   BND.solve( Ip, Ix, Ix0 );
   BND.solve( PMp, PMx, Ix );
 
-  BND.options.BLKDEC = mc::AEBND<DAG,I,PM,PV>::Options::DECOMPOSITION::DIAG;
+  BND.options.BLKDEC    = t_AEBND::Options::DECOMPOSITION::DIAG;
   BND.setup();
   std::cout << "\nDECOMPOSITION: DIAGONAL BLOCKS\n";
   BND.solve( Ip, Ix, Ix0 );
   BND.solve( PMp, PMx, Ix );
 
-  BND.options.BLKDEC = mc::AEBND<DAG,I,PM,PV>::Options::DECOMPOSITION::RECUR;
+  BND.options.BLKDEC    = t_AEBND::Options::DECOMPOSITION::RECUR;
   BND.setup();
   std::cout << "\nDECOMPOSITION: RECURSIVE BLOCKS\n";
   BND.solve( Ip, Ix, Ix0 );
   BND.solve( PMp, PMx, Ix );
  }
 
- catch( mc::AEBND<DAG,I,PM,PV>::Exceptions &eObj ){
+ catch( t_AEBND::Exceptions &eObj ){
   std::cerr << "Error " << eObj.ierr()
             << eObj.what() << std::endl;
  }
 
  return 0;
 }
-
 

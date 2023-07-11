@@ -205,7 +205,7 @@ int main()
   }
   //std::cout << DAG;
 
-  mc::MINLPREF<mc::FFGraph<>,I> MINLP;
+  mc::MINLPREF<I> MINLP;
   MINLP.set_dag( &DAG );
   for( unsigned i=0; i<NP; i++ )
     MINLP.add_var( P[i], mc::Op<I>::l(Ip[i]), mc::Op<I>::u(Ip[i]), 0 );
@@ -220,12 +220,12 @@ int main()
   MINLP.export_model( "CS_Xmin_original.gms" );
 
 #ifdef CHECK_REFORMULATION
-  mc::NLPSLV_SNOPT<mc::FFGraph<>> NLP;
+  mc::NLPSLV_SNOPT NLP;
   NLP.options.DISPLEVEL = 0;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<mc::FFGraph<>>::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 0;
   NLP.read( "CS_Xmin_original.gms" );//, true );
@@ -255,16 +255,18 @@ int main()
   MINLP.setup();
   MINLP.propagate_bounds();
 
+  MINLP.options.INVBNDGS            = 1;
+  MINLP.options.INVKEEPLIN          = 1;
   MINLP.options.AEBND.DISPLEVEL     = 1;
   MINLP.options.SELIM.MIPDISPLEVEL  = 0;
   MINLP.options.SELIM.ELIMMLIN      = 0;
   MINLP.options.SELIM.ELIMNLIN      = {};
   MINLP.options.SELIM.MULTMAX       = 3;
-  MINLP.eliminate_invertible_constraints( true, true );  
+  MINLP.eliminate_invertible_constraints( true );  
   MINLP.options.SELIM.ELIMMLIN      = 1;
   MINLP.options.SELIM.ELIMNLIN      = {mc::FFInv::Options::INV,mc::FFInv::Options::SQRT,mc::FFInv::Options::EXP,
                                        mc::FFInv::Options::LOG,mc::FFInv::Options::RPOW};
-  MINLP.eliminate_invertible_constraints( true, true );
+  MINLP.eliminate_invertible_constraints( true );
   MINLP.export_model( "CS_Xmin_reduced.gms" );
   
 #ifdef CHECK_REFORMULATION

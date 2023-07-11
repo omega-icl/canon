@@ -26,12 +26,13 @@ typedef mc::SCModel<I> PM;
 typedef mc::SCVar<I> PV;
 
 #include "aebnd.hpp"
-typedef mc::FFGraph<> DAG;
+typedef mc::FFGraph<> t_DAG;
+typedef mc::AEBND<I,PM,PV> t_AEBND;
 
 int main()
 {
  try{
-  mc::FFGraph NLE;  // DAG describing the problem
+  t_DAG NLE;  // DAG describing the problem
 
   const unsigned NP = 1;  // Parameter dimension [phiB, AB, BB, CB, AT, BT, CT]
   const unsigned NX = 2;  // State dimension [ h | PCO2 ]
@@ -89,27 +90,27 @@ int main()
 
   /////////////////////////////////////////////////////////////////////////
   // Bound AE solution set
-  mc::AEBND<DAG,I,PM,PV> BND;
+  t_AEBND BND;
 
   BND.set_dag( &NLE );
   BND.set_var( NP, P );
   BND.set_dep( NX, X, F );
 
-  BND.options.DISPLAY = 1;
-  BND.options.MAXIT   = 20;
-  BND.options.RTOL    =
-  BND.options.ATOL    = 1e-10;
-  BND.options.BOUNDER  = mc::AEBND<DAG,I,PM,PV>::Options::ALGORITHM::AUTO;//GE;//KRAW;//GS;
-  BND.options.PRECOND  = mc::AEBND<DAG,I,PM,PV>::Options::PRECONDITIONING::INVMD;//QRM;//NONE;
-  BND.options.BLKDEC   = mc::AEBND<DAG,I,PM,PV>::Options::DECOMPOSITION::RECUR;//NONE;//DIAG;
+  BND.options.DISPLEVEL = 1;
+  BND.options.MAXIT     = 20;
+  BND.options.RTOL      =
+  BND.options.ATOL      = 1e-10;
+  BND.options.BOUNDER   = t_AEBND::Options::ALGORITHM::AUTO;//GE;//KRAW;//GS;
+  BND.options.PRECOND   = t_AEBND::Options::PRECONDITIONING::INVMD;//QRM;//NONE;
+  BND.options.BLKDEC    = t_AEBND::Options::DECOMPOSITION::RECUR;//NONE;//DIAG;
 
   BND.setup();
-  std::cout << "\nSuccessful? " << (BND.solve( Ip, Ix, Ix0 )==mc::AEBND<DAG,I,PM,PV>::NORMAL?"Y\n":"N\n");
-  std::cout << "\nSuccessful? " << (BND.solve( PMp, PMx, Ix )==mc::AEBND<DAG,I,PM,PV>::NORMAL?"Y\n":"N\n");
+  std::cout << "\nSuccessful? " << (BND.solve( Ip, Ix, Ix0 )==t_AEBND::NORMAL?"Y\n":"N\n");
+  std::cout << "\nSuccessful? " << (BND.solve( PMp, PMx, Ix )==t_AEBND::NORMAL?"Y\n":"N\n");
 
  }
 
- catch( mc::AEBND<DAG,I,PM,PV>::Exceptions &eObj ){
+ catch( t_AEBND::Exceptions &eObj ){
   std::cerr << "Error " << eObj.ierr()
             << eObj.what() << std::endl;
  }
