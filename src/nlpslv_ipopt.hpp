@@ -671,7 +671,6 @@ class NLPSLV_IPOPT
 {
 public:
 
-  using BASE_AE<ExtOps...>::set;
   using BASE_AE<ExtOps...>::dag;
   using BASE_AE<ExtOps...>::set_dag;
   using BASE_AE<ExtOps...>::par;
@@ -691,6 +690,7 @@ public:
   using BASE_AE<ExtOps...>::add_sys;
   using BASE_AE<ExtOps...>::reset_sys;
 
+  using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
 
@@ -1288,8 +1288,8 @@ NLPSLV_IPOPT<ExtOps...>::set_obj_lazy
 ( BASE_OPT::t_OBJ const& type, FFVar const& obj )
 {
   // Keep track of original model 
-  if( _rec_model && _Fvar[0] == obj
-   && (type == BASE_OPT::MIN? _obj_dir == -1: _obj_dir == 1) ) return false;
+  //if( _rec_model && _Fvar[0] == obj
+  // && (type == BASE_OPT::MIN? _obj_dir == -1: _obj_dir == 1) ) return false;
   _record_model();
   
   // Change to new objective

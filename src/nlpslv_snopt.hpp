@@ -578,7 +578,6 @@ class NLPSLV_SNOPT
 {
 public:
 
-  using BASE_AE<ExtOps...>::set;
   using BASE_AE<ExtOps...>::dag;
   using BASE_AE<ExtOps...>::set_dag;
   using BASE_AE<ExtOps...>::par;
@@ -598,6 +597,7 @@ public:
   using BASE_AE<ExtOps...>::add_sys;
   using BASE_AE<ExtOps...>::reset_sys;
 
+  using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
 
@@ -1174,8 +1174,8 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
 ( BASE_OPT::t_OBJ const& type, FFVar const& obj )
 {
   // Keep track of original model 
-  if( _recModel && _Fvar[_ObjRow] == obj
-   && (type == BASE_OPT::MIN? _ObjDir == -1: _ObjDir == 1) ) return false;
+  //if( _recModel && _Fvar[_ObjRow] == obj
+  // && (type == BASE_OPT::MIN? _ObjDir == -1: _ObjDir == 1) ) return false;
   _record_model();
   
   // Change to new objective

@@ -5,8 +5,8 @@
 /*!
 \page page_MINLPSLV Local Mixed-Integer Nonlinear Optimization via Outer-Approximation using MC++
 \author Benoit Chachuat <tt>(b.chachuat@imperial.ac.uk)</tt>
-\version 1.0
-\date 2020
+\version 2.0
+\date 2023
 \bug No known bugs.
 
 Consider a mixed-integer nonlinear optimization problem (MINLP) in the form:
@@ -33,7 +33,10 @@ Consider the following MINLP model:
 Start by instantiating an mc::MINLPSLV class object, which is defined in the header file <tt>minlpslv.hpp</tt>:
 
 \code
-  mc::MINLPSLV MINLP;
+  typedef mc::Interval I;
+  typedef mc::MIPSLV_GUROBI<I> MIPSOL;
+  typedef mc::NLPSLV_SNOPT<> NLPSOL;
+  mc::MINLPSLV<I,NLPSOL,MIPSOL> MINLP;
 \endcode
 
 Next, set the variables and objective/constraint functions after creating a DAG of the problem: 
@@ -52,11 +55,12 @@ Next, set the variables and objective/constraint functions after creating a DAG 
   MINLP.add_ctr( mc::BASE_NLP::LE, 2*P[0]-5*P[1]+1 );
 \endcode
 
-Possibly set options using the class member NLPSLV_SNOPT::options:
+Possibly set options using the class member MINLPSLV::options:
 
 \code
-  MINLP.options.CVRTOL = 1e-5;
-  MINLP.options.CVATOL = 1e-5;
+  MINLP.options.LINMETH   = mc::MINLPSLV<I,NLPSOL,MIPSOL>::Options::CVX;
+  MINLP.options.CVRTOL    = 1e-5;
+  MINLP.options.CVATOL    = 1e-5;
   MINLP.options.DISPLEVEL = 1;
 \endcode
 
@@ -71,20 +75,26 @@ The following display is obtained:
 
 \verbatim
 #  ITERATION     INCUMBENT    BEST BOUND    TIME
-        0  r  1.000000e+20 -5.698551e+01      0s
-        1  * -3.951361e+01 -5.698551e+01      0s
-        2  * -5.416791e+01 -5.698551e+01      0s
-        3  * -5.698117e+01 -5.698551e+01      0s
-        4    -5.698117e+01 -5.698551e+01      0s
-        5    -5.698117e+01 -5.698117e+01      0s
+        0  r  1.000000e+30 -5.698551e+01      0s
+        1  f  1.000000e+30 -5.698551e+01      0s
+        2  * -5.698117e+01 -5.698551e+01      0s
+        3    -5.698117e+01 -5.698117e+01      0s
 
-#  TERMINATION AFTER 4 ITERATIONS: 0.063044 SEC
+#  TERMINATION AFTER 3 ITERATIONS: 0.029739 SEC
 #  INCUMBENT VALUE: -5.698117e+01
 #  INCUMBENT POINT:  7.663529e+00  1.100000e+01
 \endverbatim
 
 The return value of mc::MINLPSLV::optimize is per the enumeration mc::MINLPSLV::STATUS. The incumbent solution may be retrieved as an instance of <a>mc::SOLUTION_OPT</a> using the method <a>mc::MINLPSLV::incumbent</a>. A computational breakdown may be obtained from the internal class <a>mc::MINLPSLV::Stats</a>.
 */
+
+//TO DO:
+// [done] Allow pure integer problems - change NLP solve to simple feasibility test
+// [done] Allow tailored rounding procedure for integer variables at root node
+// [done] Improve setup of feasibility lazy objective in NLP subproblem - define constants in DAG
+// - Add option to disable feasibility pump after root note
+// - Add option for second-order information and MIQP master solve 
+// - Test class with DAG externals, e.g. log det objective in MBDOE
 
 #ifndef MC__MINLPSLV_HPP
 #define MC__MINLPSLV_HPP
@@ -106,66 +116,68 @@ namespace mc
 //! constraints are generated using MC++. Further details can be found
 //! at: \ref page_MINLPSLV
 ////////////////////////////////////////////////////////////////////////
-template < typename DAG = mc::FFGraph<>,
-           typename T=Interval,
-           typename NLP=NLPSLV_SNOPT<DAG>,
-           typename MIP=MIPSLV_GUROBI<T> >
+template <typename T,
+          typename NLP,
+          typename MIP,
+          typename... ExtOps>
 class MINLPSLV
 #if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<DAG>,
-  public virtual BASE_NLP<DAG>
+: protected virtual GAMSIO<ExtOps...>,
+  public virtual BASE_NLP<ExtOps...>
 #else
-: public virtual BASE_NLP<DAG>
+: public virtual BASE_NLP<ExtOps...>
 #endif
 {
 public:
 
-  using BASE_AE<DAG>::set;
-  using BASE_AE<DAG>::dag;
-  using BASE_AE<DAG>::set_dag;
-  using BASE_AE<DAG>::par;
-  using BASE_AE<DAG>::set_par;
-  using BASE_AE<DAG>::add_par;
-  using BASE_AE<DAG>::reset_par;
-  using BASE_AE<DAG>::var;
-  using BASE_AE<DAG>::set_var;
-  using BASE_AE<DAG>::add_var;
-  using BASE_AE<DAG>::reset_var;
-  using BASE_AE<DAG>::update_vartyp;
-  using BASE_AE<DAG>::dep;
-  using BASE_AE<DAG>::set_dep;
-  using BASE_AE<DAG>::add_dep;
-  using BASE_AE<DAG>::reset_dep;
-  using BASE_AE<DAG>::sys;
-  using BASE_AE<DAG>::add_sys;
-  using BASE_AE<DAG>::reset_sys;
+  using BASE_AE<ExtOps...>::dag;
+  using BASE_AE<ExtOps...>::set_dag;
+  using BASE_AE<ExtOps...>::par;
+  using BASE_AE<ExtOps...>::set_par;
+  using BASE_AE<ExtOps...>::add_par;
+  using BASE_AE<ExtOps...>::reset_par;
+  using BASE_AE<ExtOps...>::var;
+  using BASE_AE<ExtOps...>::set_var;
+  using BASE_AE<ExtOps...>::add_var;
+  using BASE_AE<ExtOps...>::reset_var;
+  using BASE_AE<ExtOps...>::update_vartyp;
+  using BASE_AE<ExtOps...>::dep;
+  using BASE_AE<ExtOps...>::set_dep;
+  using BASE_AE<ExtOps...>::add_dep;
+  using BASE_AE<ExtOps...>::reset_dep;
+  using BASE_AE<ExtOps...>::sys;
+  using BASE_AE<ExtOps...>::add_sys;
+  using BASE_AE<ExtOps...>::reset_sys;
 
-  using BASE_NLP<DAG>::set_obj;
-  using BASE_NLP<DAG>::add_ctr;
+  using BASE_NLP<ExtOps...>::set;
+  using BASE_NLP<ExtOps...>::set_obj;
+  using BASE_NLP<ExtOps...>::add_ctr;
+
+  typedef void (*ROUND)( unsigned const, unsigned const*, double* );
 
 protected:
 
-  using BASE_AE<DAG>::_dag;
-  using BASE_AE<DAG>::_var;
-  using BASE_AE<DAG>::_vartyp;
-  using BASE_AE<DAG>::_varlb;
-  using BASE_AE<DAG>::_varlm;
-  using BASE_AE<DAG>::_varub;
-  using BASE_AE<DAG>::_varum;
-  using BASE_AE<DAG>::_dep;
-  using BASE_AE<DAG>::_deplb;
-  using BASE_AE<DAG>::_deplm;
-  using BASE_AE<DAG>::_depub;
-  using BASE_AE<DAG>::_depum;
-  using BASE_AE<DAG>::_sys;
-  using BASE_AE<DAG>::_sysm;
-  using BASE_AE<DAG>::_par;
+  using BASE_AE<ExtOps...>::_dag;
+  using BASE_AE<ExtOps...>::_var;
+  using BASE_AE<ExtOps...>::_vartyp;
+  using BASE_AE<ExtOps...>::_varlb;
+  using BASE_AE<ExtOps...>::_varlm;
+  using BASE_AE<ExtOps...>::_varub;
+  using BASE_AE<ExtOps...>::_varum;
+  using BASE_AE<ExtOps...>::_dep;
+  using BASE_AE<ExtOps...>::_deplb;
+  using BASE_AE<ExtOps...>::_deplm;
+  using BASE_AE<ExtOps...>::_depub;
+  using BASE_AE<ExtOps...>::_depum;
+  using BASE_AE<ExtOps...>::_sys;
+  using BASE_AE<ExtOps...>::_sysm;
+  using BASE_AE<ExtOps...>::_par;
 
-  using BASE_NLP<DAG>::_obj;
-  using BASE_NLP<DAG>::_ctr;
+  using BASE_NLP<ExtOps...>::_obj;
+  using BASE_NLP<ExtOps...>::_ctr;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<DAG>::_varini;
+  using GAMSIO<ExtOps...>::_varini;
 #endif
 
 public:
@@ -185,7 +197,7 @@ public:
   {
     //! @brief Constructor
     Options():
-      LINMETH(PENAL), FEASPUMP(true), INCCUT(true),
+      LINMETH(PENAL), FEASPUMP(true), INCCUT(true), ROOTCUT(true),
       FEASTOL(1e-5), CVATOL(1e-3), CVRTOL(1e-3), MAXITER(20),
       CPMAX(10), CPTHRES(0.), 
       PENSOFT(1e3), MSLOC(8), TIMELIMIT(6e2), DISPLEVEL(1),
@@ -198,6 +210,7 @@ public:
         LINMETH       = options.LINMETH;
         FEASPUMP      = options.FEASPUMP;
         INCCUT        = options.INCCUT;
+        ROOTCUT       = options.ROOTCUT;
         FEASTOL       = options.FEASTOL;
         CVATOL        = options.CVATOL;
         CVRTOL        = options.CVRTOL;
@@ -222,8 +235,10 @@ public:
     unsigned LINMETH;
     //! @brief Whether or not to apply feasibility pump strategy
     bool FEASPUMP;
-    //! @brief Whether or not to add incumbent cuts in master problem
+    //! @brief Whether or not to add incumbent cut in master and feasibility problems
     bool INCCUT;
+    //! @brief Whether or not to add cut from root-node relaxation in master problem
+    bool ROOTCUT;
     //! @brief Feasibility tolerance 
     double FEASTOL;
     //! @brief Convergence absolute tolerance
@@ -320,9 +335,12 @@ protected:
 
   //! @brief Current incumbent value
   double                    _Zinc;
-  
+
   //! @brief Variable values at current relaxation
   std::vector<double>       _Xrel;
+
+  //! @brief Variable values at current relaxation with integer fixing
+  std::vector<double>       _Xreli;
   
   //! @brief subset of integer participating variables
   std::set<unsigned>        _Xint;
@@ -335,6 +353,9 @@ protected:
 
   //! @brief Number of decision variables (independent and dependent) in MINLP model
   unsigned                  _nX;
+
+  //! @brief Reference variables in MINLP feasibility pump
+  std::vector<FFVar>        _Xref;
 
   //! @brief Decision variables in MINLP model
   std::vector<FFVar>        _Xvar;
@@ -356,6 +377,9 @@ protected:
 
   //! @brief number of functions (objective and constraints) in MINLP model
   unsigned                  _nF;
+
+  //! @brief Cost function in MINLP feasibility pump
+  FFVar                     _Ffeas;
 
   //! @brief Functions in MINLP model
   std::vector<FFVar>        _Fvar;
@@ -419,7 +443,7 @@ protected:
 
   //! @brief Cost coefficients for slack variables
   std::vector< double >     _POLScost;
-  
+
   //! @brief Polyhedral image cut storage
   std::vector< PolCut<T>* > _POLcuts;
 
@@ -428,7 +452,13 @@ protected:
 
   //! @brief Structure holding MINLP incumbent information
   SOLUTION_OPT              _incumbent;
-  
+
+  //! @brief Incumbent cut storage
+  PolCut<T>*                _POLcutinc;
+
+  //! @brief Root-node relaxation cut storage
+  PolCut<T>*                _POLcutroot;
+
   //! @brief function sparse derivatives
   std::tuple< unsigned, unsigned const*, unsigned const*, FFVar const* > _Fgrad;
 
@@ -444,6 +474,10 @@ protected:
   bool _add_outerapproximation_cuts
     ( std::vector<double> const& Xval, std::vector<double>& Fval,
       std::vector<double>& Fmul );
+
+  //! @brief Add root-node cut to master MIP subproblem
+  bool _add_rootnode_cut
+    ();
 
   //! @brief Add incumbent cut to master MIP subproblem
   bool _add_incumbent_cut
@@ -484,7 +518,7 @@ protected:
 
   //! @brief Update master MIP subproblem with local NLP cuts
   bool _update_master
-    ( bool const locfeas, bool const pumpfeas, bool const inccut );
+    ( bool const locfeas, bool const pumpfeas, bool const inccut, bool const intrel );
 
   //! @brief Solve master MIP subproblem
   int _solve_master
@@ -534,7 +568,8 @@ public:
 
   //! @brief Solve MINLP model to local optimality using outer-approximation
   int optimize
-    ( double const* Xini=nullptr,  T const* Xbnd=nullptr, std::ostream& os=std::cout );
+    ( double const* Xini=nullptr,  T const* Xbnd=nullptr, ROUND const& f=nullptr,
+      std::ostream& os=std::cout );
 
   //! @brief Get incumbent info
   SOLUTION_OPT const& get_incumbent
@@ -586,11 +621,11 @@ public:
 private:
 
   //! @brief Private methods to block default compiler methods
-  MINLPSLV( MINLPSLV<DAG,T,NLP,MIP> const& );
-  MINLPSLV<DAG,T,NLP,MIP>& operator=( MINLPSLV<DAG,T,NLP,MIP> const& );
+  MINLPSLV( MINLPSLV<T,NLP,MIP,ExtOps...> const& );
+  MINLPSLV<T,NLP,MIP,ExtOps...>& operator=( MINLPSLV<T,NLP,MIP,ExtOps...> const& );
 
   //! @brief Interval representation of 'unbounded' variables
-  T _IINF;
+  static T _IINF;
 
   //! @brief Working array for bound propagation
   std::vector<T> _CPbnd;
@@ -654,15 +689,18 @@ private:
 
 };
 
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline T MINLPSLV<T,NLP,MIP,ExtOps...>::_IINF = BASE_OPT::INF * T(-1,1);
+
 #if defined (MC__WITH_GAMS)
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::read
+MINLPSLV<T,NLP,MIP,ExtOps...>::read
 ( std::string const& filename )
 {
   auto tstart = stats.start();
 
-  bool flag = this->GAMSIO<DAG>::read( filename, options.DISPLEVEL>1? true: false );
+  bool flag = this->GAMSIO<ExtOps...>::read( filename, options.DISPLEVEL>1? true: false );
 
   stats.walltime_setup += stats.walltime( tstart );
   stats.walltime_all   += stats.walltime( tstart );
@@ -670,21 +708,13 @@ MINLPSLV<DAG,T,NLP,MIP>::read
 }
 #endif
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::setup
+MINLPSLV<T,NLP,MIP,ExtOps...>::setup
 ( std::ostream& os )
 {
   //stats.reset();
   auto tstart = stats.start();
-
-  _IINF = BASE_OPT::INF * T(-1,1);
-  _ismip = false;
-  for( auto const& typ : _vartyp ){
-    if( !typ ) continue;
-    _ismip = true;
-    break;
-  }
 
   assert( !std::get<0>(_obj).empty() );
   switch( std::get<0>(_obj)[0] ){
@@ -712,6 +742,7 @@ MINLPSLV<DAG,T,NLP,MIP>::setup
   _Xint.clear();
   for( unsigned i=0; i<_var.size(); i++ )
     if( _Xtyp[i] ) _Xint.insert( i );
+  _ismip = !_Xint.empty();
 
   // dependent decision variables
   _Xvar.insert( _Xvar.end(), _dep.begin(), _dep.end() );
@@ -810,10 +841,16 @@ MINLPSLV<DAG,T,NLP,MIP>::setup
   }
   _nG = _Gvar.size();
   _nA = _Aval.size();
-//  _Fop = _dag->subgraph( _Fnlin, _Fvar.data() );
-  _Gop = _dag->subgraph( _nG,    _Gvar.data() );
+  _Gop = _dag->subgraph( _nG, _Gvar.data() );
   _Gval.resize( _nG );
 
+  // feasibility pump reference
+  _Ffeas = 0.;
+  _Xref.resize( _nX );
+  for( auto i : _Xint ){
+    _Xref[i].set( _dag );
+    _Ffeas += sqr( _Xvar[i] - _Xref[i] );
+  }
 
   stats.walltime_setup += stats.walltime( tstart );
   stats.walltime_all   += stats.walltime( tstart );
@@ -822,9 +859,9 @@ MINLPSLV<DAG,T,NLP,MIP>::setup
   _issetup = true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_cleanup_grad
+MINLPSLV<T,NLP,MIP,ExtOps...>::_cleanup_grad
 ()
 {
   delete[] std::get<1>(_Fgrad);  std::get<1>(_Fgrad) = 0;
@@ -832,37 +869,37 @@ MINLPSLV<DAG,T,NLP,MIP>::_cleanup_grad
   delete[] std::get<3>(_Fgrad);  std::get<3>(_Fgrad) = 0;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_is_integer_feasible
+MINLPSLV<T,NLP,MIP,ExtOps...>::_is_integer_feasible
 ( double const* Xval, double const& feastol )
 const
 {
   for( unsigned i=0; i<_var.size(); i++ ){
-    if( !_vartyp[i] ) continue;
+    if( !_Xtyp[i] ) continue;
     if( std::fabs( Xval[i] - std::round(Xval[i]) ) > feastol )
       return false;
   }
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_is_integer_equal
+MINLPSLV<T,NLP,MIP,ExtOps...>::_is_integer_equal
 ( double const* Xval, double const* Xref )
 const
 {
   for( unsigned i=0; i<_var.size(); i++ ){
-    if( !_vartyp[i] ) continue;
+    if( !_Xtyp[i] ) continue;
     if( std::fabs( Xval[i] - Xref[i] ) > options.FEASTOL )
       return false;
   }
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_interrupted
+MINLPSLV<T,NLP,MIP,ExtOps...>::_interrupted
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 const
 {
@@ -872,9 +909,9 @@ const
   return false;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_converged
+MINLPSLV<T,NLP,MIP,ExtOps...>::_converged
 ()
 const
 {
@@ -884,9 +921,9 @@ const
   return false;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLPSLV<DAG,T,NLP,MIP>::_finalize
+MINLPSLV<T,NLP,MIP,ExtOps...>::_finalize
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   STATUS const status, std::ostream& os )
 {
@@ -896,9 +933,9 @@ MINLPSLV<DAG,T,NLP,MIP>::_finalize
   return _status;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_solve_local
+MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_local
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   double const* Xini, T const* Xbnd, bool const pumpfeas,
   bool const inccut, std::ostream& os )
@@ -906,13 +943,27 @@ MINLPSLV<DAG,T,NLP,MIP>::_solve_local
   auto tNLP = stats.start();
 
   // Modify NLP model for feasibility pump
+  double objscal = _objscal;
   if( pumpfeas ){
+/*
     FFVar feasobj(0.);
     for( unsigned i=0; i<_var.size(); i++ ){
       if( !_vartyp[i] ) continue;
       feasobj += sqr( _Xvar[i] - _Xrel[i] );
     }
     _NLPSLV.set_obj_lazy( BASE_OPT::MIN, feasobj );
+    if( inccut && options.INCCUT && !_incumbent.x.empty() )
+      _NLPSLV.add_ctr_lazy( _Ftyp[0]==BASE_OPT::MIN? BASE_OPT::LE: BASE_OPT::GE, _Fvar[0] - _Zinc );
+*/
+    for( auto i : _Xint ) _Xref[i].set( _Xrel[i] );
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << "\nFeasibility pump reference: " << std::endl;
+  for( auto i : _Xint )
+    std::cout << "_Xref[" << i << "] = " << _Xref[i] << std::endl;
+  _dag->output( _dag->subgraph( 1, &_Ffeas ) );
+#endif
+    objscal = 1;
+    _NLPSLV.set_obj_lazy( BASE_OPT::MIN, _Ffeas );
     if( inccut && options.INCCUT && !_incumbent.x.empty() )
       _NLPSLV.add_ctr_lazy( _Ftyp[0]==BASE_OPT::MIN? BASE_OPT::LE: BASE_OPT::GE, _Fvar[0] - _Zinc );
   }
@@ -931,7 +982,7 @@ MINLPSLV<DAG,T,NLP,MIP>::_solve_local
     _NLPSLV.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( tstart ) );
     _NLPSLV.solve( options.MSLOC-1, Xbnd );
     if( _NLPSLV.is_feasible( options.FEASTOL )
-     && (_solution.x.empty() || _objscal*_NLPSLV.solution().f[0] < _objscal*_solution.f[0]) )
+     && (_solution.x.empty() || objscal*_NLPSLV.solution().f[0] < objscal*_solution.f[0]) )
       _solution = _NLPSLV.solution();
   }
 
@@ -939,15 +990,17 @@ MINLPSLV<DAG,T,NLP,MIP>::_solve_local
   return !_solution.x.empty();
 }
   
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_init_master
+MINLPSLV<T,NLP,MIP,ExtOps...>::_init_master
 ()
 {
   auto tMIP = stats.start();
 
   // Reset polyhedral image and MIP solver
   _POLenv.reset();
+  _POLcutinc  = nullptr;
+  _POLcutroot = nullptr;
   _POLenv.options = options.POLIMG;
 
   // Set polyhedral main variables
@@ -960,7 +1013,7 @@ MINLPSLV<DAG,T,NLP,MIP>::_init_master
   _POLSvar.clear();
   _POLScost.clear();
   _POLSvar.push_back( PolVar<T>( &_POLenv, T(-BASE_OPT::INF,BASE_OPT::INF), true ) ); // cost variable
-  _POLScost.push_back( _objscal ); // cost coefficient -> minimize MIP
+  _POLScost.push_back( 1. ); //_objscal ); // cost coefficient -> always minimize MIP
 #ifdef MC__MINLPSLV_DEBUG
   std::cout << _POLenv;
 #endif
@@ -972,37 +1025,68 @@ MINLPSLV<DAG,T,NLP,MIP>::_init_master
   stats.walltime_slvnlp += stats.walltime( tMIP );
 }
   
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_update_master
-( bool const locfeas, bool const pumpfeas, bool const inccut )
+MINLPSLV<T,NLP,MIP,ExtOps...>::_update_master
+( bool const locfeas, bool const pumpfeas, bool const inccut, bool const intrel )
 {
   auto tMIP = stats.start();
 
-  // Append new cuts to polyhedral image
-  _POLenv.erase_cuts();
+  // Append new outer-approximation cuts to polyhedral image
   if( locfeas ){
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Adding outer-approximation cuts" << std::endl;
+    std::cout << _solution;
+#endif
     if( !_add_outerapproximation_cuts( _solution.x, _solution.f, _solution.uf ) ){
       stats.walltime_slvnlp += stats.walltime( tMIP );
       return false;
     }
   }
-  else{
+
+  // Append new integer cut
+  if( !locfeas || (options.LINMETH != Options::CVX && intrel) ){
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Adding integer cut" << std::endl;
+#endif
     if( !_add_integer_cut( _Xrel ) ){
       stats.walltime_slvnlp += stats.walltime( tMIP );
       return false;
     }
   }
+
+  // Append new anticyling cut
   if( pumpfeas ){
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Adding anticycling cut" << std::endl;
+#endif
     if( !_add_anticycling_cut( _solution.x, _Xrel )
      || (locfeas && !_set_integer_cut( _Xrel, _POLauxvar, _POLauxwei, _auxcst )) ){
       stats.walltime_slvnlp += stats.walltime( tMIP );
       return false;
     }
   }
-  if( inccut && options.INCCUT && !_add_incumbent_cut() ){
+
+  // Update incumbent cut
+  if( inccut && options.INCCUT ){
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Adding incumbent cut" << std::endl;
+#endif
+    if( !_add_incumbent_cut() ){
       stats.walltime_slvnlp += stats.walltime( tMIP );
       return false;
+    }
+  }
+
+  // Append new root-relaxation cut
+  if( _iter == 1 && options.ROOTCUT ){
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Adding root-node cut" << std::endl;
+#endif
+    if( !_add_rootnode_cut() ){
+      stats.walltime_slvnlp += stats.walltime( tMIP );
+      return false;
+    }
   }
   
   // Update master MIP problem 
@@ -1011,23 +1095,41 @@ MINLPSLV<DAG,T,NLP,MIP>::_update_master
     _MIPSLV.set_objective( _POLauxvar.size(), _POLauxvar.data(), _POLauxwei.data(), BASE_OPT::MIN );    
   else
     _MIPSLV.set_objective( _POLSvar.size(), _POLSvar.data(), _POLScost.data(), BASE_OPT::MIN );
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << _POLenv;
+#endif
 
   stats.walltime_slvnlp += stats.walltime( tMIP );
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_add_incumbent_cut
+MINLPSLV<T,NLP,MIP,ExtOps...>::_add_rootnode_cut
 ()
 {
-  _POLenv.add_cut( _Ftyp[0]==BASE_OPT::MIN? PolCut<T>::LE: PolCut<T>::GE, _Zinc, _POLSvar.front(), 1. );
+  double const Zrel = (_Ftyp[0]==BASE_OPT::MIN? _Zrel: -_Zrel );
+  _POLcutroot = *_POLenv.add_cut( nullptr, PolCut<T>::GE, Zrel, _POLSvar.front(), 1. );
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_add_outerapproximation_cuts
+MINLPSLV<T,NLP,MIP,ExtOps...>::_add_incumbent_cut
+()
+{
+  double const Ztol = 0; //std::max( options.CVATOL, 0.5 * options.CVRTOL * std::fabs( _Zinc + _Zrel ) );
+  double const Zcor = (_Ftyp[0]==BASE_OPT::MIN? _Zinc-Ztol: -_Zinc+Ztol );
+  if( !_POLcutinc ) // create new incumbent cut
+    _POLcutinc = *_POLenv.add_cut( nullptr, PolCut<T>::LE, Zcor, _POLSvar.front(), 1. );
+  else              // update existing incumbent cut
+    _POLcutinc->rhs() = Zcor;
+  return true;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline bool
+MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
 ( std::vector<double> const& Xval, std::vector<double>& Fval, std::vector<double>& Fmul )
 {
   // Initialize cuts
@@ -1040,16 +1142,16 @@ MINLPSLV<DAG,T,NLP,MIP>::_add_outerapproximation_cuts
 
     // Define cut type: objective
     if( !i ) switch( _Ftyp[0] ){
-      case BASE_OPT::MIN: _POLcuts[0] = *_POLenv.add_cut( PolCut<T>::LE, -Fval[0], _POLSvar.front(), -1. ); continue;
-      case BASE_OPT::MAX: _POLcuts[0] = *_POLenv.add_cut( PolCut<T>::GE, -Fval[0], _POLSvar.front(),  1. ); continue;
+      case BASE_OPT::MIN: _POLcuts[0] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Fval[0], _POLSvar.front(), -1. ); continue;
+      case BASE_OPT::MAX: _POLcuts[0] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Fval[0], _POLSvar.front(),  1. ); continue;
       default: return false;
     }
 
-    // Define cut type: linear constraints
+    // Define cut type: linear and convex constraints
     if( islin || options.LINMETH == Options::CVX ) switch( _Ftyp[i] ){
-      case BASE_OPT::EQ: _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::EQ, -Fval[i] ); continue;
-      case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::LE, -Fval[i] ); continue;
-      case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::GE, -Fval[i] ); continue;
+      case BASE_OPT::EQ: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, -Fval[i] ); continue;
+      case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Fval[i] ); continue;
+      case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Fval[i] ); continue;
       default: return false;
     }
 
@@ -1061,29 +1163,33 @@ MINLPSLV<DAG,T,NLP,MIP>::_add_outerapproximation_cuts
         default: break;
       }
     }
-    _POLSvar.push_back( PolVar<T>( &_POLenv, T(0.,BASE_OPT::INF), true ) ); // slack variable
-    _POLScost.push_back( options.PENSOFT * std::fabs(Fmul[i]) ); // slack cost coefficient
-    switch( _Ftyp[i] ){
-      case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::LE, -Fval[i], _POLSvar.back(), -1. ); continue;
-      case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::GE, -Fval[i], _POLSvar.back(),  1. ); continue;
-      case BASE_OPT::EQ:
-        if( _objscal * Fmul[i] < 0 ) _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::LE, -Fval[i], _POLSvar.back(), -1. );
-        else                         _POLcuts[i] = *_POLenv.add_cut( PolCut<T>::GE, -Fval[i], _POLSvar.back(),  1. );
-        continue;
-      default: return false;
+    if( options.LINMETH == Options::PENAL ){
+      _POLSvar.push_back( PolVar<T>( &_POLenv, T(0.,BASE_OPT::INF), true ) ); // slack variable
+      _POLScost.push_back( options.PENSOFT * std::fabs(Fmul[i]) ); // slack cost coefficient
+      switch( _Ftyp[i] ){
+        case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Fval[i], _POLSvar.back(), -1. ); continue;
+        case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Fval[i], _POLSvar.back(),  1. ); continue;
+        case BASE_OPT::EQ:
+          if( _objscal * Fmul[i] < 0 ) _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Fval[i], _POLSvar.back(), -1. );
+          else                         _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Fval[i], _POLSvar.back(),  1. );
+          continue;
+        default: return false;
+      }
     }
   }
 
   // Populate linear cuts
   if( _iter == 1 ){
-    for( unsigned ie=0; ie<_nA; ie++ )
+    for( unsigned ie=0; ie<_nA; ie++ ){
+      if( _Aval[ie] == 0. ) continue;
       _POLcuts[_iAfun[ie]]->append( _POLXvar[_jAvar[ie]], _Aval[ie] ).rhs() += _Aval[ie] * Xval[_jAvar[ie]];
+    }
   }
   
   // Evaluate nonlinear function derivatives
   try{
     _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data() );
-#ifdef MC__MINLPSLV_DEBUG
+#ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
     for( unsigned ie=0; ie<_nG; ie++ )
       std::cout << "  _Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = " << _Gval[ie] << std::endl;
 #endif
@@ -1094,30 +1200,32 @@ MINLPSLV<DAG,T,NLP,MIP>::_add_outerapproximation_cuts
   
   // Populate linearized nonlinear cuts
   for( unsigned ie=0; ie<_nG; ie++ ){
-    if( !_POLcuts[_iGfun[ie]] ) continue;
+    if( !_POLcuts[_iGfun[ie]] || _Gval[ie] == 0. ) continue;
     _POLcuts[_iGfun[ie]]->append( _POLXvar[_jGvar[ie]], _Gval[ie] ).rhs() += _Gval[ie] * Xval[_jGvar[ie]];
   }
-#ifdef MC__MINLPSLV_DEBUG
-    std::cout << _POLenv;
-#endif
 
+#ifdef MC__MINLPSLV_DEBUG
+  for( unsigned i=0; i<_nF; i++ )
+    if( _POLcuts[i] ) std::cout << " _POLcuts[" << i << "]: " << *_POLcuts[i] << std::endl;
+  int dum; std::cout << "PRESS 1 TO CONTINUE"; std::cin >> dum;
+#endif
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_add_integer_cut
+MINLPSLV<T,NLP,MIP,ExtOps...>::_add_integer_cut
 ( std::vector<double> const& Xint )
 {
   // Add constraints for the linear cut: \|y-\bar{y}\|_1 \geq 1
   if( !_set_integer_cut( Xint, _POLauxvar, _POLauxwei, _auxcst ) ) return false;
-  _POLenv.add_cut( PolCut<T>::GE, 1-_auxcst, _POLauxvar.size(), _POLauxvar.data(), _POLauxwei.data() );
+  _POLenv.add_cut( nullptr, PolCut<T>::GE, 1-_auxcst, _POLauxvar.size(), _POLauxvar.data(), _POLauxwei.data() );
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_set_integer_cut
+MINLPSLV<T,NLP,MIP,ExtOps...>::_set_integer_cut
 ( std::vector<double> const& Xint, std::vector<PolVar<T>>& linvar,
   std::vector<double>& linwei, double& cst )
 {
@@ -1140,35 +1248,35 @@ MINLPSLV<DAG,T,NLP,MIP>::_set_integer_cut
       PolVar<T> POLWvar( &_POLenv, T(0.,BASE_OPT::INF), true );
       linvar.push_back( POLWvar );
       linwei.push_back( 1. );
-      _POLenv.add_cut( PolCut<T>::GE, Xint[j], _POLXvar[j], 1., POLWvar,  1. );
-      _POLenv.add_cut( PolCut<T>::LE, Xint[j], _POLXvar[j], 1., POLWvar, -1. );
+      _POLenv.add_cut( nullptr, PolCut<T>::GE, Xint[j], _POLXvar[j], 1., POLWvar,  1. );
+      _POLenv.add_cut( nullptr, PolCut<T>::LE, Xint[j], _POLXvar[j], 1., POLWvar, -1. );
       PolVar<T> POLNvar( &_POLenv, T(0.,1.), false );
       double M1 = 2 * ( Xint[j] - std::ceil(_Xlow[j]) );
       double M2 = 2 * ( std::floor(_Xupp[j]) - Xint[j] );
-      _POLenv.add_cut( PolCut<T>::GE, Xint[j]-M1, _POLXvar[j], 1., POLWvar, -1., POLNvar, -M1 );
-      _POLenv.add_cut( PolCut<T>::LE, Xint[j],    _POLXvar[j], 1., POLWvar,  1., POLNvar, -M2 );
+      _POLenv.add_cut( nullptr, PolCut<T>::GE, Xint[j]-M1, _POLXvar[j], 1., POLWvar, -1., POLNvar, -M1 );
+      _POLenv.add_cut( nullptr, PolCut<T>::LE, Xint[j],    _POLXvar[j], 1., POLWvar,  1., POLNvar, -M2 );
     }
   }
 
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLPSLV<DAG,T,NLP,MIP>::_add_anticycling_cut
+MINLPSLV<T,NLP,MIP,ExtOps...>::_add_anticycling_cut
 ( std::vector<double> const& Xval, std::vector<double> const& Xrel )
 {
   // Add linear cut: [\bar{y}-\hat{y}]^T[y-\hat{y}] \geq 0
-  auto ACcut = *_POLenv.add_cut( PolCut<T>::GE, 0. );
+  auto ACcut = *_POLenv.add_cut( nullptr, PolCut<T>::GE, 0. );
   for( auto&& j: _Xint )
     ACcut->append( _POLXvar[j], Xval[j]-Xrel[j] ).rhs() += Xval[j]*(Xval[j]-Xrel[j]);
 
   return true;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLPSLV<DAG,T,NLP,MIP>::_solve_master
+MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_master
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   auto tMIP = stats.start();
@@ -1181,9 +1289,9 @@ MINLPSLV<DAG,T,NLP,MIP>::_solve_master
   return _MIPSLV.get_status();
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLPSLV<DAG,T,NLP,MIP>::_propagate_bounds
+MINLPSLV<T,NLP,MIP,ExtOps...>::_propagate_bounds
 ( T* Xbnd )
 {
   auto tstart = stats.start();
@@ -1221,10 +1329,10 @@ MINLPSLV<DAG,T,NLP,MIP>::_propagate_bounds
   return flag;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLPSLV<DAG,T,NLP,MIP>::optimize
-(  double const* Xini, T const* Xbnd, std::ostream& os )
+MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
+(  double const* Xini, T const* Xbnd, ROUND const& f, std::ostream& os )
 {
   auto tstart = stats.start();
 
@@ -1237,7 +1345,8 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
   
   // Initial point
   if( Xini ) _varini.assign( Xini, Xini+_var.size() );
-  
+  else       _varini.clear(); // No default initial guess
+
   // Initialize and reduce variable bounds
   bool locfeas = true;
   _Xbnd.resize( _nX );
@@ -1246,7 +1355,6 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
     if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) ){
       locfeas = false;
       break;
-//      return _finalize( tstart, STATUS::INFEASIBLE );
     }
   }
   int cpflag = 0;
@@ -1255,13 +1363,12 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
     if( cpflag < 0 ){
       locfeas = false;
       _Zrel = _objscal * BASE_OPT::INF;
-//      return _finalize( tstart, STATUS::INFEASIBLE );
     }
   }
 
   // Solve relaxed MINLP model
   if( locfeas ){
-    is_bounded( BASE_OPT::INF/10 );
+    is_bounded( BASE_OPT::INF/10 ); // set _isbnd flag
     locfeas = _solve_local( tstart, _varini.data(), _Xbnd.data(), false, false, os );
   }
 #ifdef MC__MINLPSLV_DEBUG
@@ -1269,18 +1376,35 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
 #endif
 
   // Update bounds
+  bool intrel = false;
   if( locfeas ){
-    _Zrel = _NLPSLV.solution().f[0];
-    _Xrel = _NLPSLV.solution().x;
+    _Zrel  = _solution.f[0];
+    _Xrel  = _solution.x;
+    _Xbndi = _Xbnd;
     if( _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
       _incumbent = _solution;
-      _Zinc = _Zrel;
+      _Zinc = _incumbent.f[0];
+      intrel = true;
     }
-    _Xbndi = _Xbnd;
+    else if( f ){
+      _Xreli = _solution.x;
+      SOLUTION_OPT soltmp = _solution; // temporary storage
+      f( _Xtyp.size(), _Xtyp.data(), _Xreli.data() );
+      for( auto&& i: _Xint ) _Xbndi[i] = _Xreli[i];
+      if( _solve_local( tstart, _Xreli.data(), _Xbndi.data(), false, false, os ) 
+       && _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
+        _incumbent = _solution;
+        _Zinc = _incumbent.f[0];
+        intrel = true;
+      }
+      else{
+        _solution = soltmp; // restore solution if rounding unsuccessful
+        _incumbent.reset();
+      }
+    }
   }
   else{
     _Zrel = _objscal * BASE_OPT::INF;
-//    return _finalize( tstart, STATUS::INFEASIBLE );
   }
   
   // Intermediate display
@@ -1312,7 +1436,7 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
   for( ++_iter; !stopiter && !_converged() ; ++_iter ){
 
     // Update master MIP subproblem
-    if( !_update_master( locfeas, pumpfeas, updinc ) )
+    if( !_update_master( locfeas, pumpfeas, updinc, intrel ) )
       return _finalize( tstart, STATUS::ABORTED );
 
     // Solve master MIP subproblem
@@ -1332,7 +1456,7 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
 
     // Retrieve MIP solution
     if( !pumpfeas )
-      _Zrel = _MIPSLV.get_objective();
+      _Zrel = _objscal * _MIPSLV.get_variable( _POLSvar.front() );
     for( unsigned i=0; i<_nX; i++ )
       _Xrel[i] = _MIPSLV.get_variable( _POLXvar[i] );
 #ifdef MC__MINLPSLV_DEBUG
@@ -1341,10 +1465,11 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
       std::cout << "_Xrel[" << i << "] = " << _Xrel[i] << std::endl;
 #endif
     locfeas = true; // reinitialize to not add integer cut to master MIP subproblem during feasibility pump
-
+    intrel  = true; // reinitialize to enable integer cut to master MIP subproblem
+    
     // Interrupt if master and local bounds cross each other
     if( !_incumbent.x.empty() && _objscal*_Zrel >= _objscal*_Zinc ){
-      updinc = false;
+      updinc   = false;
       stopiter = true;
     }
     
@@ -1417,9 +1542,9 @@ MINLPSLV<DAG,T,NLP,MIP>::optimize
   return _finalize( tstart, STATUS::SUCCESSFUL );
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::Options::display
+MINLPSLV<T,NLP,MIP,ExtOps...>::Options::display
 ( std::ostream & out ) const
 {
   // Display MINLPSLV Options
@@ -1444,10 +1569,10 @@ MINLPSLV<DAG,T,NLP,MIP>::Options::display
       << DISPLEVEL << std::endl;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline std::ostream&
 operator <<
-( std::ostream & out, MINLPSLV<DAG,T,NLP,MIP> const& MINLP )
+( std::ostream & out, MINLPSLV<T,NLP,MIP,ExtOps...> const& MINLP )
 {
   out << std::left << std::endl
       << std::setfill('_') << std::setw(72) << "#" << std::endl << "#" << std::endl << std::setfill(' ')
@@ -1462,9 +1587,9 @@ operator <<
   return out;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_setup
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_setup
 ( std::ostream& os )
 {
   if( options.DISPLEVEL < 2 ) return;
@@ -1473,9 +1598,9 @@ MINLPSLV<DAG,T,NLP,MIP>::_display_setup
   _display_flush( os ); 
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_init
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_init
 ( std::ostream& os)
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1488,15 +1613,17 @@ MINLPSLV<DAG,T,NLP,MIP>::_display_init
   _display_flush( os ); 
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_final
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_final
 ( unsigned const iter, std::chrono::microseconds const& walltime,
   std::ostream& os )
 {
   if( options.DISPLEVEL < 1 ) return;
-  _odisp << std::endl << "#  TERMINATION AFTER " << (_iter?_iter-1:0) << " ITERATIONS: "
-         << std::fixed << std::setprecision(6) << walltime.count()*1e-6 << " SEC"
+  _odisp << std::endl << "#  TERMINATION AFTER ";
+  if( iter ) _odisp << _iter << " ITERATIONS: ";
+  else       _odisp << "0 ITERATION: ";
+  _odisp << std::fixed << std::setprecision(6) << walltime.count()*1e-6 << " SEC"
          << std::endl;
 
   // No feasible solution found
@@ -1523,9 +1650,9 @@ MINLPSLV<DAG,T,NLP,MIP>::_display_final
   _display_flush( os );
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_add
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1533,9 +1660,9 @@ MINLPSLV<DAG,T,NLP,MIP>::_display_add
          << std::setw(7) << stats.to_time( stats.walltime( tstart ) ) << "s";
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_add
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
 ( const double dval )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1543,27 +1670,27 @@ MINLPSLV<DAG,T,NLP,MIP>::_display_add
          << std::setw(_DPREC+8) << dval;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_add
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
 ( const unsigned ival )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(_IPREC) << ival;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_add
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
 ( const std::string &sval )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(3) << sval;
 }
 
-template <typename DAG, typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<DAG,T,NLP,MIP>::_display_flush
+MINLPSLV<T,NLP,MIP,ExtOps...>::_display_flush
 ( std::ostream &os )
 {
   if( _odisp.str() == "" ) return;
