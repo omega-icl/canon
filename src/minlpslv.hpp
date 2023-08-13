@@ -33,10 +33,7 @@ Consider the following MINLP model:
 Start by instantiating an mc::MINLPSLV class object, which is defined in the header file <tt>minlpslv.hpp</tt>:
 
 \code
-  typedef mc::Interval I;
-  typedef mc::MIPSLV_GUROBI<I> MIPSOL;
-  typedef mc::NLPSLV_SNOPT<> NLPSOL;
-  mc::MINLPSLV<I,NLPSOL,MIPSOL> MINLP;
+  mc::MINLPSLV MINLP;
 \endcode
 
 Next, set the variables and objective/constraint functions after creating a DAG of the problem: 
@@ -58,7 +55,7 @@ Next, set the variables and objective/constraint functions after creating a DAG 
 Possibly set options using the class member MINLPSLV::options:
 
 \code
-  MINLP.options.LINMETH   = mc::MINLPSLV<I,NLPSOL,MIPSOL>::Options::CVX;
+  MINLP.options.LINMETH   = mc::MINLPSLV<>::Options::CVX;
   MINLP.options.CVRTOL    = 1e-5;
   MINLP.options.CVATOL    = 1e-5;
   MINLP.options.DISPLEVEL = 1;
@@ -116,9 +113,9 @@ namespace mc
 //! constraints are generated using MC++. Further details can be found
 //! at: \ref page_MINLPSLV
 ////////////////////////////////////////////////////////////////////////
-template <typename T,
-          typename NLP,
-          typename MIP,
+template <typename T=Interval,
+          typename NLP=NLPSLV_SNOPT<>,
+          typename MIP=MIPSLV_GUROBI<T>,
           typename... ExtOps>
 class MINLPSLV
 #if defined (MC__WITH_GAMS)

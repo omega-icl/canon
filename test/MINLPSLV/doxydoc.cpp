@@ -1,15 +1,6 @@
 #undef MC__MINLPSLV_DEBUG
 #include "minlpslv.hpp"
 
-#include "interval.hpp"
-typedef mc::Interval I;
-
-#include "mipslv_gurobi.hpp"
-typedef mc::MIPSLV_GUROBI<I> MIPSOL;
-
-#include "nlpslv_snopt.hpp"
-typedef mc::NLPSLV_SNOPT<> NLPSOL;
-
 void
 nearest
 ( unsigned const n, unsigned const* typ, double* val )
@@ -41,7 +32,7 @@ main
   NLP.setup();
   NLP.solve();
 */
-  mc::MINLPSLV<I,NLPSOL,MIPSOL> MINLP;
+  mc::MINLPSLV MINLP;
   MINLP.set_dag( &DAG );
   MINLP.add_var( P[0], 1, 20, 0 );
   MINLP.add_var( P[1], 1, 20, 1 );
@@ -50,7 +41,7 @@ main
   MINLP.add_ctr( mc::BASE_OPT::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
   MINLP.add_ctr( mc::BASE_OPT::LE, 2*P[0]-5*P[1]+1 );
 
-//  MINLP.options.LINMETH                 = mc::MINLPSLV<I,NLPSOL,MIPSOL>::Options::CVX;
+  MINLP.options.LINMETH                 = mc::MINLPSLV<>::Options::CVX;
   MINLP.options.CVRTOL                  =
   MINLP.options.CVATOL                  = 1e-5;
   MINLP.options.DISPLEVEL               = 1;
