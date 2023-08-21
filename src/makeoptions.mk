@@ -5,12 +5,12 @@ PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp23 ; pwd)
 include $(PATH_MC)/src/makeoptions.mk
 
 PATH_CLI =
-LIB_CLI  = #-lboost_program_options
+LIB_CLI  = -lboost_program_options
 INC_CLI  =
 FLAG_CLI =
 
 PATH_SOBOL  =
-LIB_SOBOL   = #-lboost_random
+LIB_SOBOL   = -lboost_random
 INC_SOBOL   =
 FLAG_SOBOL  = -DMC__USE_SOBOL
 

@@ -149,7 +149,6 @@ class MINLPBND
 
 public:
 
-  using BASE_AE<ExtOps...>::set;
   using BASE_AE<ExtOps...>::dag;
   using BASE_AE<ExtOps...>::set_dag;
   using BASE_AE<ExtOps...>::par;
@@ -169,6 +168,7 @@ public:
   using BASE_AE<ExtOps...>::add_sys;
   using BASE_AE<ExtOps...>::reset_sys;
 
+  using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
 
@@ -179,10 +179,10 @@ public:
   using MINLPREF<T,ExtOps...>::functions;
   using MINLPREF<T,ExtOps...>::variable_bounds;
   using MINLPREF<T,ExtOps...>::update_bounds;
+  using MINLPREF<T,ExtOps...>::propagate_bounds;
   using MINLPREF<T,ExtOps...>::flatten_linear_functions;
   using MINLPREF<T,ExtOps...>::flatten_quadratic_functions;
   using MINLPREF<T,ExtOps...>::flatten_polynomial_functions;
-
   using MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions;
   using MINLPREF<T,ExtOps...>::quadratize_polynomial_functions;
   using MINLPREF<T,ExtOps...>::eliminate_invertible_constraints;
@@ -208,6 +208,7 @@ protected:
   using MINLPREF<T,ExtOps...>::_Xquad;
   using MINLPREF<T,ExtOps...>::_Xpol;
   using MINLPREF<T,ExtOps...>::_Xgal;
+  using MINLPREF<T,ExtOps...>::_Xlift;
   using MINLPREF<T,ExtOps...>::_Xobj;
   
   using MINLPREF<T,ExtOps...>::_nF;
@@ -223,10 +224,12 @@ protected:
   using MINLPREF<T,ExtOps...>::_SQenv;
 
   using MINLPREF<T,ExtOps...>::_propagate_bounds;
+  using MINLPREF<T,ExtOps...>::_dwk;
   using MINLPREF<T,ExtOps...>::_Iwk;
   using MINLPREF<T,ExtOps...>::_CPbnd;
   using MINLPREF<T,ExtOps...>::_IINF;
 
+  using MINLPREF<T,ExtOps...>::_tstart;
 
 protected:
 
@@ -323,7 +326,7 @@ public:
         SCQUAD.REDUC            = false; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
-        MINLPREF<T,ExtOps...>::options = options;
+        MINLPREF<T,ExtOps...>::Options::operator=( options );
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
         SUBSETSCM     = options.SUBSETSCM;
@@ -409,7 +412,13 @@ public:
   } options;
 
   //! @brief MINLPBND computational statistics
-  struct Stats{
+  struct Stats
+  : MINLPREF<T,ExtOps...>::Stats
+  {
+    using MINLPREF<T,ExtOps...>::Stats::start;
+    using MINLPREF<T,ExtOps...>::Stats::walltime;
+    using MINLPREF<T,ExtOps...>::Stats::to_time;
+
     //! @brief Reset statistics
     void reset()
       { walltime_cprop = walltime_polimg = walltime_setmip = walltime_slvmip =
@@ -435,27 +444,11 @@ public:
     std::chrono::microseconds walltime_slvmip;
     //! @brief Total number of MIP model solves
     unsigned total_slvmip;
-    //! @brief Get current time point
-    std::chrono::time_point<std::chrono::system_clock> start
-      () const
-      { return std::chrono::system_clock::now(); }
-    //! @brief Get current time lapse with respect to start time point
-    std::chrono::microseconds walltime
-      ( std::chrono::time_point<std::chrono::system_clock> const& start ) const
-      { return std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::system_clock::now() - start ); }    
-    //! @brief Convert microsecond ticks to time
-    double to_time
-      ( std::chrono::microseconds t ) const
-      { return t.count() * 1e-6; }
   } stats;
 
   //! @brief Setup optimization model before bounding
   void setup
     ( std::ostream& os=std::cout );
-
-  //! @brief Update options before bounding
-  void update
-    ();
 
   //! @brief Propagate bounds, starting with variable subdomain <a>X</a>, for the incumbent value <a>Finc</a>, and using the options specified in <a>MINLPREF::Options::CPMAX</a> and <a>MINLPREF::Options::CPTHRES</a> -- returns updated variable bounds <a>X</a>
   bool propagate_bounds
@@ -482,7 +475,7 @@ public:
   int relax_model
     ( T const* X=nullptr, double const* Finc=nullptr, double const* Xinc=nullptr,
       unsigned const nref=0, bool const resetbnd=true, bool const reinit=true,
-      std::string const gmsfile="" );
+      std::string const gmsfile="", std::ostream& os=std::cout );
 
   //! @brief Setup and solve bound reduction problems using polyhedral relaxations of optimization model, starting with variable subdomain <a>X</a>, for the incumbent value <a>Finc</a>, and using the options specified in <a>MINLPBND::Options::OBBTMAX</a> and <a>MINLPBND::Options::OBBTTHRES</a> -- returns updated variable bounds <a>X</a>, and number of iterative refinements <a>nred</a>
   int reduce_bounds
@@ -507,8 +500,12 @@ public:
 
 private:
 
+  //! @brief Update MINLPREF baseclass options
+  virtual void _update_options
+    ();
+
   //! @brief Time point to enable TIMELIMIT option
-  std::chrono::time_point<std::chrono::system_clock> _tstart;
+  //std::chrono::time_point<std::chrono::system_clock> _tstart;
 
   //! @brief Test if bounds are tight
   bool _tight
@@ -631,11 +628,11 @@ MINLPBND<T,MIP,ExtOps...>::setup
 
 template <typename T, typename MIP, typename... ExtOps>
 inline void
-MINLPBND<T,MIP,ExtOps...>::update
+MINLPBND<T,MIP,ExtOps...>::_update_options
 ()
 {
   MINLPREF<T,ExtOps...>::options = options;
-  stats.reset();
+  //stats.reset();
 }
 
 template <typename T, typename MIP, typename... ExtOps>
@@ -658,7 +655,7 @@ template <typename T, typename MIP, typename... ExtOps>
 inline int
 MINLPBND<T,MIP,ExtOps...>::relax_model
 ( T const* X, double const* Finc, double const* Xinc, const unsigned nref,
-  const bool resetbnd, bool const reinit, std::string const gmsfile )
+  const bool resetbnd, bool const reinit, std::string const gmsfile, std::ostream& os )
 {
   if( !_issetup ) throw typename MINLPREF<T,ExtOps...>::Exceptions( MINLPREF<T,ExtOps...>::Exceptions::SETUP );
   _tstart = stats.start();
@@ -680,18 +677,60 @@ MINLPBND<T,MIP,ExtOps...>::relax_model
   if( !gmsfile.empty() ){
     GAMSWRITER<T,ExtOps...> GMS;
     GMS.set_cuts( &_POLenv, true );
-    for( unsigned i=0; i<_nX0; i++ )
+    for( unsigned i=0; i<_nX0; i++ ){
       GMS.set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr );
+#ifdef MC__MINLPBND_DEBUG_INITIALS
+      if( Xinc ) std::cout << "Xinc[ " << i << "] = " << Xinc[i] << std::endl;
+#endif
+    }
+    if( Xinc ){
+      unsigned j=0; 
+      for( auto const& [i,Fi] : _Xlift ){
+        try{
+          double Xi;
+          _dag->eval( _Fops.at(_nF+j), _dwk, 1, &Fi, &Xi, _nX0, _Xvar.data(), Xinc );
+          GMS.set_variable( _POLXvar[i], &Xi );
+#ifdef MC__MINLPBND_DEBUG_INITIALS
+          std::cout << "Xinc[ " << i << "] = " << Xi << std::endl;
+#endif
+        }
+        catch(...){
+          continue;
+        }
+        j++;
+      }
+    }
     GMS.set_objective( _POLFvar[0], _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
     GMS.write( gmsfile );
     if( options.MIPSLV.DISPLEVEL > 0 )
-      std::cout << std::endl << "# WRITING MIP MODEL TO FILE " << gmsfile << std::endl;
+      os << std::endl << "# WRITING MIP MODEL TO FILE " << gmsfile << std::endl;
     return MIP::OTHER;
   }
 
   // Set-up variable initial guess and branch priority
-  for( unsigned i=0; i<_nX0; i++ )
+  for( unsigned i=0; i<_nX0; i++ ){
     assert( _MIPSLV->set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr, options.BCHPRIM ) );
+#ifdef MC__MINLPBND_DEBUG_INITIALS
+    if( Xinc ) std::cout << "Xinc[ " << i << "] = " << Xinc[i] << std::endl;
+#endif
+  }
+  if( Xinc ){
+    unsigned j=0; 
+    for( auto const& [i,Fi] : _Xlift ){
+      try{
+        double Xi;
+        _dag->eval( _Fops.at(_nF+j), _dwk, 1, &Fi, &Xi, _nX0, _Xvar.data(), Xinc );
+        assert( _MIPSLV->set_variable( _POLXvar[i], &Xi, 0 ) );
+#ifdef MC__MINLPBND_DEBUG_INITIALS
+        std::cout << "Xinc[ " << i << "] = " << Xi << std::endl;
+#endif
+      }
+      catch(...){
+        continue;
+      }
+      j++;
+    }
+  }
 
   for( unsigned iref=0; ; iref++ ){
     // Set-up relaxed objective, options, and solve polyhedral relaxation

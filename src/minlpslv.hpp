@@ -372,6 +372,9 @@ protected:
   //! @brief Decision variable bounds with integer fixing
   std::vector<T>            _Xbndi;
 
+  //! @brief vector of zeros for offset calculation in functions
+  std::vector<double>       _X0;
+
   //! @brief number of functions (objective and constraints) in MINLP model
   unsigned                  _nF;
 
@@ -383,6 +386,9 @@ protected:
 
   //! @brief Function bounds
   std::vector<T>            _Fbnd;
+
+  //! @brief vector of function offsets
+  std::vector<double>       _Foff;
 
   //! @brief Functions in MINLP model
   std::vector<unsigned>     _Ftyp;
@@ -565,7 +571,7 @@ public:
 
   //! @brief Solve MINLP model to local optimality using outer-approximation
   int optimize
-    ( double const* Xini=nullptr,  T const* Xbnd=nullptr, ROUND const& f=nullptr,
+    ( double const* Xini=nullptr,  T const* Xbnd=nullptr, ROUND const& f=nearest,
       std::ostream& os=std::cout );
 
   //! @brief Get incumbent info
@@ -575,12 +581,12 @@ public:
     { return _incumbent; }
     
   //! @brief Get reference to local NLP solver
-  NLP& NLPsolver
+  NLP& local_solver
     ()
     { return _NLPSLV; }
     
   //! @brief Get reference to master MIP solver
-  MIP& MIPsolver
+  MIP& master_solver
     ()
     { return _MIPSLV; }
 
@@ -614,6 +620,12 @@ public:
   double cost_correction
     ( double const* x, double const* ux, double const* uf )
     { return x && ux && uf ? _NLPSLV.cost_correction( x, ux, uf ) : 0.; }
+
+  //! @brief Round relaxed integer variables to nearest integer
+  static void nearest
+    ( unsigned const n, unsigned const* typ, double* val )
+    { for( unsigned i=0; i<n; ++i ) val[i] = std::round( val[i] ); }
+
 
 private:
 
@@ -786,20 +798,28 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _dag->output( _dag->subgraph( _nF, _Fvar.data() ) );
 #endif
 
-  // nonlinear functions
+  // linear and nonlinear functions
   _Flin.clear();
   _Fnlin.clear();
+  _Foff.clear();
+  _X0.resize( _nX, 0. );
   for( unsigned j=0; j<_nF; j++ ){
     auto && Fjdep = _Fvar[j].dep();
     auto it = Fjdep.dep().cbegin();
+    bool islin = true;
+    double CtrCst = 0.;
     for( ; it != Fjdep.dep().cend(); ++it ){
       if( it->second > FFDep::L ){
         _Fnlin.insert( j );
+        islin = false;
         break;
       }
     }
-    if( _Fnlin.find( j ) == _Fnlin.end() )
+    if( islin ){
       _Flin.insert( j );
+      _dag->eval( 1, &_Fvar[j], &CtrCst, _nX, _Xvar.data(), _X0.data() );       
+    }
+    _Foff.push_back(  CtrCst );
   }
   assert( _nF == _Flin.size() + _Fnlin.size() );
   
@@ -1087,7 +1107,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_update_master
   }
   
   // Update master MIP problem 
-  _MIPSLV.set_cuts( &_POLenv, false );
+  _MIPSLV.set_cuts( &_POLenv, true );//false );
   if( pumpfeas )
     _MIPSLV.set_objective( _POLauxvar.size(), _POLauxvar.data(), _POLauxwei.data(), BASE_OPT::MIN );    
   else
@@ -1145,7 +1165,13 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
     }
 
     // Define cut type: linear and convex constraints
-    if( islin || options.LINMETH == Options::CVX ) switch( _Ftyp[i] ){
+    if( islin ) switch( _Ftyp[i] ){
+      case BASE_OPT::EQ: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, -_Foff[i] ); continue;
+      case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -_Foff[i] ); continue;
+      case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -_Foff[i] ); continue;
+      default: return false;
+    }
+    else if( options.LINMETH == Options::CVX ) switch( _Ftyp[i] ){
       case BASE_OPT::EQ: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, -Fval[i] ); continue;
       case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Fval[i] ); continue;
       case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Fval[i] ); continue;
@@ -1179,7 +1205,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
   if( _iter == 1 ){
     for( unsigned ie=0; ie<_nA; ie++ ){
       if( _Aval[ie] == 0. ) continue;
-      _POLcuts[_iAfun[ie]]->append( _POLXvar[_jAvar[ie]], _Aval[ie] ).rhs() += _Aval[ie] * Xval[_jAvar[ie]];
+      _POLcuts[_iAfun[ie]]->append( _POLXvar[_jAvar[ie]], _Aval[ie] ).rhs();
     }
   }
   

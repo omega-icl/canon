@@ -16,6 +16,9 @@ main : main.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 doxydoc : doxydoc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
+doe : doe.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
 
@@ -28,5 +31,5 @@ doxydoc : doxydoc.o
 #####
 
 clean:
-	rm -f doxydoc main *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
+	rm -f doxydoc main doe dict.txt *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
 

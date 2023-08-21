@@ -93,7 +93,7 @@ int main()
   MINLP.options.MIPSLV.DISPLEVEL        = 0;
   MINLP.options.MIPSLV.THREADS          = 0;
   //MINLP.options.MIPSLV.MIPRELGAP        = 1e-5;
-  //MINLP.options.MIPSLV.OUTPUTFILE       = "main.lp";
+  MINLP.options.MIPSLV.OUTPUTFILE       = "main.lp";
 #elif  MC__USE_CPLEX
   throw std::runtime_error("Error: CPLEX solver not yet implemented");
 #endif

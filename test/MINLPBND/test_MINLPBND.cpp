@@ -141,7 +141,6 @@ int main()
   MINLP.propagate_bounds();
   MINLP.export_model( "test_MINLPBND4.gms" );
 
-  MINLP.update();
   switch( MINLP.relax_model() ){
     case mc::MIPSLV_GUROBI<I>::OPTIMAL:
       std::cout << std::endl << std::scientific << std::setprecision(5)

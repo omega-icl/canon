@@ -43,10 +43,10 @@
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT NLP;
+ typedef mc::NLPSLV_SNOPT<> NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT NLP;
+ typedef mc::NLPSLV_IPOPT<> NLP;
 #endif
 
 #include "minlgo.hpp"
@@ -194,8 +194,10 @@ int main
   }
 
   ////////////////////////////////////////////////////////////
-  // OPTIMIZE GAMS MODEL
-  flag = MINLP.optimize( os ); 
+  // EXPORT/OPTIMIZE GAMS MODEL
+  flag = mc::MINLGO<I,NLP,MIP>::STATUS::SUCCESSFUL;
+  if( !MINLP.GAMSexport( false, os ) )
+    flag = MINLP.optimize( os ); 
   if( MINLP.options.DISPLEVEL >= 1 )
     MINLP.stats.display();
 

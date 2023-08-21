@@ -51,9 +51,10 @@ int main()
   MINLP.add_ctr( mc::BASE_OPT::EQ,  sqr(P[0])+sqr(P[1])+sqr(P[2])+sqr(P[3])-40 );
   //MINLP.add_ctr( mc::BASE_OPT::EQ,  sqr(P[0])-P[0]/P[3] );
 */
-  //std::string gamsfile( "tuncphd_29.gms"); 
-  //std::string gamsfile( "tuncphd_30.gms"); 
-  std::string gamsfile( "transswitch0009r.gms" );
+  //std::string gamsfile( "tuncphd_29.gms");
+  //std::string gamsfile( "tuncphd_30.gms");
+  //std::string gamsfile( "transswitch0009r.gms" );
+  std::string gamsfile( "ex6_1_4.gms" );
   if( !MINLP.read( gamsfile ) ){//, true ) ){
     std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
     return -1;
@@ -95,7 +96,7 @@ int main()
   MINLP.propagate_bounds();
   MINLP.eliminate_invertible_constraints( true );
   MINLP.export_model( "test_MINLPREF_elimfull.gms" );
-
+*/
   // Formulate full-space model after lifting of non-polynomial terms and quadratization of polynomials
   MINLP.options.NCOCUTS             = 0;
   MINLP.options.QUADOPTIM           = 0;
@@ -103,7 +104,7 @@ int main()
   MINLP.options.REDELIM             = 0;
   MINLP.options.SRED.MIPDISPLEVEL   = 1;
   MINLP.options.SRED.ORDER          = 1;
-  MINLP.options.SRED.NODIV          = 1;
+  MINLP.options.SRED.NODIV          = 0;
   MINLP.setup();
 
   MINLP.propagate_bounds();
@@ -116,7 +117,7 @@ int main()
   //MINLP.append_reduction_constraints( true );
   MINLP.propagate_bounds();
   MINLP.export_model( "test_MINLPREF_lift.gms" );
-
+/*
   MINLP.quadratize_polynomial_functions( true );
   MINLP.propagate_bounds();
   MINLP.export_model( "test_MINLPREF_liftquad.gms" );

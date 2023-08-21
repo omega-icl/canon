@@ -125,15 +125,69 @@ namespace mc
 //! details can be found at: \ref page_MINLGO
 ////////////////////////////////////////////////////////////////////////
 template < typename T=Interval,
-           typename NLP=NLPSLV_SNOPT,
-           typename MIP=MIPSLV_GUROBI<T> >
-class MINLGO:
-  public    virtual BASE_NLP,
-  protected virtual GAMSIO
+           typename NLP=NLPSLV_SNOPT<>,
+           typename MIP=MIPSLV_GUROBI<T>,
+           typename... ExtOps >
+class MINLGO
+#if defined (MC__WITH_GAMS)
+: protected virtual GAMSIO<ExtOps...>,
+  public virtual BASE_NLP<ExtOps...>
+#else
+: public virtual BASE_NLP<ExtOps...>
+#endif
 {
-  using BASE_NLP::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
+protected:
+
+  // Do not use BASE_AE<ExtOps...>::_dag since redefined locally
+  using BASE_AE<ExtOps...>::_var;
+  using BASE_AE<ExtOps...>::_vartyp;
+  using BASE_AE<ExtOps...>::_varlb;
+  using BASE_AE<ExtOps...>::_varlm;
+  using BASE_AE<ExtOps...>::_varub;
+  using BASE_AE<ExtOps...>::_varum;
+  using BASE_AE<ExtOps...>::_dep;
+  using BASE_AE<ExtOps...>::_deplb;
+  using BASE_AE<ExtOps...>::_deplm;
+  using BASE_AE<ExtOps...>::_depub;
+  using BASE_AE<ExtOps...>::_depum;
+  using BASE_AE<ExtOps...>::_sys;
+  using BASE_AE<ExtOps...>::_sysm;
+  using BASE_AE<ExtOps...>::_par;
+
+  using BASE_NLP<ExtOps...>::_obj;
+  using BASE_NLP<ExtOps...>::_ctr;
+  using BASE_NLP<ExtOps...>::_nco;
+  using BASE_NLP<ExtOps...>::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
+
+#if defined (MC__WITH_GAMS)
+  using GAMSIO<ExtOps...>::_varini;
+#endif
 
 public:
+
+  using BASE_AE<ExtOps...>::set;
+  using BASE_AE<ExtOps...>::dag;
+  using BASE_AE<ExtOps...>::set_dag;
+  using BASE_AE<ExtOps...>::par;
+  using BASE_AE<ExtOps...>::set_par;
+  using BASE_AE<ExtOps...>::add_par;
+  using BASE_AE<ExtOps...>::reset_par;
+  using BASE_AE<ExtOps...>::var;
+  using BASE_AE<ExtOps...>::set_var;
+  using BASE_AE<ExtOps...>::add_var;
+  using BASE_AE<ExtOps...>::reset_var;
+  using BASE_AE<ExtOps...>::update_vartyp;
+  using BASE_AE<ExtOps...>::dep;
+  using BASE_AE<ExtOps...>::set_dep;
+  using BASE_AE<ExtOps...>::add_dep;
+  using BASE_AE<ExtOps...>::reset_dep;
+  using BASE_AE<ExtOps...>::sys;
+  using BASE_AE<ExtOps...>::add_sys;
+  using BASE_AE<ExtOps...>::reset_sys;
+
+  using BASE_NLP<ExtOps...>::set;
+  using BASE_NLP<ExtOps...>::set_obj;
+  using BASE_NLP<ExtOps...>::add_ctr;
 
   //! @brief NLP solution status
   enum STATUS{
@@ -157,13 +211,23 @@ public:
     Options& operator=
       ( Options const& other );
 
+    //! @brief Export GAMS model after preprocessing
+    std::string GAMSEXPORT;
     //! @brief Level of preprocessing
     int         PRESOLVE;
+    //! @brief Level of reformulation
+    int         REFORM;
+    //! @brief Search and append redundant polynomial cuts
+    int         REDCUTS;
+//    //! @brief Append NCO cuts
+//    bool        NCOCUTS;
     //! @brief Correct the incumbent for feasibility using multipliers
     bool        CORRINC;
-    //! @brief Add a cut at incumbent value
+    //! @brief Initialize relaxed problem at incumbent point
+    bool        INIINC;
+    //! @brief Add a cut at incumbent value in relaxed problem
     bool        CUTINC;
-    //! @brief Add a break-point at incumbent
+    //! @brief Add a break-point at incumbent in relaxed problem
     bool        BKPTINC;
     //! @brief Feasibility tolerance 
     double      FEASTOL;
@@ -175,29 +239,31 @@ public:
     unsigned    MAXITER;
     //! @brief Maximum run time (seconds)
     double      TIMELIMIT;
-    //! @brief Display level for solver
+    //! @brief Overall display level
     int         DISPLEVEL;
+    //! @brief Maximum run time for preprocessing (seconds)
+    double      PRETIMELIMIT;
 
     //! @brief MINLP local solver options
-    typename MINLPSLV<T,NLP,MIP>::Options MINLPSLV;
+    typename MINLPSLV<T,NLP,MIP,ExtOps...>::Options  MINLPSLV;
     //! @brief MINLP global bounder options
-    typename MINLPBND<T,MIP>::Options     MINLPBND;
+    typename MINLPBND<T,MIP,ExtOps...>::Options      MINLPBND;
     //! @brief MINLP global bounder options for presolve
-    typename MINLPBND<T,MIP>::Options     MINLPPRE;
+    typename MINLPBND<T,MIP,ExtOps...>::Options      MINLPPRE;
 
     //! @brief Load option file
     bool read
-      ( std::string const& optionfilename, std::ofstream&logfile,
-        std::ostream&out=std::cout );
+      ( std::string const& optionfilename, std::ofstream& logfile,
+        std::ostream& out=std::cout );
     bool read
-      ( std::string const& optionfilename, std::ostream&out=std::cout );
+      ( std::string const& optionfilename, std::ostream& out=std::cout );
     //! @brief user options
     opt::options_description const& user_options
       () const
       { return _USROPT; }
     //! @brief Display
     void display
-      ( std::ostream&out=std::cout ) const;
+      ( std::ostream& out=std::cout ) const;
 
    private:
     //! @brief Option description from file
@@ -206,12 +272,12 @@ public:
     opt::variables_map _USRMAP; 
     //! @brief Log file
     std::string _LOGFILENAME;
-    //! @brief Reformulation approach
-    unsigned    _MINLPBND_REFORMMETH;
-    unsigned    _MINLPPRE_REFORMMETH;
     //! @brief Relaxation approach
-    unsigned    _MINLPBND_RELAXMETH;
-    unsigned    _MINLPPRE_RELAXMETH;
+    unsigned    _MINLPBND_ALLOW_NLIN;
+    bool        _MINLPBND_ALLOW_DISJ;
+    unsigned    _MINLPBND_QUADOPTIM;
+//    unsigned    _MINLPBND_RELAXMETH;
+//    unsigned    _MINLPPRE_RELAXMETH;
   } options;
 
   //! @brief Class managing exceptions for MINLGO
@@ -285,70 +351,70 @@ public:
 protected:
 
   //! @brief Current status
-  STATUS                    _status;
+  STATUS                         _status;
 
   //! @brief Current iteration
-  unsigned                  _iter;
+  unsigned                       _iter;
 
   //! @brief Rounds of domain reduction
-  unsigned                  _nred;
+  unsigned                       _nred;
 
   //! @brief Flag for setup function
-  bool                      _issetup;
+  bool                           _issetup;
 
   //! @brief Flag for presolve function
-  bool                      _ispresolved;
+  bool                           _ispresolved;
 
   //! @brief Flag for MIP problem
-  bool                      _ismip;
+  bool                           _ismip;
 
   //! @brief Flag for boundedness
-  bool                      _isbnd;
+  bool                           _isbnd;
 
   //! @brief objective scaling coefficient (1: min; -1: max)
-  double                    _objscal;
+  double                         _objscal;
 
   //! @brief Current relaxation value
-  double                    _Zrel;
+  double                         _Zrel;
 
   //! @brief Current incumbent value
-  double                    _Zinc;
+  double                         _Zinc;
 
   //! @brief Current incumbent correction
-  double                    _Zcor;
+  double                         _Zcor;
 
   //! @brief Variable values at current relaxation
-  std::vector<double>       _Xrel;
+  std::vector<double>            _Xrel;
 
   //! @brief Structure holding incumbent information
-  SOLUTION_OPT              _incumbent;
+  SOLUTION_OPT                   _incumbent;
 
   //! @brief Variable bounds
-  std::vector<T>            _Xbnd;
+  std::vector<T>                 _Xbnd;
   
   //! @brief Decision variable bounds with integer fixing
-  std::vector<T>            _Xbndi;
+  std::vector<T>                 _Xbndi;
 
   //! @brief Local solver for factorable MINLP
-  MINLPSLV<T,NLP,MIP>       _MINLPSLV;
+  MINLPSLV<T,NLP,MIP,ExtOps...>  _MINLPSLV;
 
   //! @brief Global bounder for factorable NLP
-  MINLPBND<T,MIP>           _MINLPBND;
+  MINLPBND<T,MIP,ExtOps...>      _MINLPBND;
 
   //! @brief Structure holding NLP intermediate solution
-  SOLUTION_OPT              _solution;
+  SOLUTION_OPT                   _solution;
 
   //! @brief maximum number of values displayed in a row
-  static const unsigned int _LDISP = 4;
+  static const unsigned int      _LDISP = 4;
 
   //! @brief reserved space for integer variable display
-  static const unsigned int _IPREC = 9;
+  static const unsigned int      _IPREC = 9;
 
   //! @brief reserved space for double variable display
-  static const unsigned int _DPREC = 6;
+  static const unsigned int      _DPREC = 6;
 
   //! @brief stringstream for displaying results
-  std::ostringstream        _odisp;
+  std::ostringstream             _odisp;
 
   //! @brief Time point to enable TIMELIMIT option
   std::chrono::time_point<std::chrono::system_clock> _tstart;
@@ -385,7 +451,7 @@ protected:
 
   //! @brief Display current buffer stream and reset it
   void _display_flush
-    ( std::ostream& os = std::cout );
+    ( std::ostream& os=std::cout );
 
   //! @brief Finalize optimization display and status
   int _finalize
@@ -393,11 +459,15 @@ protected:
 
   //! @brief Solve local NLP subproblem
   bool _solve_local
-    ( double const* Xini, T const* Xbnd );
+    ( double const* Xini, T const* Xbnd, std::ostream& os=std::cout );
       
   //! @brief Solve relaxed MIP subproblem   
   int _solve_relax
-    ();
+    ( std::ostream& os=std::cout );
+      
+  //! @brief Export relaxed MIP subproblem   
+  bool _export_relax
+    ( std::ostream& os=std::cout );
       
   //! @brief Convergence test for piecewise-linear relaxation approach 
   bool _converged
@@ -441,6 +511,10 @@ public:
   int presolve
     (  T* Xbnd=nullptr, double* Xini=nullptr, std::ostream& os=std::cout );
 
+  //! @brief Export relaxed optimization model to GAMS after preprocessing
+  bool GAMSexport
+    ( bool const relax=false, std::ostream& os=std::cout );
+
   //! @brief Solve optimization model to global optimality after preprocessing
   int optimize
     ( std::ostream& os=std::cout );
@@ -454,26 +528,26 @@ public:
   //! @brief Interrupt solve process
   void interrupt
     ()
-    { _MINLPSLV.MIPsolver().terminate();
-      _MINLPBND.solver()->terminate(); }
+    { _MINLPSLV.master_solver().terminate();
+      _MINLPBND.relax_solver()->terminate(); }
 
 private:
   //! @brief Private methods to block default compiler methods
   MINLGO
-    ( MINLGO const& );
-  MINLGO& operator=
-    ( MINLGO const& );
+    ( MINLGO<T,NLP,MIP,ExtOps...> const& );
+  MINLGO<T,NLP,MIP,ExtOps...>& operator=
+    ( MINLGO<T,NLP,MIP,ExtOps...> const& );
 };
 
 #if defined (MC__WITH_GAMS)
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::read
+MINLGO<T,NLP,MIP,ExtOps...>::read
 ( std::string const& filename, bool const disp )
 {
   _tstart = stats.start();
 
-  bool flag = this->GAMSIO::read( filename, disp );
+  bool flag = this->GAMSIO<ExtOps...>::read( filename, disp );
 
   stats.walltime_setup += stats.walltime( _tstart );
   stats.walltime_all   += stats.walltime( _tstart );
@@ -481,9 +555,9 @@ MINLGO<T,NLP,MIP>::read
 }
 #endif
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::setup
+MINLGO<T,NLP,MIP,ExtOps...>::setup
 ()
 {
   //stats.reset();
@@ -498,8 +572,8 @@ MINLGO<T,NLP,MIP>::setup
 
   assert( !std::get<0>(_obj).empty() );
   switch( std::get<0>(_obj)[0] ){
-    case MIN: _objscal =  1e0; break;
-    case MAX: _objscal = -1e0; break;
+    case BASE_OPT::MIN: _objscal =  1e0; break;
+    case BASE_OPT::MAX: _objscal = -1e0; break;
   }
 
 #ifdef MC__MINLGO_SETUP_DEBUG
@@ -525,9 +599,9 @@ MINLGO<T,NLP,MIP>::setup
   stats.walltime_all   += stats.walltime( _tstart );
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::_is_integer_feasible
+MINLGO<T,NLP,MIP,ExtOps...>::_is_integer_feasible
 ( double const* Xval, double const& feastol )
 const
 {
@@ -540,14 +614,15 @@ const
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLGO<T,NLP,MIP>::presolve
+MINLGO<T,NLP,MIP,ExtOps...>::presolve
 (  T* Xbnd, double* Xini, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
   _ispresolved = false;
   _tstart = stats.start();
+  if( options.PRETIMELIMIT > options.TIMELIMIT ) options.PRETIMELIMIT = options.TIMELIMIT; 
 
   // Reset incumbent
   _incumbent.reset();
@@ -575,26 +650,45 @@ MINLGO<T,NLP,MIP>::presolve
 
   // Check feasibility of user-supplied point
   if( _MINLPSLV.is_feasible( _varini.data(), options.CORRINC? 0.: options.FEASTOL ) ){
-    _incumbent = _MINLPSLV.NLPsolver().solution();
-    _Zinc = _MINLPSLV.NLPsolver().solution().f[0];
+    _incumbent = _MINLPSLV.local_solver().solution();
+    _Zinc = _MINLPSLV.local_solver().solution().f[0];
   }
+
+  // Apply bounder reformulations
+  _MINLPBND.options = options.MINLPPRE;
+  _MINLPBND.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+  if( options.DISPLEVEL > 1 )
+    _MINLPBND.options.SQUAD.MIPDISPLEVEL = _MINLPBND.options.SRED.MIPDISPLEVEL = 1;
+
+  if( options.REFORM ){
+    _MINLPBND.lift_polynomial_subexpressions( true );
+    _MINLPBND.flatten_linear_functions( true );
+    if( options.REFORM > 1 )
+      _MINLPBND.quadratize_polynomial_functions( true );
+    else{
+      _MINLPBND.flatten_quadratic_functions( true );
+      _MINLPBND.flatten_polynomial_functions( true );
+    }
+  }
+
+  // Search for redundant constraints
+  _MINLPBND.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+  if( options.REDCUTS )
+    _MINLPBND.append_reduction_constraints( true );
 
   // Simple bound propagation if presolve is turned off
   if( !options.PRESOLVE ){
     // Set presolve bounder options
-    _MINLPBND.options = options.MINLPPRE;
-    _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+    //_MINLPBND.options = options.MINLPPRE;
+    _MINLPBND.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
 
     // Apply domain contraction for both linear and nonlinear constraints
-    switch( _MINLPBND.propagate( _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, true ) ){
-      case MIP::STATUS::INFEASIBLE:
-        stats.walltime_preproc += stats.walltime( _tstart );
-        stats.walltime_all     += stats.walltime( _tstart );
-        return STATUS::INFEASIBLE;
-      default:
-        break;
+    if( !_MINLPBND.propagate_bounds( _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, true ) ){
+      stats.walltime_preproc += stats.walltime( _tstart );
+      stats.walltime_all     += stats.walltime( _tstart );
+      return STATUS::INFEASIBLE;
     }
-    _Xbnd.assign( _MINLPBND.varbnd(), _MINLPBND.varbnd()+_var.size() );
+    _Xbnd = _MINLPBND.variable_bounds();
     for( unsigned i=0; Xbnd && i<_var.size(); i++ )
       Xbnd[i] = _Xbnd[i];
 
@@ -616,8 +710,10 @@ MINLGO<T,NLP,MIP>::presolve
 
   // Apply MINLP feasibility pump
   _MINLPSLV.options = options.MINLPSLV;
-  _MINLPSLV.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-  _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), os );
+  _MINLPSLV.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+  if( options.DISPLEVEL )
+    os << "# PERFORMING LOCAL SEARCH" << std::endl;
+  _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), _MINLPSLV.nearest, os );
   if( _MINLPSLV.is_feasible( options.FEASTOL ) ){
     _Zcor = options.CORRINC? _MINLPSLV.cost_correction(): 0.;
     if( _objscal*(_MINLPSLV.get_incumbent().f[0]+_Zcor) < _objscal*_Zinc ){
@@ -638,14 +734,13 @@ MINLGO<T,NLP,MIP>::presolve
   }
   { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
-
-  // Set presolve bounder options
-  _MINLPBND.options = options.MINLPPRE;
-  _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-
+  
   // Apply domain contraction for both linear and nonlinear constraints
-  switch( _MINLPBND.reduce( _nred, _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, true, true ) ){
-//  switch( _MINLPBND.solver()->get_status() ){
+  //_MINLPBND.options = options.MINLPPRE;
+  _MINLPBND.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+  if( options.DISPLEVEL )
+    os << "# PERFORMING DOMAIN CONTRACTION" << std::endl;
+  switch( _MINLPBND.reduce_bounds( _nred, _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, true, true ) ){
     case MIP::STATUS::INFEASIBLE:
       stats.walltime_preproc += stats.walltime( _tstart );
       stats.walltime_all     += stats.walltime( _tstart );
@@ -654,7 +749,7 @@ MINLGO<T,NLP,MIP>::presolve
     default:
       break;
   }
-  _Xbnd.assign( _MINLPBND.varbnd(), _MINLPBND.varbnd()+_var.size() );
+  _Xbnd = _MINLPBND.variable_bounds();
   for( unsigned i=0; Xbnd && i<_var.size(); i++ )
     Xbnd[i] = _Xbnd[i];
 
@@ -667,14 +762,14 @@ MINLGO<T,NLP,MIP>::presolve
 
   // Compute relaxation -- COULD EXIT HERE, BENEFIT OF EXTRA FEASIBILITY PUMP?!?
   if( options.PRESOLVE > 1 ){
-    _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-    _MINLPBND.relax( nullptr, nullptr, nullptr, 0, false, false ); // reset cuts but not variables or bounds 
-    switch( _MINLPBND.solver()->get_status() ){
+    _MINLPBND.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+    _MINLPBND.relax_model( nullptr, nullptr, nullptr, 0, false, false, "", os ); // reset cuts but not variables or bounds 
+    switch( _MINLPBND.relax_solver()->get_status() ){
       case MIP::STATUS::OPTIMAL:
       case MIP::STATUS::SUBOPTIMAL:
-        _Zrel = _MINLPBND.solver()->get_objective_bound();
+        _Zrel = _MINLPBND.relax_solver()->get_objective_bound();
         for( unsigned i=0; i<_var.size(); i++ )
-          _Xrel[i] = _MINLPBND.solver()->get_variable( _var[i] );
+          _Xrel[i] = _MINLPBND.relax_solver()->get_variable( _var[i] );
         break;
       case MIP::STATUS::INFEASIBLE:
       case MIP::STATUS::INFORUNBND:
@@ -713,9 +808,9 @@ MINLGO<T,NLP,MIP>::presolve
     if( _varini.empty() )
       _varini.resize( _var.size() );
     for( unsigned i=0; i<_var.size(); i++ )
-      _varini[i] = _MINLPBND.solver()->get_variable( _var[i] );
-    _MINLPSLV.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-    _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), os );
+      _varini[i] = _MINLPBND.relax_solver()->get_variable( _var[i] );
+    _MINLPSLV.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+    _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), _MINLPSLV.nearest, os );
     if( _MINLPSLV.is_feasible( options.FEASTOL ) ){
       _Zcor = options.CORRINC? _MINLPSLV.cost_correction(): 0.;
       if( _objscal*(_MINLPSLV.get_incumbent().f[0]+_Zcor) < _objscal*_Zinc ){
@@ -747,13 +842,40 @@ MINLGO<T,NLP,MIP>::presolve
   return( _isbnd? STATUS::SUCCESSFUL: STATUS::UNBOUNDED );
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline bool
+MINLGO<T,NLP,MIP,ExtOps...>::GAMSexport
+( bool const relax, std::ostream& os )
+{
+  if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
+  //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
+
+  // Check GAMS export filename
+  std::string extfile = std::filesystem::path(options.GAMSEXPORT).extension();
+  if( extfile != ".gms" ) return false;
+
+  // Export relaxed preprocessed model
+  if( relax ){
+    if( options.DISPLEVEL )
+      os << "# EXPORTING RELAXED PREPROCESSED MODEL TO GAMS" << std::endl;
+    return _export_relax( os );
+  }
+
+  // Export preprocessed model
+  if( options.DISPLEVEL )
+    os << "# EXPORTING PREPROCESSED MODEL TO GAMS" << std::endl;
+  return _MINLPBND.export_model( options.GAMSEXPORT, options.INIINC? _incumbent.x.data(): nullptr, os );
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLGO<T,NLP,MIP>::optimize
+MINLGO<T,NLP,MIP,ExtOps...>::optimize
 ( std::ostream& os )
 {
   if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
   //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
+  if( options.DISPLEVEL )
+    os << "# PERFORMING GLOBAL SEARCH" << std::endl;
 
   // Initialize solve
   _tstart = stats.start();
@@ -762,6 +884,8 @@ MINLGO<T,NLP,MIP>::optimize
   
   // Set bounder options
   _MINLPBND.options = options.MINLPBND;
+  if( options.DISPLEVEL > 1 )
+    _MINLPBND.options.MIPSLV.DISPLEVEL = 1;
 
   // Display presolve results
   _display_init( os );
@@ -781,7 +905,7 @@ MINLGO<T,NLP,MIP>::optimize
   for( ++_iter; options.MAXITER; ++_iter ){
 
     // Set-up and solve MIP relaxation
-    switch( _solve_relax() ){
+    switch( _solve_relax( os ) ){
       case MIP::OPTIMAL:
         break;
       case MIPSLV_GUROBI<T>::INFEASIBLE:
@@ -790,16 +914,16 @@ MINLGO<T,NLP,MIP>::optimize
       case MIP::UNBOUNDED:
         return _finalize( STATUS::UNBOUNDED );
       case MIP::TIMELIMIT:
-        _Zrel = _MINLPBND.solver()->get_objective_bound();
+        _Zrel = _MINLPBND.relax_solver()->get_objective_bound();
         return _finalize( STATUS::INTERRUPTED );
       default:
         return _finalize( STATUS::FAILED );
     }
 
     // Retrieve MIP solution - use bound on objective, not incumbent!
-    _Zrel = _MINLPBND.solver()->get_objective_bound();
+    _Zrel = _MINLPBND.relax_solver()->get_objective_bound();
     for( unsigned i=0; i<_var.size(); i++ )
-      _Xrel[i] = _MINLPBND.solver()->get_variable( _var[i] );
+      _Xrel[i] = _MINLPBND.relax_solver()->get_variable( _var[i] );
 #ifdef MC__MINLGO_DEBUG
     std::cout << "_Zrel = " << _Zrel << std::endl;
     for( unsigned i=0; i<_var.size(); i++ )
@@ -811,7 +935,7 @@ MINLGO<T,NLP,MIP>::optimize
       if( _vartyp[i] ) _Xbndi[i] = _Xrel[i];
       else             _Xbndi[i] = _Xbnd[i];
     }
-    locfeas = _solve_local( _Xrel.data(), _Xbndi.data() );
+    locfeas = _solve_local( _Xrel.data(), _Xbndi.data(), os );
 
     // Update incumbent
     updinc = false;
@@ -846,7 +970,7 @@ MINLGO<T,NLP,MIP>::optimize
     // Do NOT test for infeasibility here, because contraction problem may
     // become infeasible due to round-off in LP solver
     auto tMIP = stats.start();
-    _MINLPBND.reduce( _nred, _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, false, false );
+    _MINLPBND.reduce_bounds( _nred, _Xbnd.data(), !_incumbent.x.empty()? &_Zinc: nullptr, false, false );
     stats.walltime_slvrel += stats.walltime( tMIP );
 #ifdef MC__MINLGO_DEBUG
     std::cout << "Reduced bounds: x" << _nred << std::endl;
@@ -859,13 +983,13 @@ MINLGO<T,NLP,MIP>::optimize
   return _finalize( STATUS::SUCCESSFUL );
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::_solve_local
-( double const* Xini, T const* Xbnd )
+MINLGO<T,NLP,MIP,ExtOps...>::_solve_local
+( double const* Xini, T const* Xbnd, std::ostream& os )
 {
   auto tNLP = stats.start();
-  auto& _NLPSLV = _MINLPSLV.NLPsolver();
+  auto& _NLPSLV = _MINLPSLV.local_solver();
   _NLPSLV.restore_model();
       
   // Local solve from provided initial point
@@ -900,10 +1024,27 @@ MINLGO<T,NLP,MIP>::_solve_local
   return !_solution.x.empty();
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline bool
+MINLGO<T,NLP,MIP,ExtOps...>::_export_relax
+( std::ostream& os )
+{
+  // Check GAMS export filename
+  std::string extfile = std::filesystem::path(options.GAMSEXPORT).extension();
+  if( extfile != ".gms" ) return false;
+  
+  // Call master MIP problem - do NOT reset bounds, otherwise reinitializing lifted variable bounds
+  int flag = _MINLPBND.relax_model( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
+                                    options.INIINC? _incumbent.x.data(): nullptr, 0, false, _iter>1? false: true,
+                                    options.GAMSEXPORT, os );
+
+  return( flag==MIP::OTHER? true: false );
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLGO<T,NLP,MIP>::_solve_relax
-()
+MINLGO<T,NLP,MIP,ExtOps...>::_solve_relax
+( std::ostream& os )
 {
   // Update time limit
   _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
@@ -912,18 +1053,17 @@ MINLGO<T,NLP,MIP>::_solve_relax
   
   // Solve master MIP problem - do NOT reset bounds, otherwise reinitializing lifted variable bounds
   auto tMIP = stats.start();
-  std::string extfile = std::filesystem::path(_MINLPBND.options.MIPSLV.OUTPUTFILE).extension();
-  std::string gmsfile = extfile==".gms"? _MINLPBND.options.MIPSLV.OUTPUTFILE: "";
-  int flag = _MINLPBND.relax( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
-                              _incumbent.x.data(), 0, false, _iter>1? false: true, gmsfile );
+  int flag = _MINLPBND.relax_model( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
+                                    options.INIINC? _incumbent.x.data(): nullptr, 0, false, _iter>1? false: true,
+                                    "", os );
   stats.walltime_slvrel += stats.walltime( tMIP );
 
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::_converged
+MINLGO<T,NLP,MIP,ExtOps...>::_converged
 ()
 const
 {
@@ -936,9 +1076,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::_interrupted
+MINLGO<T,NLP,MIP,ExtOps...>::_interrupted
 ()
 const
 {
@@ -949,9 +1089,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
-MINLGO<T,NLP,MIP>::_finalize
+MINLGO<T,NLP,MIP,ExtOps...>::_finalize
 ( STATUS const status, std::ostream& os )
 {
   _status = status;
@@ -960,9 +1100,9 @@ MINLGO<T,NLP,MIP>::_finalize
   return _status;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_init
+MINLGO<T,NLP,MIP,ExtOps...>::_display_init
 ( std::ostream& os )
 {
   _odisp.str("");
@@ -976,9 +1116,9 @@ MINLGO<T,NLP,MIP>::_display_init
   _display_flush( os ); 
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_final
+MINLGO<T,NLP,MIP,ExtOps...>::_display_final
 ( std::chrono::microseconds const& walltime,
   std::ostream& os )
 {
@@ -1017,9 +1157,9 @@ MINLGO<T,NLP,MIP>::_display_final
   _display_flush( os );
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_add
+MINLGO<T,NLP,MIP,ExtOps...>::_display_add
 ( const double dval )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1027,27 +1167,27 @@ MINLGO<T,NLP,MIP>::_display_add
          << std::setw(_DPREC+8) << dval;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_add
+MINLGO<T,NLP,MIP,ExtOps...>::_display_add
 ( const unsigned ival )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(_IPREC) << ival;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_add
+MINLGO<T,NLP,MIP,ExtOps...>::_display_add
 ( const std::string &sval )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(4) << sval;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_time
+MINLGO<T,NLP,MIP,ExtOps...>::_display_time
 ()
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1055,9 +1195,9 @@ MINLGO<T,NLP,MIP>::_display_time
          << stats.to_time( stats.walltime_all + stats.walltime( _tstart ) ) << "s";
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::_display_flush
+MINLGO<T,NLP,MIP,ExtOps...>::_display_flush
 ( std::ostream &os )
 {
   if( _odisp.str() == "" ) return;
@@ -1066,11 +1206,15 @@ MINLGO<T,NLP,MIP>::_display_flush
   return;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline
-MINLGO<T,NLP,MIP>::Options::Options()
-: PRESOLVE( 1 ),
+MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
+: GAMSEXPORT( "" ),
+  PRESOLVE( 1 ),
+  REFORM( 2 ),
+  REDCUTS( 0 ),
   CORRINC( 1 ),
+  INIINC( 1 ),
   CUTINC( 0 ),
   BKPTINC( 0 ),
   FEASTOL( 1e-5 ),
@@ -1079,25 +1223,25 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MAXITER( 1 ),
   TIMELIMIT( 72e2 ),
   DISPLEVEL( 1 ),
+  PRETIMELIMIT( 72e2 ),
   MINLPSLV(),
   MINLPBND(),
   MINLPPRE(),
   _USROPT( "User-defined solver options" )
 {
-  MINLPPRE.REFORMMETH                                               = { MINLPBND.NPOL };
-  MINLPBND.REFORMMETH                                               = { MINLPBND.NPOL, MINLPBND.QUAD };
   MINLPPRE.LINCTRSEP              = MINLPBND.LINCTRSEP              = 1;
   MINLPPRE.RELAXMETH                                                = { MINLPBND.DRL };
   MINLPBND.RELAXMETH                                                = { MINLPBND.DRL };
-  MINLPPRE.SUBSETDRL              = MINLPPRE.SUBSETSCQ              = 0;
-  MINLPBND.SUBSETDRL                                                = 0;
-  MINLPBND.SUBSETSCQ                                                = 0;
-  MINLPPRE.POLIMG.RELAX_QUAD                                        = 1;
-  MINLPPRE.POLIMG.RELAX_MONOM                                       = 1;
-  MINLPPRE.POLIMG.RELAX_NLIN                                        = 1;
-  MINLPBND.POLIMG.RELAX_QUAD                                        = 0;
-  MINLPBND.POLIMG.RELAX_MONOM                                       = 0;
-  MINLPBND.POLIMG.RELAX_NLIN                                        = 0;
+  MINLPPRE.SUBSETDRL              = MINLPPRE.SUBSETSCM              = 0;
+  MINLPBND.SUBSETDRL              = MINLPBND.SUBSETSCM              = 0;
+  MINLPPRE.POLIMG.ALLOW_QUAD                                        = 0;
+  MINLPPRE.POLIMG.ALLOW_NLIN                                        = {};
+  MINLPPRE.POLIMG.ALLOW_DISJ                                        = {};
+  MINLPBND.POLIMG.ALLOW_QUAD                                        = 1;
+  MINLPBND.POLIMG.ALLOW_NLIN                                        = { FFOp::IPOW, FFOp::DPOW, FFOp::CHEB, FFOp::SQRT, FFOp::EXP,  FFOp::LOG,
+                                                                        FFOp::COS,  FFOp::SIN,  FFOp::TAN,  FFOp::ACOS, FFOp::ASIN, FFOp::ATAN, 
+                                                                        FFOp::TANH }; //FFOp::FABS, FFOp::MINF, FFOp::MAXF };
+  MINLPBND.POLIMG.ALLOW_DISJ                                        = { FFOp::FABS, FFOp::FSTEP, FFOp::MINF, FFOp::MAXF };
   MINLPPRE.POLIMG.AGGREG_LQ       = MINLPBND.POLIMG.AGGREG_LQ       = 1;
   MINLPPRE.POLIMG.SANDWICH_RTOL   = MINLPBND.POLIMG.SANDWICH_RTOL   = 1e-3;
   MINLPPRE.POLIMG.SANDWICH_MAXCUT = MINLPBND.POLIMG.SANDWICH_MAXCUT = 5;
@@ -1113,17 +1257,19 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPPRE.OBBTMIG                = MINLPBND.OBBTMIG                = 1e-6;
   MINLPPRE.CPMAX                  = MINLPBND.CPMAX                  = 10;
   MINLPPRE.CPTHRES                = MINLPBND.CPTHRES                = 0.;
+  MINLPPRE.REDELIM                = MINLPBND.REDELIM                = 0;
   MINLPPRE.CMODPROP               = MINLPBND.CMODPROP               = 15;
-  MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR      = 1e-10;
-  MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = SQuad::Options::MONOM;
-  MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER            = SQuad::Options::DEC;
-  MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
-  MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS               = 0;
+  MINLPPRE.CMODEL.MIG_ATOL        = MINLPBND.CMODEL.MIG_ATOL        = 1e-10;
+  MINLPPRE.CMODEL.MIG_RTOL        = MINLPBND.CMODEL.MIG_RTOL        = 1e-10;
+  MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS            = MINLPBND.SQUAD.MONOM;
+  MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER            = MINLPBND.SQUAD.DEC;
   MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC            = 0;
+  MINLPPRE.QUADOPTIM              = MINLPBND.QUADOPTIM              = 0;
+  MINLPPRE.MONSCALE               = MINLPBND.MONSCALE               = 0;
   MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS            = 0;
   MINLPPRE.DCQUADCUTS             = MINLPBND.DCQUADCUTS             = 0;
   MINLPPRE.NCOCUTS                = MINLPBND.NCOCUTS                = 0;
-  MINLPPRE.NCOADIFF               = MINLPBND.NCOADIFF               = MINLPBND.ASA;
+  MINLPPRE.NCOADIFF               = MINLPBND.NCOADIFF               = MINLPBND.FSA;
   MINLPPRE.DISPLEVEL              = MINLPBND.DISPLEVEL              = 1;
   MINLPPRE.MIPSLV.PRESOLVE        = MINLPBND.MIPSLV.PRESOLVE        = -1;
   MINLPBND.MIPSLV.LPWARMSTART                                       = 1;
@@ -1161,66 +1307,56 @@ MINLGO<T,NLP,MIP>::Options::Options()
   MINLPSLV.MIPSLV.THREADS         = 0;
 
   _USROPT.add_options()
-    ( "PRESOLVE",  opt::value<int>(&PRESOLVE),             "level of preprocessing" )
-    ( "CVATOL",    opt::value<double>(&CVATOL),            "convergence absolute tolerance" )
-    ( "CVRTOL",    opt::value<double>(&CVRTOL),            "convergence relative tolerance" )
-    ( "FEASTOL",   opt::value<double>(&FEASTOL),           "feasibility tolerance" )
-    ( "CORRINC",   opt::value<bool>(&CORRINC),             "feasibility correction of incumbent using KKT multipliers" )
-    ( "CUTINC",    opt::value<bool>(&CUTINC),              "add cut at current incumbent in relaxation" )
-    ( "BKPTINC",   opt::value<bool>(&BKPTINC),             "add breakpoint at current incumbent in piecewise relaxation" )
-    ( "MAXITER",   opt::value<unsigned>(&MAXITER),         "maximal number of iterations" )
-    ( "TIMELIMIT", opt::value<double>(&TIMELIMIT),         "runtime limit" )
-    ( "DISPLEVEL", opt::value<int>(&DISPLEVEL),            "general display level" )
-    ( "LOGFILE",   opt::value<std::string>(&_LOGFILENAME), "log file" )
+    ( "GAMSEXPORT",       opt::value<std::string>(&GAMSEXPORT),   "export GAMS model after preprocessing" )
+    ( "PRESOLVE",         opt::value<int>(&PRESOLVE),             "level of preprocessing" )
+    ( "REFORM",           opt::value<int>(&REFORM),               "level of reformulation" )
+    ( "REDCUTS",          opt::value<int>(&REDCUTS),              "level of redundant polynomial cuts" )
+    ( "CVATOL",           opt::value<double>(&CVATOL),            "convergence absolute tolerance" )
+    ( "CVRTOL",           opt::value<double>(&CVRTOL),            "convergence relative tolerance" )
+    ( "FEASTOL",          opt::value<double>(&FEASTOL),           "feasibility tolerance" )
+    ( "CORRINC",          opt::value<bool>(&CORRINC),             "feasibility correction of incumbent using KKT multipliers" )
+    ( "INIINC",           opt::value<bool>(&INIINC),              "initialize relaxation at current incumbent point" )
+    ( "CUTINC",           opt::value<bool>(&CUTINC),              "add cut at current incumbent in relaxation" )
+    ( "BKPTINC",          opt::value<bool>(&BKPTINC),             "add breakpoint at current incumbent in piecewise relaxation" )
+    ( "MAXITER",          opt::value<unsigned>(&MAXITER),         "maximal number of iterations" )
+    ( "TIMELIMIT",        opt::value<double>(&TIMELIMIT),         "overall runtime limit" )
+    ( "DISPLEVEL",        opt::value<int>(&DISPLEVEL),            "overall display level" )
+    ( "PRETIMELIMIT",     opt::value<double>(&PRETIMELIMIT),      "runtime limit of preprocessing" )
+    ( "LOGFILE",          opt::value<std::string>(&_LOGFILENAME), "log file" )
 //
-    ( "MINLPBND.PRERELAXMETH",     opt::value<unsigned>(&_MINLPPRE_RELAXMETH),           "polyhedral relaxation approach during presolve" )
     ( "MINLPBND.PREOBBTLIN",       opt::value<unsigned>(&MINLPPRE.OBBTLIN),              "optimization-based bounds tighteneting approach during presolve" )
     ( "MINLPBND.PREOBBTCONT",      opt::value<bool>(&MINLPPRE.OBBTCONT),                 "continuous relaxation for optimization-based bounds tighteneting during presolve" )
-    ( "MINLPBND.PREOBBTMAX",       opt::value<unsigned>(&MINLPPRE.OBBTMAX),              "maximum rounds of optimization-based bounds tighteneting during presolve" )
+    ( "MINLPBND.PREOBBTMAX",       opt::value<unsigned>(&MINLPPRE.OBBTMAX),              "maximal number of optimization-based bounds tighteneting iterations during presolve" )
     ( "MINLPBND.PREOBBTTHRES",     opt::value<double>(&MINLPPRE.OBBTTHRES),              "threshold for optimization-based bounds tighteneting repeats during presolve" )
     ( "MINLPBND.PREOBBTBKOFF",     opt::value<double>(&MINLPPRE.OBBTBKOFF),              "backoff for optimization-based bounds tighteneting during presolve" )
-    ( "MINLPBND.PREOBBTMIG",       opt::value<double>(&MINLPPRE.OBBTMIG),                "minimum range for optimization-based bounds tighteneting during presolve" )
-    ( "MINLPBND.PRERELAXQUAD",     opt::value<bool>(&MINLPPRE.POLIMG.RELAX_QUAD),        "linearize quadratic terms during presolve" )
-    ( "MINLPBND.PRERELAXMONOM",    opt::value<int>(&MINLPPRE.POLIMG.RELAX_MONOM),        "linearize monomial terms during presolve" )
-    ( "MINLPBND.PRERELAXNLIN",     opt::value<bool>(&MINLPPRE.POLIMG.RELAX_NLIN),        "linearize nonlinear terms during presolve" )
+    ( "MINLPBND.PREOBBTMIG",       opt::value<double>(&MINLPPRE.OBBTMIG),                "minimal variable range for optimization-based bounds tighteneting during presolve" )
     ( "MINLPBND.PREMIPPRESOLVE",   opt::value<int>(&MINLPPRE.MIPSLV.PRESOLVE),           "presolve level in MIP solver during presolve" )
     ( "MINLPBND.PREMIPWARMSTART",  opt::value<int>(&MINLPPRE.MIPSLV.LPWARMSTART),        "use of warm start information for LP optimization during presolve" )
     ( "MINLPBND.PREMIPRELGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPABSGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPHEURISTICS", opt::value<double>(&MINLPPRE.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics during presolve" )
     ( "MINLPBND.PREMIPNUMERIC",    opt::value<int>(&MINLPPRE.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver during presolve" )
-    ( "MINLPBND.PREMIPSCALE",      opt::value<int>(&MINLPPRE.MIPSLV.SCALEFLAG),           "control of model scaling by MIP solver during presolve" )
+    ( "MINLPBND.PREMIPSCALE",      opt::value<int>(&MINLPPRE.MIPSLV.SCALEFLAG),          "control of model scaling by MIP solver during presolve" )
     ( "MINLPBND.PREMIPDISPLEVEL",  opt::value<int>(&MINLPPRE.MIPSLV.DISPLEVEL),          "display level of MIP solver during presolve" )
     ( "MINLPBND.PREMIPOUTPUTFILE", opt::value<std::string>(&MINLPPRE.MIPSLV.OUTPUTFILE), "output file for MIP model during presolve" )
     ( "MINLPBND.PREMIPMAXTHREAD",  opt::value<unsigned>(&MINLPPRE.MIPSLV.THREADS),       "number of threads used by MIP solver during presolve" )
 //
-    ( "MINLPBND.REFORMMETH",    opt::value<unsigned>(&_MINLPBND_REFORMMETH),            "reformulation approach prior to relaxation" )
-    ( "MINLPBND.RELAXMETH",     opt::value<unsigned>(&_MINLPBND_RELAXMETH),             "polyhedral relaxation approach" )
-    ( "MINLPBND.RELAXQUAD",     opt::value<bool>(&MINLPBND.POLIMG.RELAX_QUAD),          "linearize quadratic terms" )
-    ( "MINLPBND.RELAXMONOM",    opt::value<int>(&MINLPBND.POLIMG.RELAX_MONOM),          "linearize monomial terms" )
-    ( "MINLPBND.RELAXNLIN",     opt::value<bool>(&MINLPBND.POLIMG.RELAX_NLIN),          "linearize nonlinear terms" )
-    ( "MINLPBND.SUBSETDRL",     opt::value<unsigned>(&MINLPBND.SUBSETDRL),              "exclude functions from decomposition-relaxation-linearization" )
-    ( "MINLPBND.SUBSETSCQ",     opt::value<unsigned>(&MINLPBND.SUBSETSCQ),              "exclude functions from quadratization" )
+    ( "MINLPBND.RETAINQUAD",    opt::value<bool>(&MINLPBND.POLIMG.ALLOW_QUAD),          "retain quadratic terms in MIP relaxation" )
+    ( "MINLPBND.RETAINDISJ",    opt::value<bool>(&_MINLPBND_ALLOW_DISJ),                "retain disjunctive terms (abs,min,max) in MIP relaxation" )
+    ( "MINLPBND.RETAINNLIN",    opt::value<unsigned>(&_MINLPBND_ALLOW_NLIN),            "retain nonlinear terms (sqrt,pow,exp,log,cos,sin,tan,tanh,...) in MIP relaxation" )
     ( "MINLPBND.BCHPRIM",       opt::value<unsigned>(&MINLPBND.BCHPRIM),                "Set higher branch priority to original variables" )
     ( "MINLPBND.OBBTLIN",       opt::value<unsigned>(&MINLPBND.OBBTLIN),                "optimization-based bounds tighteneting approach" )
     ( "MINLPBND.OBBTCONT",      opt::value<bool>(&MINLPBND.OBBTCONT),                   "continuous relaxation for optimization-based bounds tighteneting" )
-    ( "MINLPBND.OBBTMAX",       opt::value<unsigned>(&MINLPBND.OBBTMAX),                "maximum rounds of optimization-based bounds tighteneting" )
+    ( "MINLPBND.OBBTMAX",       opt::value<unsigned>(&MINLPBND.OBBTMAX),                "maximal number of optimization-based bounds tighteneting iterations" )
     ( "MINLPBND.OBBTTHRES",     opt::value<double>(&MINLPBND.OBBTTHRES),                "threshold for optimization-based bounds tighteneting repeats" )
     ( "MINLPBND.OBBTBKOFF",     opt::value<double>(&MINLPBND.OBBTBKOFF),                "backoff for optimization-based bounds tighteneting" )
-    ( "MINLPBND.OBBTMIG",       opt::value<double>(&MINLPBND.OBBTMIG),                  "minimum range for optimization-based bounds tighteneting" )
-    ( "MINLPBND.CPMAX",         opt::value<unsigned>(&MINLPBND.CPMAX),                  "maximum rounds of constraint propagation" )
+    ( "MINLPBND.OBBTMIG",       opt::value<double>(&MINLPBND.OBBTMIG),                  "minimal variable range for optimization-based bounds tighteneting" )
+    ( "MINLPBND.CPMAX",         opt::value<unsigned>(&MINLPBND.CPMAX),                  "maximal number of constraint propagation iterations" )
     ( "MINLPBND.CPTHRES",       opt::value<double>(&MINLPBND.CPTHRES),                  "threshold for constraint propagation repeats" )
-    ( "MINLPBND.CMODPROP",      opt::value<unsigned>(&MINLPBND.CMODPROP),               "maximum order of sparse polynomial model" )
-    ( "MINLPBND.MONMIG",        opt::value<double>(&MINLPBND.CMODEL.MIN_FACTOR),        "monomial minimal coefficient in sparse polynomial model" )
-    ( "MINLPBND.MONBASIS",      opt::value<int>(&MINLPBND.SQUAD.BASIS),                 "monomial basis in sparse quadratic form" )
     ( "MINLPBND.MONORDER",      opt::value<int>(&MINLPBND.SQUAD.ORDER),                 "monomial processing order in sparse quadratic form" )
-    ( "MINLPBND.MONSCALE",      opt::value<bool>(&MINLPBND.MONSCALE),                   "monomial scaling in sparse quadratic form" )
+    ( "MINLPBND.MONOPTIM",      opt::value<unsigned>(&_MINLPBND_QUADOPTIM),             "monomial minimisation in sparse quadratic form" )
     ( "MINLPBND.REDQUADCUTS",   opt::value<bool>(&MINLPBND.SQUAD.REDUC),                "add redundant cuts within quadratisation" )
     ( "MINLPBND.PSDQUADCUTS",   opt::value<unsigned>(&MINLPBND.PSDQUADCUTS),            "add PSD cuts within quadratisation" )
-    ( "MINLPBND.DCQUADCUTS",    opt::value<bool>(&MINLPBND.DCQUADCUTS),                 "add DC cuts within quadratisation" )
-    ( "MINLPBND.RRLTCUTS",      opt::value<bool>(&MINLPBND.RRLTCUTS),                   "add reduced RLT cuts" )
-    ( "MINLPBND.NCOCUTS",       opt::value<bool>(&MINLPBND.NCOCUTS),                    "add NCO cuts" )
-    ( "MINLPBND.NCOADIFF",      opt::value<unsigned>(&MINLPBND.NCOADIFF),               "NCO cut generation method" )
     ( "MINLPBND.LINCTRSEP",     opt::value<bool>(&MINLPBND.LINCTRSEP),                  "separate linear constraints during relaxation" )
     ( "MINLPBND.AGGREGLQ",      opt::value<bool>(&MINLPBND.POLIMG.AGGREG_LQ),           "keep linear and quadratic expressions aggregated" )
     ( "MINLPBND.SANDWICHRTOL",  opt::value<double>(&MINLPBND.POLIMG.SANDWICH_RTOL),     "relative tolerance in outer-approximation of univariate terms" )
@@ -1258,30 +1394,35 @@ MINLGO<T,NLP,MIP>::Options::Options()
     ;
 }
 
-template <typename T, typename NLP, typename MIP>
-inline typename MINLGO<T,NLP,MIP>::Options&
-MINLGO<T,NLP,MIP>::Options::operator=
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline typename MINLGO<T,NLP,MIP,ExtOps...>::Options&
+MINLGO<T,NLP,MIP,ExtOps...>::Options::operator=
 ( Options const& other )
 {
-  PRESOLVE   = other.PRESOLVE;
-  CORRINC    = other.CORRINC;
-  CUTINC     = other.CUTINC;
-  BKPTINC    = other.BKPTINC;
-  FEASTOL    = other.FEASTOL;
-  CVATOL     = other.CVATOL;
-  CVRTOL     = other.CVRTOL;
-  MAXITER    = other.MAXITER;
-  TIMELIMIT  = other.TIMELIMIT;
-  DISPLEVEL  = other.DISPLEVEL;
-  MINLPSLV   = other.MINLPSLV;
-  MINLPBND   = other.MINLPBND;
-  MINLPPRE   = other.MINLPPRE;       
+  GAMSEXPORT       = other.GAMSEXPORT;
+  PRESOLVE         = other.PRESOLVE;
+  REFORM           = other.REFORM;
+  REDCUTS          = other.REDCUTS;
+  CORRINC          = other.CORRINC;
+  INIINC           = other.INIINC;
+  CUTINC           = other.CUTINC;
+  BKPTINC          = other.BKPTINC;
+  FEASTOL          = other.FEASTOL;
+  CVATOL           = other.CVATOL;
+  CVRTOL           = other.CVRTOL;
+  MAXITER          = other.MAXITER;
+  TIMELIMIT        = other.TIMELIMIT;
+  DISPLEVEL        = other.DISPLEVEL;
+  PRETIMELIMIT     = other.PRETIMELIMIT;
+  MINLPSLV         = other.MINLPSLV;
+  MINLPBND         = other.MINLPBND;
+  MINLPPRE         = other.MINLPPRE;       
   return *this;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::Options::read
+MINLGO<T,NLP,MIP,ExtOps...>::Options::read
 ( std::string const& optionfilename, std::ofstream&logfile, std::ostream&os )
 {
   if( !read( optionfilename, os ) ) return false;
@@ -1294,9 +1435,9 @@ MINLGO<T,NLP,MIP>::Options::read
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
-MINLGO<T,NLP,MIP>::Options::read
+MINLGO<T,NLP,MIP,ExtOps...>::Options::read
 ( std::string const& optionfilename, std::ostream&os )
 {
   std::ifstream optionfile( optionfilename.c_str() );
@@ -1319,49 +1460,39 @@ MINLGO<T,NLP,MIP>::Options::read
     return false;
   }
 
-  if( _USRMAP.count( "MINLPBND.REFORMMETH" ) )
-    MINLPBND.REFORMMETH.clear();
-    switch( _MINLPBND_REFORMMETH ){
-      default:
-      case 2: MINLPBND.REFORMMETH.insert( MINLPBND.QUAD ); // no break
-      case 1: MINLPBND.REFORMMETH.insert( MINLPBND.NPOL );
-              MINLPPRE.REFORMMETH.insert( MINLPBND.NPOL ); break;
-      case 0: break;
-    }
-    
-  if( _USRMAP.count( "MINLPBND.RELAXMETH" ) )
-    MINLPBND.RELAXMETH.clear();
-    switch( _MINLPBND_RELAXMETH ){
-      default:
-      case 0: MINLPBND.RELAXMETH.insert( MINLPBND.DRL ); break;
-      case 1: MINLPBND.RELAXMETH.insert( MINLPBND.SCQ ); break;
-      case 2: MINLPBND.RELAXMETH.insert( { MINLPBND.DRL, MINLPBND.SCQ } ); break;
+  if( _USRMAP.count( "REDCUTS" ) ){
+    MINLPBND.SRED.ORDER = (REDCUTS>=0? REDCUTS: -REDCUTS);
+    MINLPBND.SRED.NODIV = (REDCUTS>=0? 1: 0 );
+  }
+
+  if( _USRMAP.count( "MINLPBND.RETAINDISJ" ) )
+    MINLPBND.POLIMG.ALLOW_DISJ.clear();
+    switch( _MINLPBND_ALLOW_DISJ ){
+      case 1: MINLPBND.POLIMG.ALLOW_DISJ.insert( {FFOp::FABS, FFOp::FSTEP, FFOp::MINF, FFOp::MAXF} ); // no break
+      default: break;
     }
 
-  if( _USRMAP.count( "MINLPPRE.RELAXMETH" ) )
-    MINLPPRE.RELAXMETH.clear();
-    switch( _MINLPPRE_RELAXMETH ){
-      default:
-      case 0: MINLPPRE.RELAXMETH.insert( MINLPPRE.DRL ); break;
-      case 1: MINLPPRE.RELAXMETH.insert( MINLPPRE.SCQ ); break;
-      case 2: MINLPPRE.RELAXMETH.insert( { MINLPPRE.DRL, MINLPPRE.SCQ } ); break;
+  if( _USRMAP.count( "MINLPBND.RETAINNLIN" ) )
+    MINLPBND.POLIMG.ALLOW_NLIN.clear();
+    switch( _MINLPBND_ALLOW_NLIN ){
+      case 2: MINLPBND.POLIMG.ALLOW_NLIN.insert( {FFOp::FABS, FFOp::FSTEP, FFOp::MINF, FFOp::MAXF} ); // no break
+      case 1: MINLPBND.POLIMG.ALLOW_NLIN.insert( {FFOp::IPOW, FFOp::DPOW, FFOp::CHEB, FFOp::SQRT, FFOp::EXP,  FFOp::LOG,
+                                                  FFOp::COS,  FFOp::SIN,  FFOp::TAN,  FFOp::ACOS, FFOp::ASIN, FFOp::ATAN, 
+                                                  FFOp::TANH} ); // no break
+      default: break;
     }
 
-  if( _USRMAP.count( "MINLPBND.BCHPRIM"      ) ) MINLPPRE.BCHPRIM                = MINLPBND.BCHPRIM;
-  if( _USRMAP.count( "MINLPBND.MIPPWLRELGAP" ) ) MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP;
+  if( _USRMAP.count( "MINLPBND.MONOPTIM" ) )
+    switch( _MINLPBND_QUADOPTIM ){
+      case 2:  MINLPBND.QUADOPTIM = 1; MINLPBND.SQUAD.MIPFIXEDBASIS = 0; break;
+      case 1:  MINLPBND.QUADOPTIM = 1; MINLPBND.SQUAD.MIPFIXEDBASIS = 1; break;
+      default: MINLPBND.QUADOPTIM = 0; break;
+    }
+
   if( _USRMAP.count( "MINLPBND.CPMAX"        ) ) MINLPPRE.CPMAX                  = MINLPBND.CPMAX;
   if( _USRMAP.count( "MINLPBND.CPTHRES"      ) ) MINLPPRE.CPTHRES                = MINLPBND.CPTHRES;
-  if( _USRMAP.count( "MINLPBND.CMODPROP"     ) ) MINLPPRE.CMODPROP               = MINLPBND.CMODPROP;
-  if( _USRMAP.count( "MINLPBND.MONMIG"       ) ) MINLPPRE.CMODEL.MIN_FACTOR      = MINLPBND.CMODEL.MIN_FACTOR;
-  if( _USRMAP.count( "MINLPBND.MONBASIS"     ) ) MINLPPRE.SQUAD.BASIS            = MINLPBND.SQUAD.BASIS;
   if( _USRMAP.count( "MINLPBND.MONORDER"     ) ) MINLPPRE.SQUAD.ORDER            = MINLPBND.SQUAD.ORDER;
-  if( _USRMAP.count( "MINLPBND.MONSCALE"     ) ) MINLPPRE.MONSCALE               = MINLPBND.MONSCALE;
-  if( _USRMAP.count( "MINLPBND.REDQUADCUTS"  ) ) MINLPPRE.SQUAD.REDUC            = MINLPBND.SQUAD.REDUC;
-  if( _USRMAP.count( "MINLPBND.PSDQUADCUTS"  ) ) MINLPPRE.PSDQUADCUTS            = MINLPBND.PSDQUADCUTS;
-  if( _USRMAP.count( "MINLPBND.DCQUADCUTS"   ) ) MINLPPRE.DCQUADCUTS             = MINLPBND.DCQUADCUTS;
-  if( _USRMAP.count( "MINLPBND.RRLTCUTS"     ) ) MINLPPRE.RRLTCUTS               = MINLPBND.RRLTCUTS;
-  if( _USRMAP.count( "MINLPBND.NCOCUTS"      ) ) MINLPPRE.NCOCUTS                = MINLPBND.NCOCUTS;
-  if( _USRMAP.count( "MINLPBND.NCOADIFF"     ) ) MINLPPRE.NCOADIFF               = MINLPBND.NCOADIFF;
+  if( _USRMAP.count( "MINLPBND.MONOPTIM"     ) ) MINLPPRE.QUADOPTIM              = MINLPBND.QUADOPTIM;
   if( _USRMAP.count( "MINLPBND.LINCTRSEP"    ) ) MINLPPRE.LINCTRSEP              = MINLPBND.LINCTRSEP;
   if( _USRMAP.count( "MINLPBND.AGGREGLQ"     ) ) MINLPPRE.POLIMG.AGGREG_LQ       = MINLPBND.POLIMG.AGGREG_LQ;
   if( _USRMAP.count( "MINLPBND.SANDWICHRTOL" ) ) MINLPPRE.POLIMG.SANDWICH_RTOL   = MINLPBND.POLIMG.SANDWICH_RTOL;
@@ -1370,13 +1501,15 @@ MINLGO<T,NLP,MIP>::Options::read
   return true;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLGO<T,NLP,MIP>::Options::display
+MINLGO<T,NLP,MIP,ExtOps...>::Options::display
 ( std::ostream&os ) const
 {
   // Display MINLGO Options
   os << std::left;
+  os << std::setw(60) << "  GAMS MODEL EXPORT FILE"
+     << (GAMSEXPORT.empty()? "-": GAMSEXPORT) << std::endl;
   os << std::setw(60) << "  CONVERGENCE ABSOLUTE TOLERANCE"
      << std::scientific << std::setprecision(1)
      << CVATOL << std::endl;
@@ -1388,23 +1521,32 @@ MINLGO<T,NLP,MIP>::Options::display
      << FEASTOL << std::endl;
   os << std::setw(60) << "  FEASIBILITY CORRECTION"
      << (CORRINC?'Y':'N') << std::endl;
+  os << std::setw(60) << "  PRESOLVE LEVEL"
+     << PRESOLVE << std::endl;
+  os << std::setw(60) << "  PRESOLVE TIME LIMIT (SEC)"
+     << std::scientific << std::setprecision(1)
+     << PRETIMELIMIT << std::endl;
+  os << std::setw(60) << "  REFORMULATION LEVEL"
+     << REFORM << std::endl;
+  os << std::setw(60) << "  REDUNDANT CUTS"
+     << REDCUTS << std::endl;
+  os << std::setw(60) << "  INCUMBENT INITALIZATION"
+     << (INIINC?'Y':'N') << std::endl;
   os << std::setw(60) << "  INCUMBENT CUT"
      << (CUTINC?'Y':'N') << std::endl;
   os << std::setw(60) << "  INCUMBENT BREAKPOINT"
      << (BKPTINC?'Y':'N') << std::endl;
   os << std::setw(60) << "  MAXIMAL ITERATIONS"
      << MAXITER << std::endl;
-  os << std::setw(60) << "  PRESOLVE LEVEL"
-     << PRESOLVE << std::endl;
   os << std::setw(60) << "  TIME LIMIT (SEC)"
      << std::scientific << std::setprecision(1)
      << TIMELIMIT << std::endl;
 }
 
-template <typename T, typename NLP, typename MIP>
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline std::ostream&
 operator <<
-( std::ostream & os, MINLGO<T,NLP,MIP> const& MINLP )
+( std::ostream & os, MINLGO<T,NLP,MIP,ExtOps...> const& MINLP )
 {
   os << std::right << std::endl
      << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ')
@@ -1418,9 +1560,9 @@ operator <<
   return os;
 }
 
-//template <typename T, typename NLP, typename MIP>
+//template <typename T, typename NLP, typename MIP, typename... ExtOps>
 //inline const double*
-//MINLGO<T,NLP,MIP>::_get_SLVLOC
+//MINLGO<T,NLP,MIP,ExtOps...>::_get_SLVLOC
 //( const SOLUTION_OPT&locopt )
 //{
 //  //std::cout << locopt.n << " =?= " << BASE_NLP::_var.size() << " + " << BASE_NLP::_dep.size() << std::endl; 

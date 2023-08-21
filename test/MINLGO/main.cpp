@@ -3,7 +3,7 @@
 //#define MC__MINLGO_SETUP_DEBUG
 //#define MC__MINLGO_PREPROCESS_DEBUG
 //#define MC__MINLGO_DEBUG
-#define MC__MINLPBND_SHOW_REDUC
+//#define MC__MINLPBND_SHOW_REDUC
 //#define MC__MINLPBND_DEBUG_SQ
 //#define MC__MINLPBND_DEBUG_DRL
 //#define MC__REVAL_DEBUG
@@ -49,10 +49,10 @@
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT NLP;
+ typedef mc::NLPSLV_SNOPT<> NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT NLP;
+ typedef mc::NLPSLV_IPOPT<> NLP;
 #endif
 
 #include "minlgo.hpp"
@@ -82,10 +82,10 @@ int main()
 #ifdef READ_GAMS
   MINLP.options.read( "canon.opt" );
   // List of GAMS files:
-  // doxydoc.gms ex1221.gms ex1222.gms ex1252a.gms transswitch0009r.gms nvs05.gms
+  // doxydoc.gms ex1221.gms ex1222.gms ex1252a.gms transswitch0009r.gms nvs01.gms nvs05.gms
   // batch0812.gms batch_nc.gms jit1.gms ex7_2_2.gms packing.gms bernasconi.40.5.gms
   // tuncphd_30.gms kriging_peaks-red010.gms st_e06.gms ex14_1_5.gms hybriddynamic_varcc.gms
-  std::string gamsfile( "nvs01.gms"); 
+  std::string gamsfile( "tuncphd_30.gms"); 
   if( !MINLP.read( gamsfile, true ) ){
     std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
     return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
@@ -130,6 +130,7 @@ int main()
   ////////////////////////////////////////////////////////////
   // OPTIMIZE MODEL
 
+  std::cout << MINLP;
   MINLP.setup();
   std::ostream& os = std::cout;
   int flag = MINLP.presolve( nullptr, nullptr, os ); 
@@ -153,17 +154,10 @@ int main()
       break;
   }
   //return flag;
-  
+  MINLP.GAMSexport( false, os );
   flag = MINLP.optimize( os ); 
   if( MINLP.options.DISPLEVEL >= 1 )
     MINLP.stats.display();
 
   return flag;  
-
-//  MINLP.setup();
-//  MINLP.presolve();
-//  MINLP.optimize();
-//  MINLP.stats.display();
-// 
-//  return 0;
 }

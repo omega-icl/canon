@@ -152,7 +152,6 @@ public:
   typedef SElimEnv<ExtOps...> t_elim;
   typedef AEBND<T,ExtOps...> t_aebnd;
 
-  using BASE_AE<ExtOps...>::set;
   using BASE_AE<ExtOps...>::dag;
   using BASE_AE<ExtOps...>::set_dag;
   using BASE_AE<ExtOps...>::par;
@@ -172,6 +171,7 @@ public:
   using BASE_AE<ExtOps...>::add_sys;
   using BASE_AE<ExtOps...>::reset_sys;
 
+  using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
 
@@ -288,6 +288,8 @@ protected:
   std::vector<T>            _CPbnd;
   //! @brief Storage vector for interval arithmetic
   std::vector<T>            _Iwk;
+  //! @brief Storage vector for real arithmetic
+  std::vector<double>       _dwk;
 
   //! @brief Worst dependence type in participating expressions
   FFDep::TYPE               _pbclass;
@@ -310,9 +312,9 @@ protected:
   std::vector<T>            _bndDep;
   
   //! @brief Storage vector for polynomial variables in flattening
-  std::vector<t_ffpoly> _SPXvar;
+  std::vector<t_ffpoly>     _SPXvar;
   //! @brief Storage vector for polynomial functions in flattening
-  std::vector<t_ffpoly> _SPFvar;
+  std::vector<t_ffpoly>     _SPFvar;
 
 public:
 
@@ -482,6 +484,16 @@ public:
     { return _Fvar; }
 
   //! @brief Get vector of variable bounds
+  std::vector<double> const& variable_initials
+    ()
+    const
+    { return _Xini; }
+
+  //! @brief Update variable initial values
+  //bool update_initials
+  //  ( double const* Xini, std::ostream& os );
+
+  //! @brief Get vector of variable bounds
   std::vector<T> const& variable_bounds
     ()
     const
@@ -499,7 +511,7 @@ public:
 
   //! @brief Lift polynomial subexpressions in cost and constraints
   bool lift_polynomial_subexpressions
-    ( bool const add2dag, std::ostream& os = std::cout );
+    ( bool const add2dag, std::ostream& os=std::cout );
 
   //! @brief Flatten linear cost and constraint functions
   bool flatten_linear_functions
@@ -515,19 +527,19 @@ public:
 
   //! @brief Quadratize polynomial subexpressions in cost and constraints
   bool quadratize_polynomial_functions
-    ( bool const add2dag, std::ostream& os = std::cout );
+    ( bool const add2dag, std::ostream& os=std::cout );
 
   //! @brief Append reduction polynomial constraints
   bool append_reduction_constraints
-    ( bool const add2dag, std::ostream& os = std::cout );
+    ( bool const add2dag, std::ostream& os=std::cout );
 
   //! @brief Eliminate variables from invertible equality constraints
   bool eliminate_invertible_constraints
-    ( bool const add2dag, std::ostream& os = std::cout );
+    ( bool const add2dag, std::ostream& os=std::cout );
 
   //! @brief export reformulated optimization model to GAMS file
   bool export_model
-    ( std::string const gmsfile, double const* Xinc=nullptr );
+    ( std::string const gmsfile, double const* Xinc=nullptr, std::ostream& os=std::cout );
 
 protected:
 
@@ -535,10 +547,31 @@ protected:
   int _propagate_bounds
     ();
 
-private:
+  //! @brief MINLPBND computational statistics
+  static struct Stats{
+    //! @brief Get current time point
+    static std::chrono::time_point<std::chrono::system_clock> start
+      ()
+      { return std::chrono::system_clock::now(); }
+    //! @brief Get current time lapse with respect to start time point
+    static std::chrono::microseconds walltime
+      ( std::chrono::time_point<std::chrono::system_clock> const& start )
+      { return std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::system_clock::now() - start ); }    
+    //! @brief Convert microsecond ticks to time
+    static double to_time
+      ( std::chrono::microseconds t )
+      { return t.count() * 1e-6; }
+  } stats;
 
   //! @brief Time point to enable TIMELIMIT option
-  //std::chrono::time_point<std::chrono::system_clock> _tstart;
+  std::chrono::time_point<std::chrono::system_clock> _tstart;
+
+private:
+
+  //! @brief Update MINLPREF options
+  virtual void _update_options
+    ()
+    {};
 
   //! @brief Set linear/nonlinear participating variables in functions
   void _update_model
@@ -882,7 +915,9 @@ bool
 MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
 ( bool const add2dag, std::ostream& os )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
   if( _Fgal.empty() ) return false;
+  _update_options(); // virtual function
 
   _SLenv.set( _dag );
   _SLenv.options = options.SLIFT;
@@ -1006,6 +1041,8 @@ inline bool
 MINLPREF<T,ExtOps...>::flatten_linear_functions
 ( bool const add2dag )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _update_options(); // virtual function
   return _flatten_functions( _Flin, add2dag );
 }
 
@@ -1014,6 +1051,8 @@ inline bool
 MINLPREF<T,ExtOps...>::flatten_quadratic_functions
 ( bool const add2dag )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _update_options(); // virtual function
   return _flatten_functions( _Fquad, add2dag );
 }
 
@@ -1022,6 +1061,8 @@ inline bool
 MINLPREF<T,ExtOps...>::flatten_polynomial_functions
 ( bool const add2dag )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _update_options(); // virtual function
   return _flatten_functions( _Fpol, add2dag );
 }
 
@@ -1030,6 +1071,10 @@ inline bool
 MINLPREF<T,ExtOps...>::quadratize_polynomial_functions
 ( bool const add2dag, std::ostream& os )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _tstart = stats.start();
+  _update_options(); // virtual function
+    
   // Flatten quadratic and polynomial expressions
   std::set<unsigned> Ftpol = _Fpol;
   Ftpol.insert( _Fquad.cbegin(), _Fquad.cend() );
@@ -1058,6 +1103,7 @@ MINLPREF<T,ExtOps...>::quadratize_polynomial_functions
   if( options.QUADOPTIM ){
     if( options.DISPLEVEL )
       os << "# OPTIMIZING QUADRATIC DECOMPOSITION" << std::endl;
+    _SQenv.options.MIPTIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
     _SQenv.optimize( true );
   }
 #ifdef MC__MINLPREF_DEBUG_LIFT
@@ -1263,12 +1309,55 @@ const
     //default: return 2.*x*_insert_cheb(x,n-1)-_insert_cheb(x,n-2);
   }
 }
+/*
+template <typename T, typename... ExtOps>
+inline bool
+MINLPREF<T,ExtOps...>::update_initials
+( double const* Xini, std::ostream& os )
+{
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
 
+  // Update initial values
+  _Xini.resize( _nX, 0. ); // any NCO variable initialized to zero
+  for( unsigned i=0; Xini && i<_nX0; i++ )
+    _Xini[i] = Xini[i];
+
+  // Update subgraphs 
+  _set_subgraph( os );
+  
+  // Propagate initial values for lifted variables
+  unsigned j=0; 
+  bool noexcp = true;
+  for( auto const& [i,Fi] : _Xlift ){
+    try{
+      double Xi;
+#ifdef MC__MINLPREF_DEBUG_BOUNDS
+      _dag->output( _dag->subgraph( 1, &Fi ), " FOR LIFTED VARIABLE" );    
+#endif
+      _dag->eval( _Fops.at(_nF+j), _dwk, 1, &Fi, &Xi, _nX1, _Xvar.data(), _Xini.data() );
+#ifdef MC__MINLPREF_DEBUG_INITIALS
+      std::cout << "Xini[ " << i << "] = " << Xi << std::endl;
+#endif
+    }
+    catch(...){
+      // No cut added for function #j in case DAG evaluation failed
+      continue;
+      noexcp = false;
+    }
+    j++;
+  }
+
+  return noexcp;
+}
+*/
 template <typename T, typename... ExtOps>
 inline bool
 MINLPREF<T,ExtOps...>::update_bounds
 ( T const* X, double const* Finc, bool const resetbnd, std::ostream& os )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _update_options(); // virtual function
+
   // Variable bounds
   unsigned const nX0 = _Xbnd.size();
   _Xbnd.resize( _nX );
@@ -1296,12 +1385,12 @@ MINLPREF<T,ExtOps...>::update_bounds
       std::cout << "Xprop[ " << i << "] = " << Xi << std::endl;
 #endif
       if( !Op<T>::inter( _Xbnd[i], Xi, _Xbnd[i] ) ) return false;
-      j++;
     }
     catch(...){
       // No cut added for function #j in case DAG evaluation failed
       continue;
     }
+    j++;
   }
 
   // Function bounds
@@ -1356,6 +1445,7 @@ MINLPREF<T,ExtOps...>::propagate_bounds
 ( T const* X, double const* Finc, const bool resetbnd, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _update_options(); // virtual function
 
   // Update variable bounds
   if( !update_bounds( X, Finc, resetbnd, os ) ){
@@ -1384,6 +1474,7 @@ MINLPREF<T,ExtOps...>::_search_invertible_constraints
 
   _SEenv.set( _dag );
   _SEenv.options = options.SELIM;
+  _SEenv.options.MIPTIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
   _SEenv.process( _Fctreq, _Fvar.data() );//, true );
 #ifdef MC__MINLPREF_DEBUG_ELIM
   { std::cout << _SEenv << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
@@ -1464,8 +1555,12 @@ bool
 MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
 ( bool const add2dag, std::ostream& os )
 {
+  _update_options(); // virtual function
   if( options.DISPLEVEL )
     os << "# SEARCHING INVERTIBLE CONSTRAINTS" << std::endl;
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _tstart = stats.start();
+  
   _search_invertible_constraints( os );
   if( !add2dag ) return true;
   
@@ -1595,7 +1690,7 @@ MINLPREF<T,ExtOps...>::_search_reduction_constraints
 {
   if( _Fctreq.empty() ) return 0;
 
-  // Flatten linear, quadratic and polynomial expressions
+  // Map linear, quadratic and polynomial expressions
   std::set<unsigned> Ftpoleq = Ftpol;
   for( auto itpol=Ftpoleq.begin(); itpol!=Ftpoleq.end(); ){
     if( _Fctreq.count(*itpol) ){
@@ -1607,6 +1702,7 @@ MINLPREF<T,ExtOps...>::_search_reduction_constraints
 
   // Populate polynomial reduction problem and search
   _SRenv.options = options.SRED;
+  _SRenv.options.MIPTIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
   _SRenv.set_monomials( Ftpol, _SPFvar.data(), &t_ffpoly::mapmon );
   unsigned nred = _SRenv.search_reductions( Ftpoleq, _SPFvar.data(), &t_ffpoly::mapmon, options.REDELIM );
 //#ifdef MC__MINLPREF_DEBUG_RED
@@ -1622,9 +1718,12 @@ bool
 MINLPREF<T,ExtOps...>::append_reduction_constraints
 ( bool const add2dag, std::ostream& os )
 {
+  _update_options(); // virtual function
   if( options.DISPLEVEL )
     os << "# SEARCHING REDUCTION CONSTRAINTS" << std::endl;
-
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _tstart = stats.start();
+  
   std::set<unsigned> Ftpol = _Fpol;
   Ftpol.insert( _Fquad.cbegin(), _Fquad.cend() );
   Ftpol.insert( _Flin.cbegin(), _Flin.cend() );
@@ -1736,30 +1835,58 @@ template <typename T, typename... ExtOps>
 inline
 bool
 MINLPREF<T,ExtOps...>::export_model
-( std::string const gmsfile, double const* Xinc )
+( std::string const gmsfile, double const* Xstart, std::ostream& os )
 {
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _update_options(); // virtual function
   if( gmsfile.empty() ){
-    std::cout << std::endl << "# GAMS FILENAME UNSPECIFIED" << std::endl;
+    if( options.DISPLEVEL > 0 )
+      os << std::endl << "# GAMS FILENAME UNSPECIFIED" << std::endl;
     return false;
   }
-  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
 
   // Write relaxed model to GAMS file
   if( options.DISPLEVEL > 0 )
-    std::cout << std::endl << "# WRITING MODEL TO FILE: " << gmsfile << std::endl;
+    os << std::endl << "# WRITING MODEL TO FILE: " << gmsfile << std::endl;
   GAMSWRITER<T,ExtOps...> GMS;
-  for( unsigned i=0; i<_nX; i++ ){
-    if( Xinc && i<_nX0 )
-      GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], &Xinc[i] );
-    else if( !_Xini.empty() && i<_nX0 ) // issue is GAMS passes an initialization by default...
-      GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], &_Xini[i] );
-    else
-      GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
-  }
   typename GAMSWRITER<T,ExtOps...>::MODELTYPE type = (_Fgal.empty()&&_Fpol.empty()?
-                                               (_Fquad.empty()? GAMSWRITER<T,ExtOps...>::MODELTYPE::LIN:
-                                                                GAMSWRITER<T,ExtOps...>::MODELTYPE::QUAD):
-                                                                GAMSWRITER<T,ExtOps...>::MODELTYPE::NLIN);
+                                                     (_Fquad.empty()? GAMSWRITER<T,ExtOps...>::MODELTYPE::LIN:
+                                                                      GAMSWRITER<T,ExtOps...>::MODELTYPE::QUAD):
+                                                                      GAMSWRITER<T,ExtOps...>::MODELTYPE::NLIN);
+
+  //for( unsigned i=0; i<_nX; i++ ){
+  //  if( Xinc && i<_nX0 )
+  //    GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], &Xinc[i] );
+  //  else if( !_Xini.empty() && i<_nX0 ) // issue is GAMS passes an initialization by default...
+  //    GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], &_Xini[i] );
+  //  else
+  //    GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
+  //}
+  for( unsigned i=0; i<_nX0; i++ ){
+    GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], Xstart? &Xstart[i]: nullptr );
+#ifdef MC__MINLPREF_DEBUG_INITIALS
+    if( Xstart ) std::cout << "Xstart[ " << i << "] = " << Xstart[i] << std::endl;
+#endif
+  }
+  unsigned j=0; 
+  for( auto const& [i,Fi] : _Xlift ){
+    if( !Xstart )
+      GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
+    else{
+      try{
+        double Xi;
+        _dag->eval( _Fops.at(_nF+j), _dwk, 1, &Fi, &Xi, _nX0, _Xvar.data(), Xstart );
+        GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], &Xi );
+#ifdef MC__MINLPREF_DEBUG_INITIALS
+        std::cout << "Xstart[ " << i << "] = " << Xi << std::endl;
+#endif
+      }
+      catch(...){
+        GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
+      }
+      j++;
+    }
+  }
 
   GMS.set_functions( _dag, type, _nF, _Fvar.data(), _nX, _Xvar.data() );
   GMS.set_objective( 0, _objsense>0? BASE_OPT::MAX: BASE_OPT::MIN );
