@@ -13,7 +13,7 @@ CVRTOL        = 1e-3
 # Feasibility tolerance
 FEASTOL       = 1e-5
 # Search and append redundant polynomial cuts
-REDCUTS       = 1
+REDCUTS       = 0
 # Feasibility correction of incumbent
 CORRINC       = 1
 # Initialize relaxation at incumbent value
