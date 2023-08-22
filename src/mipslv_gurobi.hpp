@@ -838,14 +838,15 @@ MIPSLV_GUROBI<T>::_add_cut
             break;
 
           case FFOp::TANH:{
-            T bndx = 2.*_bndvar[0];
+            T bndx = 2. * _bndvar[1];
             GRBVar grbvarx = _GRBmodel->addVar( Op<T>::l(bndx), Op<T>::u(bndx), 0., GRB_CONTINUOUS );
-            _GRBmodel->addConstr( grbvarx, GRB_EQUAL, 2.*_cutvar[0] );
-            T bndy = Op<T>::tanh( bndx );
+            _GRBmodel->addConstr( grbvarx, GRB_EQUAL, 2.*_cutvar[1] );
+            T bndy = 0.5 * ( Op<T>::tanh( _bndvar[1] ) + 1. );
             GRBVar grbvary = _GRBmodel->addVar( Op<T>::l(bndy), Op<T>::u(bndy), 0., GRB_CONTINUOUS );
+            _GRBmodel->update();
             options.check_pwl( grbvarx, grbvary );
             _GRBmodel->addGenConstrLogistic( grbvarx, grbvary, "", options.pwl() );
-            _GRBmodel->addConstr( _cutvar[1], GRB_EQUAL, 2.*grbvary-1. );
+            _GRBmodel->addConstr( _cutvar[0], GRB_EQUAL, 2.*grbvary-1. );
             break;}
 
           case FFOp::FABS:

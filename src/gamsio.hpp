@@ -802,6 +802,12 @@ GAMSIO<ExtOps...>::_parse
             res = -xlog( stack.back() ); stack.pop_back();
             def = true;
             break;
+            
+          case fnsigmoid:
+            debugout << "sigmoid" << std::endl;
+            res = 0.5*(1+tanh(0.5*stack.back())); stack.pop_back();
+            def = true;
+            break;
 
           case fnsqrt:
             debugout << "sqrt" << std::endl;

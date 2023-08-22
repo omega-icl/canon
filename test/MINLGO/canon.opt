@@ -13,7 +13,7 @@ CVRTOL        = 1e-3
 # Feasibility tolerance
 FEASTOL       = 1e-5
 # Search and append redundant polynomial cuts
-REDCUTS       = 0
+REDCUTS       = 1
 # Feasibility correction of incumbent
 CORRINC       = 1
 # Initialize relaxation at incumbent value
@@ -24,7 +24,7 @@ CUTINC        = 0
 BKPTINC       = 0
 # Maximal number of refinements/iterations
 MAXITER       = 1
-#MAXITER       = 10
+#MAXITER       = 15
 # Wall-time limit in seconds
 TIMELIMIT     = 72e2
 # General display level
@@ -117,7 +117,7 @@ CPTHRES          = 0e0
 # Monomial processing order in sparse quadratic form - 0: increasing order; 1: decreasing order
 MONORDER         = 1
 # Monomial minimisation in sparse quadratic form - 0: none; 1: fixed basis; 2: full basis
-MONOPTIM         = 2
+MONOPTIM         = 0
 # Add redundant cuts within quadratisation
 REDQUADCUTS      = 0
 # Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
