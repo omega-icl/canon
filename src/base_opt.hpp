@@ -45,8 +45,8 @@ public:
 
 protected:
   //! @brief Private methods to block default compiler methods
-  BASE_OPT(const BASE_OPT&);
-  BASE_OPT& operator=(const BASE_OPT&);
+  BASE_OPT(const BASE_OPT&) = delete;
+  BASE_OPT& operator=(const BASE_OPT&) = delete;
 };
 
 inline double BASE_OPT::INF = 1E30;

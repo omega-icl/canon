@@ -17,6 +17,12 @@ main : main.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 doxydoc : doxydoc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
+test_tanh : test_tanh.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
+test_ANN : test_ANN.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
 

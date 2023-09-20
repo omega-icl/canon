@@ -241,7 +241,7 @@ protected:
   std::map< t_mon, FFVar, lt_mon > _Xmon;
 
   //! @brief Polyhedral image environment
-  PolImg<T>                 _POLenv;
+  PolImg< T, ExtOps... >    _POLenv;
   //! @brief Polyhedral image decision variables
   std::vector< PolVar<T> >  _POLXvar;
   //! @brief Polyhedral image auxiliary variables
@@ -316,7 +316,7 @@ public:
       POLIMG(), SCQUAD(), MIPSLV()
       { CMODEL.MIXED_IA        = true;
         CMODEL.MIG_ATOL        = 1e-13; // compatibility with GUROBI
-        POLIMG.BREAKPOINT_TYPE = PolImg<T>::Options::BIN;
+        POLIMG.BREAKPOINT_TYPE = PolImg<T,ExtOps...>::Options::BIN;
         MIPSLV.DISPLEVEL       = 0;
         MIPSLV.DUALRED         = 0;
         //MIPSLV.PRESOLVE        = 1;
@@ -401,7 +401,7 @@ public:
     //! @brief Set higher branch priority to primary variables (e.g. over auxiliary variables in quadratization)
     unsigned BCHPRIM;
     //! @brief PolImg (polyhedral relaxation) options
-    typename PolImg<T>::Options POLIMG;
+    typename PolImg<T,ExtOps...>::Options POLIMG;
     //! @brief SQuad options for quadratization of sparse Chebyshev models
     typename t_quad::Options SCQUAD;
     //! @brief Display
@@ -1125,9 +1125,11 @@ MINLPBND<T,MIP,ExtOps...>::update_polrelax
 
   // Update polyhedral dependent bounds
   for( unsigned i=0; i<_nF; i++ ){
-   T Fupdi = _Fbnd[i];
-    Op<T>::inter( Fupdi, _Fbnd[i], _POLFvar[i].range() );
-    _POLFvar[i].update( Fupdi );
+    T Fupdi = _Fbnd[i];
+    if( Op<T>::inter( Fupdi, _Fbnd[i], _POLFvar[i].range() ) )
+      _POLFvar[i].update( Fupdi );
+    else
+      _POLFvar[i].update( _Fbnd[i] );
   }
 
   stats.walltime_polimg += stats.walltime( tstart );
@@ -1196,7 +1198,10 @@ MINLPBND<T,MIP,ExtOps...>::_set_cuts_LIN
      // Update bounds of intermediate factors from constraint propagation results
      if( options.CPMAX ){
        _dag->wkextract( _Fops[j], _Iwk, _Fallops, _CPbnd );
-       for( unsigned i=0; i<_Iwk.size(); i++ ) _POLwk[i].update( _Iwk[i] );
+       //for( unsigned i=0; i<_Iwk.size(); i++ )
+       for( unsigned i=0; i<_Fops[j].len_tap-_Fops[j].len_wrk; i++ )
+          if( Op<T>::inter( _Iwk[i], _Iwk[i], _POLwk[i].range() ) ) // intersection needed for externals
+           _POLwk[i].update( _Iwk[i] );
      }
      // Generate cuts
      _POLenv.generate_cuts( 1, &_POLFvar[j], false );
@@ -1351,8 +1356,10 @@ MINLPBND<T,MIP,ExtOps...>::_set_cuts_DRL
       // Update bounds of intermediate factors from constraint propagation results
       if( options.CPMAX ){
         _dag->wkextract( _Fops[j], _Iwk, _Fallops, _CPbnd );
-        for( unsigned i=0; i<_Iwk.size(); i++ ){
-          _POLwk[i].update( _Iwk[i] );
+        //for( unsigned i=0; i<_Iwk.size(); i++ ){
+        for( unsigned i=0; i<_Fops[j].len_tap-_Fops[j].len_wrk; i++ ){
+          if( Op<T>::inter( _Iwk[i], _Iwk[i], _POLwk[i].range() ) ) // intersection needed for externals
+            _POLwk[i].update( _Iwk[i] );
 #ifdef MC__MINLPBND_DEBUG_DRL
           std::cout << _POLwk[i] << _POLwk[i].range() << _Iwk[i] << std::endl;
 #endif

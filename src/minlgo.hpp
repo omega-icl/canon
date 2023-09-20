@@ -113,6 +113,7 @@ namespace opt = boost::program_options;
 #include "nlpslv_snopt.hpp"
 #include "mipslv_gurobi.hpp"
 #include "minlpbnd.hpp"
+#include "sbbslv.hpp"
 
 namespace mc
 {
@@ -131,9 +132,11 @@ template < typename T=Interval,
 class MINLGO
 #if defined (MC__WITH_GAMS)
 : protected virtual GAMSIO<ExtOps...>,
+  protected SBBSLV<T>,
   public virtual BASE_NLP<ExtOps...>
 #else
-: public virtual BASE_NLP<ExtOps...>
+: protected SBBSLV<T>,
+  public virtual BASE_NLP<ExtOps...>
 #endif
 {
 protected:
@@ -211,6 +214,15 @@ public:
     Options& operator=
       ( Options const& other );
 
+    //! @brief Global search strategy
+    enum METHOD{
+      ROOT=0,	//!< Solve root-node only
+      PWR,	//!< Piecewise relaxation hierarchy
+      SBB	//!< Spatial branch-and-bound
+    };
+
+    //! @brief Global search strategy
+    int         STRATEGY;
     //! @brief Export GAMS model after preprocessing
     std::string GAMSEXPORT;
     //! @brief Level of preprocessing
@@ -235,7 +247,7 @@ public:
     double      CVATOL;
     //! @brief Convergence relative tolerance
     double      CVRTOL;
-    //! @brief Maximum number of outer-approximation iterations (0-no limit)
+    //! @brief Maximum number of iterations in complete-search algorithim (0-no limit)
     unsigned    MAXITER;
     //! @brief Maximum run time (seconds)
     double      TIMELIMIT;
@@ -276,8 +288,6 @@ public:
     unsigned    _MINLPBND_ALLOW_NLIN;
     bool        _MINLPBND_ALLOW_DISJ;
     unsigned    _MINLPBND_QUADOPTIM;
-//    unsigned    _MINLPBND_RELAXMETH;
-//    unsigned    _MINLPPRE_RELAXMETH;
   } options;
 
   //! @brief Class managing exceptions for MINLGO
@@ -287,6 +297,7 @@ public:
     //! @brief Enumeration type for MINLGO exception handling
     enum TYPE{
       SETUP,		//!< Incomplete setup before a solve
+      STRATEGY,		//!< Invalid global search strategy
       INTERN=-33	//!< Internal error
     };
     //! @brief Constructor for error <a>ierr</a>
@@ -298,7 +309,10 @@ public:
       switch( _ierr ){
       case SETUP:
         return "MINLGO::Exceptions  Incomplete setup before a solve";
-      case INTERN: default:
+      case STRATEGY:
+        return "MINLGO::Exceptions  Invalid global search strategy";
+      case INTERN:
+      default:
         return "MINLGO::Exceptions  Internal error";
       }
     }
@@ -419,6 +433,14 @@ protected:
   //! @brief Time point to enable TIMELIMIT option
   std::chrono::time_point<std::chrono::system_clock> _tstart;
 
+  //! @brief Set SBBSLV solver options
+  void _set_options_sbbslv
+    ();
+
+  //! @brief Solve optimization model using piecewise relaxation hierarchy
+  int _optimize_pwr
+    ( std::ostream& os=std::cout );
+
     //! @brief Test whether a variable vector is integer feasible
   bool _is_integer_feasible
     ( double const* Xval, double const& feastol )
@@ -451,23 +473,32 @@ protected:
 
   //! @brief Display current buffer stream and reset it
   void _display_flush
-    ( std::ostream& os=std::cout );
+    ( std::ostream& os );
 
   //! @brief Finalize optimization display and status
   int _finalize
-    ( STATUS const status, std::ostream& os=std::cout );
+    ( STATUS const status, std::ostream& os );
+
+  //! @brief Test feasibility
+  bool _test_feasible
+    ( double const* Xini, std::ostream& os );
 
   //! @brief Solve local NLP subproblem
   bool _solve_local
-    ( double const* Xini, T const* Xbnd, std::ostream& os=std::cout );
-      
+    ( double const* Xini, T const* Xbnd, bool const mstart, std::ostream& os );
+
+  //! @brief Bound reduction subproblem
+  int _reduce_bounds
+    ( T* Xbnd, double const* Zinc, bool const reset, bool const reinit, std::ostream& os );
+
   //! @brief Solve relaxed MIP subproblem   
   int _solve_relax
-    ( std::ostream& os=std::cout );
+    ( T const* Xbnd, double const* Zinc, double const* pinc, bool const reinit, std::ostream& os );
+    //( std::ostream& os );
       
   //! @brief Export relaxed MIP subproblem   
   bool _export_relax
-    ( std::ostream& os=std::cout );
+    ( std::ostream& os );
       
   //! @brief Convergence test for piecewise-linear relaxation approach 
   bool _converged
@@ -479,6 +510,10 @@ protected:
     ()
     const;
 
+  //! @brief User-function to subproblems in SBB
+  typename SBBSLV<T>::STATUS subproblems
+    ( typename SBBSLV<T>::TASK const task, SBBNode<T>* node,
+      std::vector<double>& p, double& f, double const& INC, std::ostream& os );
 
 public:
 
@@ -848,7 +883,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::GAMSexport
 ( bool const relax, std::ostream& os )
 {
   if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
-  //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
+  //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED, os );
 
   // Check GAMS export filename
   std::string extfile = std::filesystem::path(options.GAMSEXPORT).extension();
@@ -873,7 +908,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
 ( std::ostream& os )
 {
   if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
-  //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED );
+  //if( !_isbnd ) return _finalize( STATUS::UNBOUNDED, os );
   if( options.DISPLEVEL )
     os << "# PERFORMING GLOBAL SEARCH" << std::endl;
 
@@ -887,6 +922,140 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
   if( options.DISPLEVEL > 1 )
     _MINLPBND.options.MIPSLV.DISPLEVEL = 1;
 
+  // Search strategy
+  int flag = 0;
+  switch( options.STRATEGY ){
+    case Options::ROOT:
+    case Options::PWR:
+      flag = _optimize_pwr( os );
+      break;
+
+    case Options::SBB:
+      _set_options_sbbslv();        // setting SBBSLV solver options
+      _Xbndi.resize( _var.size() ); // storing bounds for local NLP solver
+      _MINLPBND.init_polrelax();    // reinitialising polyhedral relaxation for relaxed MIP solver
+      flag = SBBSLV<T>::solve( std::get<0>(_obj)[0], _var.size(), _Xbnd.data(),
+                               _incumbent.x.data(), !_incumbent.x.empty()? &_Zinc: nullptr,
+                               std::set<unsigned>(), os );
+      stats.walltime_all += stats.walltime( _tstart );
+      break;
+
+    default:
+      throw Exceptions( Exceptions::STRATEGY );
+  }
+  
+  return flag;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline typename SBBSLV<T>::STATUS
+MINLGO<T,NLP,MIP,ExtOps...>::subproblems
+( typename SBBSLV<T>::TASK const task, SBBNode<T>* node,
+  std::vector<double>& p, double& f, double const& INC, std::ostream& os )
+{
+  typename SBBSLV<T>::STATUS status = SBBSLV<T>::FATAL;
+
+  // Compute local solution
+  if( (task == SBBSLV<T>::UPPERBD && _objscal > 0.) 
+   || (task == SBBSLV<T>::LOWERBD && _objscal < 0.) ){
+
+    // Solve local NLP model (integer variable bounds fixed to relaxed solution if MIP)
+    for( unsigned i=0; i<_var.size(); i++ ){
+      if( _vartyp[i] ) _Xbndi[i] = p[i];
+      else             _Xbndi[i] = node->P(i);
+    }
+    try{
+      if( _solve_local( p.data(), _Xbndi.data(), false, os ) ){
+        f = _solution.f[0] + _Zcor;
+        p = _solution.x;
+#ifdef MC__MINLGO_DEBUG_SBB
+        std::cout << "Local solution: " << f << std::endl;
+#endif
+        status = SBBSLV<T>::NORMAL;
+      }
+      else
+        status = SBBSLV<T>::FAILURE;
+    }
+    catch(...){
+     status = SBBSLV<T>::FAILURE;
+    }
+  }
+
+  // compute relaxed solution
+  else if( (task == SBBSLV<T>::UPPERBD && _objscal < 0.) 
+        || (task == SBBSLV<T>::LOWERBD && _objscal > 0.) ){
+    try{
+#ifdef MC__MINLGO_DEBUG_SBB
+      std::cout << "Initial box: " << std::endl;
+      for( auto const& Pi : node->P() ) std::cout << " " << Pi;
+      std::cout << std::endl;
+      //{ int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+      // Not testing for infeasibility here, because contraction problem may
+      // become infeasible due to round-off in LP solver
+      _reduce_bounds( node->P().data(), &INC, true, false, os );
+      //if( _reduce_bounds( node->P().data(), &INC, true, false, os ) == MIP::INFEASIBLE )
+      //  return SBBSLV<T>::INFEASIBLE;
+#ifdef MC__MINLGO_DEBUG_SBB
+      std::cout << "Reduced box (" << _nred << "):" << std::endl;
+      for( auto const& Pi : node->P() ) std::cout << " " << Pi;
+      std::cout << std::endl;
+      //{ int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
+      // Setup and solve relaxed MINLP model
+      switch( _solve_relax( node->P().data(), &INC, p.data(), false, os ) ){
+        case MIP::OPTIMAL:
+        case MIP::SUBOPTIMAL:
+          f = _MINLPBND.relax_solver()->get_objective_bound();
+          for( unsigned i=0; i<_var.size(); i++ )
+            p[i] = _MINLPBND.relax_solver()->get_variable( _var[i] );
+#ifdef MC__MINLGO_DEBUG_SBB
+          std::cout << "Relaxed bound: " << f << std::endl;
+#endif
+          status = SBBSLV<T>::NORMAL;
+          break;
+        case MIP::INFEASIBLE:
+          f = _objscal * BASE_OPT::INF;
+          status = SBBSLV<T>::INFEASIBLE;
+          break;
+        case MIP::UNBOUNDED:
+        case MIP::TIMELIMIT:
+        default:
+          status = SBBSLV<T>::FAILURE;
+          break;
+      }
+    }
+    catch(...){
+      status = SBBSLV<T>::FAILURE;
+    }
+  }
+
+  // assess feasibility
+  else if( task == SBBSLV<T>::FEASTEST ){
+    if( _test_feasible( p.data(), os ) )
+      status = SBBSLV<T>::NORMAL;
+    else
+      status = SBBSLV<T>::INFEASIBLE;
+  }
+
+  // perform preprocessing/postprocessing
+  else if( task == SBBSLV<T>::PREPROC
+        || task == SBBSLV<T>::POSTPROC )
+    status = SBBSLV<T>::NORMAL;
+
+  // other
+  else
+    status = SBBSLV<T>::FATAL;
+
+  return status;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline int
+MINLGO<T,NLP,MIP,ExtOps...>::_optimize_pwr
+( std::ostream& os )
+{
   // Display presolve results
   _display_init( os );
   _display_add( _iter );
@@ -905,19 +1074,20 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
   for( ++_iter; options.MAXITER; ++_iter ){
 
     // Set-up and solve MIP relaxation
-    switch( _solve_relax( os ) ){
+    switch( _solve_relax( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
+                          options.INIINC? _incumbent.x.data(): nullptr, _iter>1? false: true, os ) ){
       case MIP::OPTIMAL:
         break;
-      case MIPSLV_GUROBI<T>::INFEASIBLE:
+      case MIP::INFEASIBLE:
         _Zrel = _objscal * BASE_OPT::INF;
-        return _finalize( STATUS::INFEASIBLE );
+        return _finalize( STATUS::INFEASIBLE, os );
       case MIP::UNBOUNDED:
-        return _finalize( STATUS::UNBOUNDED );
+        return _finalize( STATUS::UNBOUNDED, os );
       case MIP::TIMELIMIT:
         _Zrel = _MINLPBND.relax_solver()->get_objective_bound();
-        return _finalize( STATUS::INTERRUPTED );
+        return _finalize( STATUS::INTERRUPTED, os );
       default:
-        return _finalize( STATUS::FAILED );
+        return _finalize( STATUS::FAILED, os );
     }
 
     // Retrieve MIP solution - use bound on objective, not incumbent!
@@ -935,7 +1105,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
       if( _vartyp[i] ) _Xbndi[i] = _Xrel[i];
       else             _Xbndi[i] = _Xbnd[i];
     }
-    locfeas = _solve_local( _Xrel.data(), _Xbndi.data(), os );
+    locfeas = _solve_local( _Xrel.data(), _Xbndi.data(), false, os );
 
     // Update incumbent
     updinc = false;
@@ -961,7 +1131,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
     if( _converged() )
       break;
     if( _interrupted() )
-      return _finalize( STATUS::INTERRUPTED );
+      return _finalize( STATUS::INTERRUPTED, os );
 
     // Refine relaxation via additional breakpoints
     _MINLPBND.refine_polrelax( options.BKPTINC && updinc? _incumbent.x.data(): nullptr );
@@ -980,13 +1150,26 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
 #endif
   }
 
-  return _finalize( STATUS::SUCCESSFUL );
+  return _finalize( STATUS::SUCCESSFUL, os );
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline bool
+MINLGO<T,NLP,MIP,ExtOps...>::_test_feasible
+( double const* Xini, std::ostream& os )
+{
+  auto tNLP = stats.start();
+  auto& _NLPSLV = _MINLPSLV.local_solver();
+  _NLPSLV.restore_model();
+  bool flag = _NLPSLV.is_feasible( Xini, options.FEASTOL );
+  stats.walltime_slvloc += stats.walltime( tNLP );
+  return flag;
 }
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
 MINLGO<T,NLP,MIP,ExtOps...>::_solve_local
-( double const* Xini, T const* Xbnd, std::ostream& os )
+( double const* Xini, T const* Xbnd, bool const mstart, std::ostream& os )
 {
   auto tNLP = stats.start();
   auto& _NLPSLV = _MINLPSLV.local_solver();
@@ -1008,7 +1191,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::_solve_local
     if( Op<T>::diam(Xbnd[i]) < BASE_OPT::INF/10 ) continue;
     dombnd = false;
   }
-  if( dombnd && options.MINLPSLV.MSLOC > 1 && _NLPSLV.options.TIMELIMIT > 0 ){
+  if( mstart && dombnd && options.MINLPSLV.MSLOC > 1 && _NLPSLV.options.TIMELIMIT > 0 ){
     _NLPSLV.solve( options.MINLPSLV.MSLOC-1, Xbnd );
     if( _NLPSLV.is_feasible( options.FEASTOL )
      && (_solution.x.empty() || _objscal*_NLPSLV.solution().f[0] < _objscal*_solution.f[0]) )
@@ -1044,7 +1227,8 @@ MINLGO<T,NLP,MIP,ExtOps...>::_export_relax
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline int
 MINLGO<T,NLP,MIP,ExtOps...>::_solve_relax
-( std::ostream& os )
+( T const* Xbnd, double const* Zinc, double const* pinc, bool const reinit, std::ostream& os )
+//( std::ostream& os )
 {
   // Update time limit
   _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
@@ -1053,9 +1237,28 @@ MINLGO<T,NLP,MIP,ExtOps...>::_solve_relax
   
   // Solve master MIP problem - do NOT reset bounds, otherwise reinitializing lifted variable bounds
   auto tMIP = stats.start();
-  int flag = _MINLPBND.relax_model( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
-                                    options.INIINC? _incumbent.x.data(): nullptr, 0, false, _iter>1? false: true,
-                                    "", os );
+  int flag = _MINLPBND.relax_model( Xbnd, Zinc, pinc, 0, false, reinit, "", os );
+  //int flag = _MINLPBND.relax_model( _Xbnd.data(), options.CUTINC && !_incumbent.x.empty()? &_Zinc: nullptr,
+  //                                  options.INIINC? _incumbent.x.data(): nullptr, 0, false, _iter>1? false: true,
+  //                                  "", os );
+  stats.walltime_slvrel += stats.walltime( tMIP );
+
+  return flag;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline int
+MINLGO<T,NLP,MIP,ExtOps...>::_reduce_bounds
+( T* Xbnd, double const* Zinc, bool const reset, bool const reinit, std::ostream& os )
+{
+  // Update time limit
+  _MINLPBND.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
+  if( _MINLPBND.options.TIMELIMIT <= 0 )
+    return MIP::TIMELIMIT;
+  
+  // Solve master MIP problem - do NOT reset bounds, otherwise reinitializing lifted variable bounds
+  auto tMIP = stats.start();
+  int flag = _MINLPBND.reduce_bounds( _nred, Xbnd, Zinc, reset, reinit );
   stats.walltime_slvrel += stats.walltime( tMIP );
 
   return flag;
@@ -1124,7 +1327,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_final
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::endl << "#  TERMINATION AFTER " << (_iter?_iter-1:0) << " REFINEMENTS: "
-         << std::fixed << std::setprecision(6) << walltime.count()*1e-6 << " SEC"
+         << std::fixed << std::setprecision(3) << walltime.count()*1e-6 << " SEC"
          << std::endl;
 
   // No feasible solution found
@@ -1207,9 +1410,22 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_flush
 }
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline void
+MINLGO<T,NLP,MIP,ExtOps...>::_set_options_sbbslv
+()
+{
+  SBBSLV<T>::options.STOPPING_ABSTOL = options.CVATOL;
+  SBBSLV<T>::options.STOPPING_RELTOL = options.CVRTOL;
+  SBBSLV<T>::options.DISPLAY_LEVEL   = options.DISPLEVEL?2:0;
+  SBBSLV<T>::options.MAX_NODES       = options.MAXITER;
+  SBBSLV<T>::options.MAX_WALLTIME    = options.TIMELIMIT;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline
 MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
-: GAMSEXPORT( "" ),
+: STRATEGY( PWR ),
+  GAMSEXPORT( "" ),
   PRESOLVE( 1 ),
   REFORM( 2 ),
   REDCUTS( 0 ),
@@ -1559,64 +1775,6 @@ operator <<
   os << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ');
   return os;
 }
-
-//template <typename T, typename NLP, typename MIP, typename... ExtOps>
-//inline const double*
-//MINLGO<T,NLP,MIP,ExtOps...>::_get_SLVLOC
-//( const SOLUTION_OPT&locopt )
-//{
-//  //std::cout << locopt.n << " =?= " << BASE_NLP::_var.size() << " + " << BASE_NLP::_dep.size() << std::endl; 
-//  assert( locopt.p.size() == BASE_NLP::_var.size() + BASE_NLP::_dep.size() );
-//  assert( locopt.g.size() == std::get<0>(BASE_NLP::_ctr).size() + (int)BASE_NLP::_sys.size() );
-//  _Dvar = locopt.p;
-//  if( options.NCOCUTS ){
-//    //_Dvar.insert( _Dvar.end(), _nvar-locopt.n, 0. ); // <- MODIFY TO USE ACTUAL FJ MULTIPLIER VALUES (AFTER RESCALING)?
-//    _Dvar.push_back( 1. );
-//    double mult_ineq = 1., mult_eq = 0.;
-//    unsigned ig = 0;
-//    for( auto&& t_ctr : std::get<0>(BASE_NLP::_ctr) ){
-//      switch( t_ctr ){
-//        case BASE_OPT::EQ: 
-//          _Dvar.push_back( locopt.ug[ig] );
-//          mult_eq += mc::sqr( locopt.ug[ig] );
-//          break;
-//        case BASE_OPT::LE:
-//        case BASE_OPT::GE:
-//          _Dvar.push_back( std::fabs( locopt.ug[ig] ) );
-//          mult_ineq += std::fabs( locopt.ug[ig] );
-//          break;
-//      }
-//      ig++;
-//    }
-//    for( auto it=_sys.begin(); it!=_sys.end(); ++it ){
-//      _Dvar.push_back( locopt.ug[ig] );
-//      mult_eq += sqr( locopt.ug[ig] );
-//      ig++;
-//    }
-//    for( unsigned ivar=0; ivar<locopt.p.size(); ivar++ ){
-//      if( !_tvar.empty() && _tvar[ivar] ) continue;
-//      _Dvar.push_back( std::fabs( locopt.upL[ivar] ) );
-//      _Dvar.push_back( std::fabs( locopt.upU[ivar] ) );
-//      mult_ineq += std::fabs( locopt.upL[ivar] ) + std::fabs( locopt.upU[ivar] );
-//    }
-//    double mult_scal = ( - mult_ineq + std::sqrt( mult_ineq * mult_ineq + 4. * mult_eq ) )
-//                      / ( 2. * mult_eq );
-//    for( unsigned i=locopt.p.size(); i<_nvar; i++ ){
-//      _Dvar[i] *= mult_scal;
-//      //std::cout << "Dvar[" << i << "] = " << _Dvar[i] << std::endl;
-//    }
-//    //for( int i=0; i<locopt.m; i++ )
-//    //  std::cout << "ug[" << i << "] = " << locopt.ug[i] << std::endl;
-//    //for( int i=0; i<locopt.n; i++ ){
-//    //  std::cout << "upL[" << i << "] = " << locopt.upL[i] << std::endl;
-//    //  std::cout << "upU[" << i << "] = " << locopt.upU[i] << std::endl;
-//    //}
-//    //std::cout << "mult_eq = " << mult_eq << std::endl;
-//    //std::cout << "mult_ineq = " << mult_ineq << std::endl;
-//    //std::cout << "mult_scal = " << mult_scal << std::endl;
-//  }
-//  return _Dvar.data();
-//}
 
 } // end namescape mc
 

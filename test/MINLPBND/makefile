@@ -10,12 +10,15 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-all : test_MINLPREF test_MINLPBND CS_Xmin CS_DB
+all : test_ANN test_MINLPREF test_MINLPBND CS_Xmin CS_DB
 
 test_MINLPREF : test_MINLPREF.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 test_MINLPBND : test_MINLPBND.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
+test_ANN : test_ANN.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 CS_DB : CS_DB.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o

@@ -1646,7 +1646,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_final
   _odisp << std::endl << "#  TERMINATION AFTER ";
   if( iter ) _odisp << _iter << " ITERATIONS: ";
   else       _odisp << "0 ITERATION: ";
-  _odisp << std::fixed << std::setprecision(6) << walltime.count()*1e-6 << " SEC"
+  _odisp << std::fixed << std::setprecision(3) << walltime.count()*1e-6 << " SEC"
          << std::endl;
 
   // No feasible solution found

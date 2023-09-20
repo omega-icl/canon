@@ -254,10 +254,16 @@ const
   FFDOptGrad DOptGrad;
   for( unsigned i=0; i<nVar; ++i )
     vRes[0].setDepend( vVar[i] );
-  for( unsigned j=0; j<vRes[0].size(); ++j )
-    for( unsigned i=0; i<nVar; ++i )
-      if( !i ) vRes[0][j]  = DOptGrad( 0, nVar, vVarVal.data() ) * vVar[0][j];
-      else     vRes[0][j] += DOptGrad( i, nVar, vVarVal.data() ) * vVar[i][j];
+  for( unsigned j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( unsigned i=0; i<nVar; ++i ){
+      if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
+      vRes[0][j] += DOptGrad( i, nVar, vVarVal.data() ) * vVar[i][j];
+      //std::cout << "(" << i << "," << j << ")" << std::endl;
+      //if( !i ) vRes[0][j]  = DOptGrad( 0, nVar, vVarVal.data() ) * vVar[0][j];
+      //else     vRes[0][j] += DOptGrad( i, nVar, vVarVal.data() ) * vVar[i][j];
+    }
+  }
 }
 
 }
@@ -329,7 +335,7 @@ int main()
 ////////////////////////////////////////////////////////////////////////
 {
   mc::FFGraph< mc::FFDOpt, mc::FFDOptGrad > DAG;
-  const unsigned NS = mc::FFDOptBase::read( 4, "doe.fim" ); 
+  const unsigned NS = mc::FFDOptBase::read( 4, "doe_1000.fim" ); 
   mc::FFVar S[NS];
   double S0[NS];
   for( unsigned int i=0; i<NS; i++ ){
@@ -343,20 +349,20 @@ int main()
   MINLP.options.CVRTOL                  = 1e-5;
   MINLP.options.CVATOL                  = 1e-5;
   MINLP.options.FEASTOL                 = 1e-5;
-//  MINLP.options.FEASPUMP                = true;
-  MINLP.options.INCCUT                  = true;
-  MINLP.options.ROOTCUT                 = true;//false;
+//  MINLP.options.FEASPUMP                = 1;
+  MINLP.options.INCCUT                  = 0;
+  MINLP.options.ROOTCUT                 = 1;
   MINLP.options.TIMELIMIT               = 6e2;
   MINLP.options.LINMETH                 = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad>::Options::CVX;
   MINLP.options.MAXITER                 = 20;
   MINLP.options.MSLOC                   = 1;
 #ifdef MC__USE_SNOPT
-  MINLP.options.NLPSLV.DISPLEVEL        = 0;
+  MINLP.options.NLPSLV.DISPLEVEL        = 1;
   MINLP.options.NLPSLV.MAXITER          = 100;
   MINLP.options.NLPSLV.FEASTOL          = 1e-8;
   MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
   MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
-  //MINLP.options.NLPSLV.GRADCHECK        = false;
+  //MINLP.options.NLPSLV.GRADCHECK        = 0;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 #elif  MC__USE_IPOPT
   MINLP.options.NLPSLV.DISPLEVEL        = 0;
@@ -364,7 +370,7 @@ int main()
   MINLP.options.NLPSLV.FEASTOL          = 1e-8;
   MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
   MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
-  //MINLP.options.NLPSLV.GRADCHECK        = false;
+  //MINLP.options.NLPSLV.GRADCHECK        = 0;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 #endif
 #ifdef MC__USE_GUROBI
@@ -384,8 +390,8 @@ int main()
 
   MINLP.setup();
   //MINLP.optimize( S0 );
-  MINLP.optimize( S0, nullptr, nearest );
-  //MINLP.optimize( S0, nullptr, apportion );
+  //MINLP.optimize( S0, nullptr, nearest );
+  MINLP.optimize( S0, nullptr, apportion );
   MINLP.stats.display();
 
   return 0;

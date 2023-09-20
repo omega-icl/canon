@@ -15,7 +15,7 @@ int main()
   MINLP.add_ctr( mc::BASE_OPT::EQ,  sqr(P[0])+sqr(P[1])+sqr(P[2])+sqr(P[3])-40 );
 
   std::cout << MINLP;
-
+/*
   // With default options: quadratisation and MIQCQP solution
   MINLP.options.GAMSEXPORT                  = "doxydoc.gms";
   MINLP.options.MINLPSLV.DISPLEVEL          = 1;
@@ -29,6 +29,19 @@ int main()
 
   // With modified options: hierarchy of piecewise-linear relaxation and MIP solution
   MINLP.options.MAXITER                     = 10;
+  MINLP.options.MINLPBND.MIPSLV.DISPLEVEL   = 0;
+  MINLP.options.MINLPBND.POLIMG.ALLOW_QUAD  = 0;
+  MINLP.setup();
+  MINLP.presolve();
+  MINLP.optimize();
+  MINLP.stats.display();
+*/
+  // With modified options: spatial branch-and-bound
+  MINLP.options.STRATEGY                    = mc::MINLGO<>::Options::SBB;
+  MINLP.options.MAXITER                     = 0;
+  MINLP.options.MINLPBND.OBBTMAX            = 5;
+  MINLP.options.MINLPPRE.SQUAD.REDUC        = 0;
+  MINLP.options.MINLPPRE.QUADOPTIM          = 0;
   MINLP.options.MINLPBND.MIPSLV.DISPLEVEL   = 0;
   MINLP.options.MINLPBND.POLIMG.ALLOW_QUAD  = 0;
   MINLP.setup();

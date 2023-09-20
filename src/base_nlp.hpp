@@ -16,8 +16,8 @@ namespace mc
 //! objective and constraints participating in nonlinear programs.
 ////////////////////////////////////////////////////////////////////////
 template <typename... ExtOps>
-class BASE_NLP:
-  public virtual BASE_OPT,
+class BASE_NLP
+: public virtual BASE_OPT,
   public virtual BASE_AE<ExtOps...>
 {
 protected:
