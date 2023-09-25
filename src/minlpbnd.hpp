@@ -952,7 +952,7 @@ MINLPBND<T,MIP,ExtOps...>::reduce_bounds
         std::cout << "Infeasibility during constraint propagation (" << cpred << ")\n";
 #endif
         flag = MIP::INFEASIBLE;
-        //break;
+        break;
       }
       if( _tight() ){
         flag = MIP::OPTIMAL;

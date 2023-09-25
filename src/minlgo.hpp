@@ -216,8 +216,7 @@ public:
 
     //! @brief Global search strategy
     enum METHOD{
-      ROOT=0,	//!< Solve root-node only
-      PWR,	//!< Piecewise relaxation hierarchy
+      PWR=0,	//!< Piecewise relaxation hierarchy
       SBB	//!< Spatial branch-and-bound
     };
 
@@ -439,7 +438,7 @@ protected:
 
   //! @brief Solve optimization model using piecewise relaxation hierarchy
   int _optimize_pwr
-    ( std::ostream& os=std::cout );
+    ( std::ostream& os );
 
     //! @brief Test whether a variable vector is integer feasible
   bool _is_integer_feasible
@@ -569,9 +568,9 @@ public:
 private:
   //! @brief Private methods to block default compiler methods
   MINLGO
-    ( MINLGO<T,NLP,MIP,ExtOps...> const& );
+    ( MINLGO<T,NLP,MIP,ExtOps...> const& ) =delete;
   MINLGO<T,NLP,MIP,ExtOps...>& operator=
-    ( MINLGO<T,NLP,MIP,ExtOps...> const& );
+    ( MINLGO<T,NLP,MIP,ExtOps...> const& ) =delete;
 };
 
 #if defined (MC__WITH_GAMS)
@@ -925,7 +924,6 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
   // Search strategy
   int flag = 0;
   switch( options.STRATEGY ){
-    case Options::ROOT:
     case Options::PWR:
       flag = _optimize_pwr( os );
       break;
@@ -936,7 +934,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
       _MINLPBND.init_polrelax();    // reinitialising polyhedral relaxation for relaxed MIP solver
       flag = SBBSLV<T>::solve( std::get<0>(_obj)[0], _var.size(), _Xbnd.data(),
                                _incumbent.x.data(), !_incumbent.x.empty()? &_Zinc: nullptr,
-                               std::set<unsigned>(), os );
+                               _vartyp.data(), std::set<unsigned>(), os );
       stats.walltime_all += stats.walltime( _tstart );
       break;
 
@@ -954,6 +952,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::subproblems
   std::vector<double>& p, double& f, double const& INC, std::ostream& os )
 {
   typename SBBSLV<T>::STATUS status = SBBSLV<T>::FATAL;
+
+  //if( SBBSLV<T>::_node_index == 207 )
+  //  std::cout << "iteration 207\n";
 
   // Compute local solution
   if( (task == SBBSLV<T>::UPPERBD && _objscal > 0.) 

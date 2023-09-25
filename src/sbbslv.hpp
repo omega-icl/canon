@@ -105,6 +105,7 @@ public:
       STOPPING_ABSTOL(1e-3), STOPPING_RELTOL(1e-3), TREE_UPDATE(true),
       BRANCHING_STRATEGY(OMEGA), BRANCHING_BOUND_THRESHOLD(5e-2), 
       BRANCHING_VARIABLE_CRITERION(RGREL), BRANCHING_USERFUNCTION(0),
+      BACKOFF_BRANCHING_INTEGER( 0.1 ),
       STRONG_BRANCHING_MAXDEPTH(0), STRONG_BRANCHING_WEIGHT(1./6.),
       SCORE_BRANCHING_USE(false), SCORE_BRANCHING_RELTOL(1e-1),
       SCORE_BRANCHING_ABSTOL(1e-2), SCORE_BRANCHING_MAXSIZE(0),
@@ -139,6 +140,8 @@ public:
     int BRANCHING_VARIABLE_CRITERION;
     //! @brief Branching variable selection user-function
     SELECTION BRANCHING_USERFUNCTION;
+    //! @brief Backoff applied to bisection point of integer variables when it matches an integer
+    double BACKOFF_BRANCHING_INTEGER;
     //! @brief Maximum depth for strong branching interruption
     unsigned STRONG_BRANCHING_MAXDEPTH;
     //! @brief Weighting (between 0 and 1) used to account for the left and right nodes in strong branching
@@ -237,13 +240,30 @@ public:
   //! @brief Apply branch-and-bound search
   STATUS solve
     ( t_OBJ const pb, unsigned const np, T const* P, double const* p0=nullptr, double const* f0=nullptr,
-      std::set<unsigned> const& exclude=std::set<unsigned>(), std::ostream& os=std::cout );
+      const unsigned* ptyp=nullptr, std::set<unsigned> const& exclude=std::set<unsigned>(),
+      std::ostream& os=std::cout );
+
+  t_OBJ get_problem_type
+    ()
+    const
+    { return _pb; }
 
   STATUS get_status
     ()
     const
     { return _status; }
+
+  unsigned get_variable_size
+    ()
+    const
+    { return _np; }
+
+  unsigned const* get_variable_type
+    ()
+    const
+    { return _P_type.data(); }
     
+  
   std::pair<double, double const*> get_incumbent
     ()
     const
@@ -261,7 +281,6 @@ protected:
   //! @brief Current incumbent value
   double _f_inc;
 
-private:  
   //! @brief Status of bounding problems
   enum NODESTAT{
     FATHOM=0,		//!< Node should be fathomed
@@ -278,6 +297,8 @@ private:
 
   //! @brief Number of variables in optimization problem
   unsigned _np;
+  //! @brief Variable types
+  std::vector<unsigned> _P_type;
   //! @brief Variable bounds at root node
   std::vector<T> _P_root;
   //! @brief Default branching variable set
@@ -312,8 +333,8 @@ private:
   std::ostringstream _odisp;
     
   //! @brief Set variables
-  void _variables
-    ( unsigned const np, T const* P, std::set<unsigned> const& exclude );
+  bool _variables
+    ( unsigned const np, T const* P, unsigned const* ptyp, std::set<unsigned> const& exclude );
   //! @brief Erase stored nodes
   void _clean_stack
     ();
@@ -340,7 +361,7 @@ private:
     ( SBBNode<T>*pNode );
   //! @brief Try and update incumbent
   bool _update_incumbent
-    ( const double fINC, const std::vector<double>&pINC );
+    ( const double& fINC, const std::vector<double>&pINC );
 
   //! @brief Apply preprocessing to given node
   NODESTAT _preprocess
@@ -423,6 +444,9 @@ class SBBNode
     ( std::ostream&, const SBBNode<U>& );
 
 public:  
+  //! @brief Const pointer to underlying branch-and-bound tree
+  SBBSLV<T> const* sbb() const
+    { return _pSBB; };
   //! @brief Retreive node strength (based on parent bound)
   double strength() const
     { return _strength; }
@@ -600,22 +624,34 @@ struct lt_SBBNode
 ///////////////////////////////   SBBSLV   ////////////////////////////////
 
 template <typename T>
-inline void
+inline bool
 SBBSLV<T>::_variables
-( const unsigned np, const T*P, const std::set<unsigned>&exclude )
+( unsigned const np, T const* P, unsigned const* type, std::set<unsigned> const& exclude )
 {
   if( !np || !P ){
     _np = 0;
     _P_root.clear();
-    return;
+    _P_type.clear();
+    return false;
   }
   
   _np = np;
   _P_root.assign( P, P+_np );
 
-  if( &exclude == &_exclude_vars ) return;
+  if( !type )
+    _P_type.assign( _np, 0 );
+  else
+    _P_type.assign( type, type+_np );
+  for( unsigned i=0; i<_np; ++i ){
+    if( !_P_type[i] ) continue;
+    if( std::ceil( Op<T>::l( _P_root[i] ) ) > std::floor( Op<T>::u( _P_root[i] ) ) ) return false;
+    _P_root[i] = T( std::ceil( Op<T>::l( _P_root[i] ) ), std::floor( Op<T>::u( _P_root[i] ) ) );
+  }
+
+  if( &exclude == &_exclude_vars ) return true;
   _exclude_vars = exclude;
-  return;
+
+  return true;
 }
 
 template <typename T>
@@ -633,12 +669,12 @@ const
 template <typename T>
 inline typename SBBSLV<T>::STATUS
 SBBSLV<T>::solve
-( const BASE_OPT::t_OBJ pb, const unsigned np, const T*P, const double*p0, const double*f0,
-  const std::set<unsigned>&exclude, std::ostream&os )
+( BASE_OPT::t_OBJ const pb, unsigned const np, T const* P, double const* p0, double const* f0,
+  unsigned const* ptyp, std::set<unsigned> const& exclude, std::ostream& os )
 {
   // Create and add root node to set _Nodes
+  if( !_variables( np, P, ptyp, exclude ) ) return INFEASIBLE;
   _pb = pb;
-  _variables( np, P, exclude );
   _restart( p0, f0 );
   _display_init();
   _display( os );
@@ -790,7 +826,7 @@ SBBSLV<T>::solve
 template <typename T>
 inline void
 SBBSLV<T>::_restart
-( const double*p0, const double*f0 )
+( double const* p0, double const* f0 )
 {
   _clean_stack();
   _p_inc.clear();
@@ -819,7 +855,7 @@ SBBSLV<T>::_clean_stack
 template <typename T>
 inline typename SBBSLV<T>::NODESTAT
 SBBSLV<T>::_lower_bound
-( SBBNode<T>*pNode, const bool relaxed, const bool strongbranching, std::ostream& os )
+( SBBNode<T>* pNode, bool const relaxed, bool const strongbranching, std::ostream& os )
 {
   auto tstart = stats.now();
   NODESTAT stat;
@@ -866,7 +902,7 @@ SBBSLV<T>::_lower_bound
 template <typename T>
 inline typename SBBSLV<T>::NODESTAT
 SBBSLV<T>::_upper_bound
-( SBBNode<T>*pNode, const bool relaxed, const bool strongbranching, std::ostream& os )
+( SBBNode<T>* pNode, bool const relaxed, bool const strongbranching, std::ostream& os )
 {
   auto tstart = stats.now();
   NODESTAT stat;
@@ -912,7 +948,7 @@ SBBSLV<T>::_upper_bound
 template <typename T>
 inline typename SBBSLV<T>::STATUS
 SBBSLV<T>::_feasible_relax
-( SBBNode<T>*pNode, std::ostream& os )
+( SBBNode<T>* pNode, std::ostream& os )
 {
   switch( _pb ){
   case MIN:
@@ -925,7 +961,7 @@ SBBSLV<T>::_feasible_relax
 template <typename T>
 inline bool
 SBBSLV<T>::_fathom_by_dominance
-( SBBNode<T>*pNode )
+( SBBNode<T>* pNode )
 {
   double f_eff = _f_inc;
   switch( _pb ){
@@ -945,7 +981,7 @@ SBBSLV<T>::_fathom_by_dominance
 template <typename T>
 inline bool
 SBBSLV<T>::_update_incumbent
-( const double fINC, const std::vector<double>&pINC )
+( double const& fINC, std::vector<double> const& pINC )
 {
   // test incumbent w.r.t current solution point
   switch( _pb ){
@@ -962,7 +998,7 @@ SBBSLV<T>::_update_incumbent
 template <typename T>
 inline void
 SBBSLV<T>::_branching_variable_set
-( const SBBNode<T>*pNode )
+( SBBNode<T> const* pNode )
 {
   _branch_set.clear();
   typename Options::SELECTION psel = options.BRANCHING_USERFUNCTION;
@@ -990,7 +1026,7 @@ SBBSLV<T>::_branching_variable_set
 template <typename T>
 inline void
 SBBSLV<T>::_branching_score_subset
-( const SBBNode<T>*pNode )
+( SBBNode<T> const* pNode )
 {
   if( !options.SCORE_BRANCHING_USE || pNode->scores().empty() ) return;
 
@@ -1032,7 +1068,7 @@ SBBSLV<T>::_branching_score_subset
 template <typename T>
 inline std::pair<unsigned, double>
 SBBSLV<T>::_select_branching_variable
-( SBBNode<T>*pNode, std::ostream& os )
+( SBBNode<T>* pNode, std::ostream& os )
 {
   // Strong branching strategy
   if( pNode->depth() < options.STRONG_BRANCHING_MAXDEPTH && _branch_set.size() > 1 )
@@ -1064,7 +1100,7 @@ SBBSLV<T>::_select_branching_variable
 template <typename T>
 inline std::pair<const T, const T>
 SBBSLV<T>::_partition_variable_domain
-( SBBNode<T>*pNode, const unsigned var_branch )
+( SBBNode<T>* pNode, unsigned const var_branch )
 const
 {
   std::pair<T,T> partition;
@@ -1106,6 +1142,20 @@ const
     partition.second = mc::Op<T>::u(pNode->P(var_branch)) - Op<T>::zeroone()
       *Op<T>::diam(pNode->P(var_branch))/2.;
     break;
+  }
+
+  // Ensure integer variables are not duplicated in subpartition
+  if( _P_type[var_branch] ){
+    // shift bisection point if integer
+    if( Op<T>::u(partition.first) == std::round( Op<T>::u(partition.first) ) ){
+      partition.first  = Op<T>::min( partition.first,  Op<T>::u(partition.first)-options.BACKOFF_BRANCHING_INTEGER );
+      partition.second = Op<T>::hull( partition.second, Op<T>::l(partition.second)-options.BACKOFF_BRANCHING_INTEGER );
+    }
+    if( Op<T>::l( partition.first ) > std::floor( Op<T>::u(partition.first) )
+     || std::ceil( Op<T>::l( partition.second ) ) > Op<T>::u(partition.second) )
+      throw Exceptions( Exceptions::BRANCH );
+    partition.first  = T( Op<T>::l( partition.first ), std::floor( Op<T>::u(partition.first) ) );
+    partition.second = T( std::ceil( Op<T>::l( partition.second ) ), Op<T>::u(partition.second) );
   }
 
   return partition;

@@ -1,4 +1,4 @@
-//#define MC__MINLPSLV_DEBUG
+#undef MC__MINLPSLV_DEBUG
 
 #include <fstream>
 #include <iomanip>
@@ -335,7 +335,7 @@ int main()
 ////////////////////////////////////////////////////////////////////////
 {
   mc::FFGraph< mc::FFDOpt, mc::FFDOptGrad > DAG;
-  const unsigned NS = mc::FFDOptBase::read( 4, "doe_1000.fim" ); 
+  const unsigned NS = mc::FFDOptBase::read( 4, "doe_1000.fim" );//_1000.fim" ); 
   mc::FFVar S[NS];
   double S0[NS];
   for( unsigned int i=0; i<NS; i++ ){
@@ -345,6 +345,7 @@ int main()
   mc::FFDOpt DOpt;
 
   mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad> MINLP;
+  MINLP.options.SEARCHALG               = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad>::Options::OA;
   MINLP.options.DISPLEVEL               = 1;
   MINLP.options.CVRTOL                  = 1e-5;
   MINLP.options.CVATOL                  = 1e-5;
@@ -357,7 +358,7 @@ int main()
   MINLP.options.MAXITER                 = 20;
   MINLP.options.MSLOC                   = 1;
 #ifdef MC__USE_SNOPT
-  MINLP.options.NLPSLV.DISPLEVEL        = 1;
+  MINLP.options.NLPSLV.DISPLEVEL        = 0;
   MINLP.options.NLPSLV.MAXITER          = 100;
   MINLP.options.NLPSLV.FEASTOL          = 1e-8;
   MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;

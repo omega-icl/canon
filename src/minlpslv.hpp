@@ -102,6 +102,7 @@ The return value of mc::MINLPSLV::optimize is per the enumeration mc::MINLPSLV::
 #include "gamsio.hpp"
 #include "nlpslv_snopt.hpp"
 #include "mipslv_gurobi.hpp"
+#include "sbbslv.hpp"
 
 namespace mc
 {
@@ -120,9 +121,11 @@ template <typename T=Interval,
 class MINLPSLV
 #if defined (MC__WITH_GAMS)
 : protected virtual GAMSIO<ExtOps...>,
+  protected SBBSLV<T>,
   public virtual BASE_NLP<ExtOps...>
 #else
-: public virtual BASE_NLP<ExtOps...>
+: protected SBBSLV<T>,
+  public virtual BASE_NLP<ExtOps...>
 #endif
 {
 public:
@@ -194,18 +197,22 @@ public:
   {
     //! @brief Constructor
     Options():
-      LINMETH(PENAL), FEASPUMP(true), INCCUT(true), ROOTCUT(true),
+      SEARCHALG(OA),
+      LINMETH(PENAL), FEASPUMP(true), CORRINC(true), 
+      INCCUT(true), ROOTCUT(true),
       FEASTOL(1e-5), CVATOL(1e-3), CVRTOL(1e-3), MAXITER(20),
       CPMAX(10), CPTHRES(0.), 
       PENSOFT(1e3), MSLOC(8), TIMELIMIT(6e2), DISPLEVEL(1),
       NLPSLV(), POLIMG(), MIPSLV()
       { NLPSLV.DISPLEVEL = MIPSLV.DISPLEVEL = 0;
         NLPSLV.TIMELIMIT = MIPSLV.TIMELIMIT = TIMELIMIT;
-        NLPSLV.GRADMETH  = NLP::Options::BAD; }
+        NLPSLV.GRADMETH  = NLP::Options::FAD; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
+        SEARCHALG     = options.SEARCHALG;
         LINMETH       = options.LINMETH;
         FEASPUMP      = options.FEASPUMP;
+        CORRINC       = options.CORRINC;
         INCCUT        = options.INCCUT;
         ROOTCUT       = options.ROOTCUT;
         FEASTOL       = options.FEASTOL;
@@ -223,16 +230,28 @@ public:
         MIPSLV        = options.MIPSLV;
         return *this ;
       }
-    //! @brief Linearization method
-    enum LM{
+
+    //! @brief Global search strategy
+    enum ALGORITHM{
+      OA=0,	//!< Outer-approximation (OA) algorithm
+      BB	//!< Branch-and-bound (BB) algorithm
+    };
+
+    //! @brief Linearization method in OA algorithm
+    enum LINEARIZATION{
       CVX=0,   //!< Direct linearization of cost and constraints at NLP solution point (assumes convexity)
       PENAL    //!< Softening and relaxation of constraints in MIP subproblem (does not assume convexity)
     };
+
+    //! @brief Search algorithm
+    int SEARCHALG;
     //! @brief Linearization method
-    unsigned LINMETH;
-    //! @brief Whether or not to apply feasibility pump strategy
+    int LINMETH;
+    //! @brief Whether or not to apply feasibility pump strategy in OA algorithm
     bool FEASPUMP;
-    //! @brief Whether or not to add incumbent cut in master and feasibility problems
+    //! @brief Correct the incumbent for feasibility using multipliers
+    bool CORRINC;
+    //! @brief Whether or not to add incumbent cut in master and feasibility OA subproblems
     bool INCCUT;
     //! @brief Whether or not to add cut from root-node relaxation in master problem
     bool ROOTCUT;
@@ -267,7 +286,37 @@ public:
       ( std::ostream&out=std::cout ) const;
   } options;
 
-  //! @brief Structure holding solve statistics
+  //! @brief MINLPSLV exceptions
+  class Exceptions
+  {
+  public:
+    //! @brief Enumeration type for MINLPSLV exception handling
+    enum TYPE{
+      SETUP,		//!< Incomplete setup before a solve
+      SEARCHALG,	//!< Invalid search strategy
+      INTERN=-33	//!< Internal error
+    };
+    //! @brief Constructor for error <a>ierr</a>
+    Exceptions( TYPE ierr ) : _ierr( ierr ){}
+    //! @brief Inline function returning the error flag
+    int ierr(){ return _ierr; }
+    //! @brief Inline function returning the error description
+    std::string what(){
+      switch( _ierr ){
+      case SETUP:
+        return "MINLPSLV::Exceptions  Incomplete setup before a solve";
+      case SEARCHALG:
+        return "MINLPSLV::Exceptions  Invalid search algorithm";
+      case INTERN:
+      default:
+        return "MINLPSLV::Exceptions  Internal error";
+      }
+    }
+  private:
+    TYPE _ierr;
+  };
+
+  //! @brief MINLPSLV statistics
   struct Stats{
     //! @brief Reset statistics
     void reset()
@@ -312,6 +361,8 @@ protected:
   //! @brief Current iteration
   STATUS                    _status;
 
+  ROUND                     _roundf;
+
   //! @brief Current iteration
   unsigned                  _iter;
 
@@ -333,11 +384,17 @@ protected:
   //! @brief Current incumbent value
   double                    _Zinc;
 
+  //! @brief Current incumbent correction
+  double                    _Zcor;
+
   //! @brief Variable values at current relaxation
   std::vector<double>       _Xrel;
 
   //! @brief Variable values at current relaxation with integer fixing
   std::vector<double>       _Xreli;
+  
+  //! @brief subset of continuous participating variables
+  std::set<unsigned>        _Xcnt;
   
   //! @brief subset of integer participating variables
   std::set<unsigned>        _Xint;
@@ -465,6 +522,18 @@ protected:
   //! @brief function sparse derivatives
   std::tuple< unsigned, unsigned const*, unsigned const*, FFVar const* > _Fgrad;
 
+  //! @brief Set SBBSLV solver options
+  void _set_options_sbbslv
+    ();
+
+  //! @brief Solve optimization model using outer-approximation algorithm
+  int _optimize_oa
+    ( double const* Xini,  T const* Xbnd, std::ostream& os );
+
+  //! @brief Solve optimization model using branch-and-bound algorithm
+  int _optimize_bb
+    ( double const* Xini,  T const* Xbnd, std::ostream& os );
+
   //! @brief Apply constraint propagation
   int _propagate_bounds
     ( T* Xbnd );
@@ -509,6 +578,10 @@ protected:
     ( double const* Xval, double const* Xref )
     const;
 
+  //! @brief Test feasibility
+  bool _test_feasible
+    ( double const* Xini, std::ostream& os );
+
   //! @brief Solve local NLP subproblem
   bool _solve_local
     ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
@@ -541,6 +614,15 @@ protected:
   int _finalize
     ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
       STATUS const status, std::ostream& os=std::cout );
+
+  //! @brief User-function to subproblems in SBB
+  typename SBBSLV<T>::STATUS subproblems
+    ( typename SBBSLV<T>::TASK const task, SBBNode<T>* node,
+      std::vector<double>& p, double& f, double const& INC, std::ostream& os );
+
+  //! @brief Select integer branching variable with largest range and closest to integrality
+  static std::set<unsigned> _branch_subset
+    ( SBBNode<T> const* node );
 
 public:
 
@@ -626,12 +708,11 @@ public:
     ( unsigned const n, unsigned const* typ, double* val )
     { for( unsigned i=0; i<n; ++i ) val[i] = std::round( val[i] ); }
 
-
 private:
 
   //! @brief Private methods to block default compiler methods
-  MINLPSLV( MINLPSLV<T,NLP,MIP,ExtOps...> const& );
-  MINLPSLV<T,NLP,MIP,ExtOps...>& operator=( MINLPSLV<T,NLP,MIP,ExtOps...> const& );
+  MINLPSLV( MINLPSLV<T,NLP,MIP,ExtOps...> const& ) =delete;
+  MINLPSLV<T,NLP,MIP,ExtOps...>& operator=( MINLPSLV<T,NLP,MIP,ExtOps...> const& ) =delete;
 
   //! @brief Interval representation of 'unbounded' variables
   static T _IINF;
@@ -663,6 +744,9 @@ private:
   //! @brief stringstream for displaying results
   std::ostringstream _odisp;
   
+  //! @brief Time point to enable TIMELIMIT option
+  std::chrono::time_point<std::chrono::system_clock> _tstart;
+
   //! @brief Display setup info
   void _display_setup
     ( std::ostream& os=std::cout );
@@ -707,12 +791,12 @@ inline bool
 MINLPSLV<T,NLP,MIP,ExtOps...>::read
 ( std::string const& filename )
 {
-  auto tstart = stats.start();
+  _tstart = stats.start();
 
   bool flag = this->GAMSIO<ExtOps...>::read( filename, options.DISPLEVEL>1? true: false );
 
-  stats.walltime_setup += stats.walltime( tstart );
-  stats.walltime_all   += stats.walltime( tstart );
+  stats.walltime_setup += stats.walltime( _tstart );
+  stats.walltime_all   += stats.walltime( _tstart );
   return flag;  
 }
 #endif
@@ -723,7 +807,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
 ( std::ostream& os )
 {
   //stats.reset();
-  auto tstart = stats.start();
+  _tstart = stats.start();
 
   assert( !std::get<0>(_obj).empty() );
   switch( std::get<0>(_obj)[0] ){
@@ -749,8 +833,10 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _Xupp = _varub;
   _Xtyp = _vartyp;
   _Xint.clear();
+  _Xcnt.clear();
   for( unsigned i=0; i<_var.size(); i++ )
     if( _Xtyp[i] ) _Xint.insert( i );
+    else           _Xcnt.insert( i );
   _ismip = !_Xint.empty();
 
   // dependent decision variables
@@ -869,8 +955,8 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
     _Ffeas += sqr( _Xvar[i] - _Xref[i] );
   }
 
-  stats.walltime_setup += stats.walltime( tstart );
-  stats.walltime_all   += stats.walltime( tstart );
+  stats.walltime_setup += stats.walltime( _tstart );
+  stats.walltime_all   += stats.walltime( _tstart );
   _status = STATUS::SUCCESSFUL;
   _display_setup( os );
   _issetup = true;
@@ -952,6 +1038,24 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_finalize
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
+MINLPSLV<T,NLP,MIP,ExtOps...>::_test_feasible
+( double const* Xini, std::ostream& os )
+{
+  // Test integer feasibility first
+  if( !_is_integer_feasible( Xini, options.FEASTOL ) )
+    return false;
+
+  // Test other constraint feasibility next
+  auto tNLP = stats.start();
+  _NLPSLV.restore_model();
+  bool flag = _NLPSLV.is_feasible( Xini, options.FEASTOL );
+  _solution = _NLPSLV.solution();
+  stats.walltime_slvnlp += stats.walltime( tNLP );
+  return flag;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline bool
 MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_local
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   double const* Xini, T const* Xbnd, bool const pumpfeas,
@@ -1002,6 +1106,11 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_local
      && (_solution.x.empty() || objscal*_NLPSLV.solution().f[0] < objscal*_solution.f[0]) )
       _solution = _NLPSLV.solution();
   }
+
+  // Compute correction
+  _Zcor = 0.;
+  if( !_solution.x.empty() && options.CORRINC )
+    _Zcor = _NLPSLV.cost_correction();
 
   stats.walltime_slvnlp += stats.walltime( tNLP );
   return !_solution.x.empty();
@@ -1317,7 +1426,7 @@ inline int
 MINLPSLV<T,NLP,MIP,ExtOps...>::_propagate_bounds
 ( T* Xbnd )
 {
-  auto tstart = stats.start();
+  auto tCP = stats.start();
 #ifdef MC__MINLPSLV_DEBUG
   _dag->output( _dag->subgraph( _Flin, _Fvar.data() ) );
   for( unsigned i=0; i<_nX; i++ )
@@ -1348,8 +1457,108 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_propagate_bounds
     std::cout << "X[" << i << "] = " << Xbnd[i] << std::endl;
 #endif
 
-  stats.walltime_setup += stats.walltime( tstart );
+  stats.walltime_setup += stats.walltime( tCP );
   return flag;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline typename SBBSLV<T>::STATUS
+MINLPSLV<T,NLP,MIP,ExtOps...>::subproblems
+( typename SBBSLV<T>::TASK const task, SBBNode<T>* node,
+  std::vector<double>& p, double& f, double const& INC, std::ostream& os )
+{
+  typename SBBSLV<T>::STATUS status = SBBSLV<T>::FATAL;
+
+  // Compute local solution
+  if( (task == SBBSLV<T>::UPPERBD && _objscal > 0.) 
+   || (task == SBBSLV<T>::LOWERBD && _objscal < 0.) ){
+
+    if( _roundf ){
+      _roundf( _Xtyp.size(), _Xtyp.data(), p.data() );
+#ifdef MC__MINLPSLV_DEBUG
+      std::cout << std::scientific << std::setprecision(4);
+      std::cout << "Rounded point:\n@";
+      for( auto const& pi : p ) std::cout << " " << pi;
+      std::cout << std::endl;
+#endif
+      if( _test_feasible( p.data(), os ) ){
+        f = _solution.f[0] + _Zcor;
+        status = SBBSLV<T>::NORMAL;
+#ifdef MC__MINLPSLV_DEBUG
+        std::cout << "f = " << f << std::endl;
+#endif
+      }
+      else
+        status = SBBSLV<T>::FAILURE;
+    }
+    else
+      status = SBBSLV<T>::FAILURE;
+  }
+
+  // compute relaxed solution
+  else if( (task == SBBSLV<T>::UPPERBD && _objscal < 0.) 
+        || (task == SBBSLV<T>::LOWERBD && _objscal > 0.) ){
+
+    if( _solve_local( _tstart, p.data(), node->P().data(), false, false, os ) ){
+#ifdef MC__MINLPSLV_DEBUG
+      std::cout << "Relaxed solution:\n" << _solution;
+      { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+      p = _solution.x;
+      f = _solution.f[0] + _Zcor;
+      status = SBBSLV<T>::NORMAL;
+    }
+    else if( _solution.stat == NLP::STATUS::INFEASIBLE )
+      status = SBBSLV<T>::INFEASIBLE;
+    else
+      status = SBBSLV<T>::FAILURE;
+  }
+
+  // assess feasibility
+  else if( task == SBBSLV<T>::FEASTEST ){
+    if( _test_feasible( p.data(), os ) )
+      status = SBBSLV<T>::NORMAL;
+    else
+      status = SBBSLV<T>::INFEASIBLE;
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Feasibility test: " << status << std::endl;
+#endif
+  }
+
+  // perform preprocessing
+  else if( task == SBBSLV<T>::PREPROC ){
+    // propagate bounds
+    if( options.CPMAX && _propagate_bounds( node->P().data() ) < 0 )
+      status = SBBSLV<T>::INFEASIBLE;
+    else{
+      status = SBBSLV<T>::NORMAL;
+      // round integer bounds
+      for( auto& i : _Xint ){
+        if( std::ceil( Op<T>::l( node->P(i) ) ) > std::floor( Op<T>::u( node->P(i) ) ) ){
+          status = SBBSLV<T>::INFEASIBLE;
+          break;
+        }
+        node->P(i) = T( std::ceil( Op<T>::l( node->P(i) ) ), std::floor( Op<T>::u( node->P(i) ) ) );
+      }
+    }
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << std::scientific << std::setprecision(4);
+    std::cout << "Preprocessed range:\n";
+    for( auto const& Xbndi : node->P() ) std::cout << " " << Xbndi << std::endl;
+    std::cout << std::endl;
+    { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+  }
+
+  // perform postprocessing
+  else if( task == SBBSLV<T>::POSTPROC )
+    status = SBBSLV<T>::NORMAL;
+
+  // other
+  else
+    status = SBBSLV<T>::FATAL;
+
+  return status;
 }
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
@@ -1357,14 +1566,74 @@ inline int
 MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
 (  double const* Xini, T const* Xbnd, ROUND const& f, std::ostream& os )
 {
-  auto tstart = stats.start();
-
-  // Initialization
-  _display_init( os );
+  if( !_issetup ) throw Exceptions( Exceptions::SETUP );
+  _tstart = stats.start();
+  _roundf = f;
   _iter = 0;
   _Zinc =  _objscal * BASE_OPT::INF;
   _Zrel = -_objscal * BASE_OPT::INF;
   _incumbent.reset();
+
+  // Search strategy
+  int flag = 0;
+  switch( options.SEARCHALG ){
+    case Options::OA:
+      flag = _optimize_oa( Xini, Xbnd, os );
+      break;
+
+    case Options::BB:
+      flag = _optimize_bb( Xini, Xbnd, os );
+      break;
+
+    default:
+      throw Exceptions( Exceptions::SEARCHALG );
+  }
+
+  return flag;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline int
+MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_bb
+(  double const* Xini, T const* Xbnd, std::ostream& os )
+{
+  // Initialize and reduce variable bounds
+  _Xbnd.resize( _nX );
+  for( unsigned i=0; i<_nX; i++ ){
+    _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
+    if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) )
+      return _finalize( _tstart, STATUS::INFEASIBLE );
+  }
+  if( options.CPMAX && _propagate_bounds( _Xbnd.data() ) < 0 )
+    return _finalize( _tstart, STATUS::INFEASIBLE );
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << std::scientific << std::setprecision(4);
+  std::cout << "Initial range:\n";
+  for( auto const& Xbndi : _Xbnd ) std::cout << " " << Xbndi << std::endl;
+  std::cout << std::endl;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
+  // Call B&B solver
+  is_bounded( BASE_OPT::INF/10 ); // set _isbnd flag
+  _set_options_sbbslv();        // setting SBBSLV solver options
+  int flag = SBBSLV<T>::solve( std::get<0>(_obj)[0], _nX, _Xbnd.data(), Xini, nullptr,
+                               _Xtyp.data(), _Xcnt, os );
+  stats.walltime_all += stats.walltime( _tstart );
+
+  // RECOVER OPTIMAL SOLUTION VALUE AND SOLutION POINT
+  return flag;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline int
+MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
+(  double const* Xini, T const* Xbnd, std::ostream& os )
+{
+  //auto tstart = stats.start();
+
+  // Initialization
+  _display_init( os );
   
   // Initial point
   if( Xini ) _varini.assign( Xini, Xini+_var.size() );
@@ -1392,7 +1661,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
   // Solve relaxed MINLP model
   if( locfeas ){
     is_bounded( BASE_OPT::INF/10 ); // set _isbnd flag
-    locfeas = _solve_local( tstart, _varini.data(), _Xbnd.data(), false, false, os );
+    locfeas = _solve_local( _tstart, _varini.data(), _Xbnd.data(), false, false, os );
   }
 #ifdef MC__MINLPSLV_DEBUG
   std::cout << _solution;
@@ -1409,12 +1678,12 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
       _Zinc = _incumbent.f[0];
       intrel = true;
     }
-    else if( f ){
+    else if( _roundf ){
       _Xreli = _solution.x;
       SOLUTION_OPT soltmp = _solution; // temporary storage
-      f( _Xtyp.size(), _Xtyp.data(), _Xreli.data() );
+      _roundf( _Xtyp.size(), _Xtyp.data(), _Xreli.data() );
       for( auto&& i: _Xint ) _Xbndi[i] = _Xreli[i];
-      if( _solve_local( tstart, _Xreli.data(), _Xbndi.data(), false, false, os ) 
+      if( _solve_local( _tstart, _Xreli.data(), _Xbndi.data(), false, false, os ) 
        && _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
         _incumbent = _solution;
         _Zinc = _incumbent.f[0];
@@ -1440,16 +1709,16 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
   else                          _display_add( " " );
   _display_add( _Zinc );
   _display_add( _Zrel );
-  _display_add( tstart );
+  _display_add( _tstart );
   _display_flush( os );
 
   // Termination tests
   if( !locfeas )
-    return _finalize( tstart, STATUS::INFEASIBLE );
+    return _finalize( _tstart, STATUS::INFEASIBLE );
   if( !_ismip )
-    return _finalize( tstart, STATUS::SUCCESSFUL );
-  if( _interrupted( tstart ) )
-    return _finalize( tstart, STATUS::INTERRUPTED );
+    return _finalize( _tstart, STATUS::SUCCESSFUL );
+  if( _interrupted( _tstart ) )
+    return _finalize( _tstart, STATUS::INTERRUPTED );
   
   // Initialize master MIP subproblem
   _init_master();
@@ -1460,21 +1729,21 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
 
     // Update master MIP subproblem
     if( !_update_master( locfeas, pumpfeas, updinc, intrel ) )
-      return _finalize( tstart, STATUS::ABORTED );
+      return _finalize( _tstart, STATUS::ABORTED );
 
     // Solve master MIP subproblem
-    switch( _solve_master( tstart ) ){
+    switch( _solve_master( _tstart ) ){
       case MIP::OPTIMAL:
         break;
       case MIP::INFEASIBLE:
         _Zrel = _objscal * BASE_OPT::INF;
-        return _finalize( tstart, STATUS::INFEASIBLE );
+        return _finalize( _tstart, STATUS::INFEASIBLE );
       case MIP::UNBOUNDED:
-        return _finalize( tstart, STATUS::UNBOUNDED );
+        return _finalize( _tstart, STATUS::UNBOUNDED );
       case MIP::TIMELIMIT:
-        return _finalize( tstart, STATUS::INTERRUPTED );
+        return _finalize( _tstart, STATUS::INTERRUPTED );
       default:
-        return _finalize( tstart, STATUS::FAILED );
+        return _finalize( _tstart, STATUS::FAILED );
     }
 
     // Retrieve MIP solution
@@ -1498,8 +1767,8 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
     
     // Apply feasibility pump if NLP model found infeasible at current MIP integer fixing
     else if( pumpfeas ){
-      if( !_solve_local( tstart, _Xrel.data(), _Xbnd.data(), true, !locfeas, os ) )
-        return _finalize( tstart, STATUS::FAILED ); // may not be infeasible unless MINLP is infeasible
+      if( !_solve_local( _tstart, _Xrel.data(), _Xbnd.data(), true, !locfeas, os ) )
+        return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible unless MINLP is infeasible
 #ifdef MC__MINLPSLV_DEBUG
       std::cout << _solution;
 #endif
@@ -1508,8 +1777,8 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
       if( _is_integer_equal( _solution.x.data(), _Xrel.data() ) ){
         pumpfeas = false;
         for( auto&& i: _Xint ) _Xbndi[i] = _Xrel[i];
-        if( !_solve_local( tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) )
-          return _finalize( tstart, STATUS::FAILED ); // may not be infeasible after feasibility pump
+        if( !_solve_local( _tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) )
+          return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible after feasibility pump
 #ifdef MC__MINLPSLV_DEBUG
         std::cout << _solution;
 #endif
@@ -1527,7 +1796,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
     // Solve local NLP model at current MIP integer fixing outside feasibility pump
     else{
       for( auto&& i: _Xint ) _Xbndi[i] = _Xrel[i];
-      locfeas = _solve_local( tstart, _Xrel.data(), _Xbndi.data(), false, false, os );
+      locfeas = _solve_local( _tstart, _Xrel.data(), _Xbndi.data(), false, false, os );
 #ifdef MC__MINLPSLV_DEBUG
       std::cout << _solution;
 #endif
@@ -1552,17 +1821,17 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
     else                _display_add( " " );
     _display_add( _Zinc );
     _display_add( _Zrel );
-    _display_add( tstart );
+    _display_add( _tstart );
     _display_flush( os );
 
     // Termination tests
     if( stopiter )
       break;
-    if( _interrupted( tstart ) )
-      return _finalize( tstart, STATUS::INTERRUPTED );
+    if( _interrupted( _tstart ) )
+      return _finalize( _tstart, STATUS::INTERRUPTED );
   }
 
-  return _finalize( tstart, STATUS::SUCCESSFUL );
+  return _finalize( _tstart, STATUS::SUCCESSFUL );
 }
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
@@ -1679,7 +1948,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   if( options.DISPLEVEL < 1 ) return;
-  _odisp << std::right << std::fixed << std::setprecision(0)
+  _odisp << std::right << std::fixed << std::setprecision(1)
          << std::setw(7) << stats.to_time( stats.walltime( tstart ) ) << "s";
 }
 
@@ -1720,6 +1989,64 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_flush
   os << _odisp.str() << std::endl;
   _odisp.str("");
   return;
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline std::set<unsigned>
+MINLPSLV<T,NLP,MIP,ExtOps...>::_branch_subset
+( SBBNode<T> const* node )
+{
+  // Find maximal magnitude
+  double mag = 0.;
+  for( unsigned i=0; i<node->sbb()->get_variable_size(); ++i ){
+    if( !node->sbb()->get_variable_type()[i] || std::round( Op<T>::diam( node->P(i) ) ) < mag ) continue;
+    mag = std::round( Op<T>::diam( node->P(i) ) );
+  }
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << "MINLPSLV::_branch_subset: maximal range: " << mag << std::endl;
+#endif
+  
+  // Map all variables with maximal magnitude and corresponding rounding gap
+  std::multimap<double,unsigned> branchmap;
+  for( unsigned i=0; i<node->sbb()->get_variable_size(); ++i ){
+    if( !node->sbb()->get_variable_type()[i] || std::round( Op<T>::diam( node->P(i) ) ) < mag ) continue;
+    double pi = node->sbb()->get_problem_type()==BASE_OPT::MIN? node->pLB(i): node->pUB(i);
+    double dist = std::fabs( pi - std::round( pi ) );
+    branchmap.insert( std::make_pair( dist, i ) );
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "MINLPSLV::_branch_subset: <var,dist>: " << i << "  " << dist << std::endl;
+#endif
+  }
+
+  // Return subset of variables with maximal range and rounding gap
+  auto it = branchmap.lower_bound( branchmap.rbegin()->first );
+  std::set<unsigned> branchset;
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << "MINLPSLV::_branch_subset: selection: {";
+#endif
+  for( ; it!=branchmap.cend(); ++it ){
+    branchset.insert( it->second );
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << " " << it->second;
+#endif
+  }
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << " }" << std::endl;
+#endif
+  return branchset;
+}
+    
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline void
+MINLPSLV<T,NLP,MIP,ExtOps...>::_set_options_sbbslv
+()
+{
+  SBBSLV<T>::options.BRANCHING_USERFUNCTION = MINLPSLV<T,NLP,MIP,ExtOps...>::_branch_subset;
+  SBBSLV<T>::options.STOPPING_ABSTOL        = options.CVATOL;
+  SBBSLV<T>::options.STOPPING_RELTOL        = options.CVRTOL;
+  SBBSLV<T>::options.DISPLAY_LEVEL          = options.DISPLEVEL?2:0;
+  SBBSLV<T>::options.MAX_NODES              = options.MAXITER;
+  SBBSLV<T>::options.MAX_WALLTIME           = options.TIMELIMIT;
 }
 
 } // end namescape mc
