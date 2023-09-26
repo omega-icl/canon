@@ -534,7 +534,7 @@ public:
   //! @brief Load optimization model from GAMS file
 #if defined (MC__WITH_GAMS)
   bool read
-    ( std::string const& filename, bool const disp=false );
+    ( std::string const& filename, bool const init=false, bool const disp=false );
 #endif
 
   //! @brief Setup DAG for cost and constraint evaluation
@@ -577,11 +577,11 @@ private:
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline bool
 MINLGO<T,NLP,MIP,ExtOps...>::read
-( std::string const& filename, bool const disp )
+( std::string const& filename, bool const init, bool const disp )
 {
   _tstart = stats.start();
 
-  bool flag = this->GAMSIO<ExtOps...>::read( filename, disp );
+  bool flag = this->GAMSIO<ExtOps...>::read( filename, init, disp );
 
   stats.walltime_setup += stats.walltime( _tstart );
   stats.walltime_all   += stats.walltime( _tstart );

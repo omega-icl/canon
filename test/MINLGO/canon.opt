@@ -17,9 +17,9 @@ REDCUTS       = 0
 # Feasibility correction of incumbent
 CORRINC       = 1
 # Initialize relaxation at incumbent value
-INIINC        = 0
+INIINC        = 1
 # Add cut at incumbent value in relaxation
-CUTINC        = 0
+CUTINC        = 1
 # Add breakpoint at incumbent in piecewise relaxation
 BKPTINC       = 0
 # Maximal number of refinements/iterations

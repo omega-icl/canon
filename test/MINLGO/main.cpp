@@ -86,7 +86,7 @@ int main()
   // batch0812.gms batch_nc.gms jit1.gms ex7_2_2.gms packing.gms bernasconi.40.5.gms
   // tuncphd_30.gms kriging_peaks-red010.gms st_e06.gms ex14_1_5.gms hybriddynamic_varcc.gms
   std::string gamsfile( "N2-Misc_classify_binary_tanh.gms"); 
-  if( !MINLP.read( gamsfile, true ) ){
+  if( !MINLP.read( gamsfile, true, true ) ){
     std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
     return mc::MINLGO<I,NLP,MIP>::STATUS::ABORTED;
   }

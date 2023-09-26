@@ -37,7 +37,7 @@ LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_g++5.2 -lgurobi100 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 
-PATH_GAMS = /opt/gams/gams40.2_linux_x64_64_sfx
+PATH_GAMS = /opt/gams/gams44.4_linux_x64_64_sfx
 LIB_GAMS  =
 INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"

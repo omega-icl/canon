@@ -77,12 +77,12 @@ public:
   //! @brief GAMS reader
 #if defined (MC__WITH_GAMS)
   bool read
-    ( std::string const filename, bool const init=false, bool const disp=false );
-#endif
+    ( std::string const& filename, bool const init=false, bool const disp=false );
 
   //! @brief GAMS API
   bool read
     ( struct gmoRec* gmo, bool const init=false, bool const disp=false );
+#endif
 
 private:
 
@@ -128,7 +128,7 @@ template <typename... ExtOps>
 inline
 bool
 GAMSIO<ExtOps...>::read
-( std::string const filename, bool const init, bool const disp )
+( std::string const& filename, bool const init, bool const disp )
 {
   // reset
   _gmo = nullptr;
@@ -153,7 +153,9 @@ GAMSIO<ExtOps...>::read
  
   // call GAMS with convertd solver to get compiled model instance in temporary directory
   {std::ostringstream GamsCall;
-  GamsCall << MC__WITH_GAMS << "/gams " << filename << " LP=CONVERTD RMIP=CONVERTD QCP=CONVERTD RMIQCP=CONVERTD NLP=CONVERTD DNLP=CONVERTD RMINLP=CONVERTD CNS=CONVERTD MIP=CONVERTD MIQCP=CONVERTD MINLP=CONVERTD MCP=CONVERTD MPEC=CONVERTD RMPEC=CONVERTD SCRDIR=loadgms.tmp output=loadgms.tmp/listing optdir=loadgms.tmp optfile=1 pf4=0 solprint=0 limcol=0 limrow=0 pc=2 lo=" << (disp? 3: 0);
+  GamsCall << MC__WITH_GAMS << "/gams " << filename << " LP=CONVERT RMIP=CONVERT QCP=CONVERT RMIQCP=CONVERT NLP=CONVERT DNLP=CONVERT RMINLP=CONVERT CNS=CONVERT MIP=CONVERT MIQCP=CONVERT MINLP=CONVERT MCP=CONVERT MPEC=CONVERT RMPEC=CONVERT SCRDIR=loadgms.tmp output=loadgms.tmp/listing optdir=loadgms.tmp optfile=1 pf4=0 solprint=0 limcol=0 limrow=0 pc=2 lo=" << (disp? 3: 0);
+  //GamsCall << MC__WITH_GAMS << "/gams " << filename << " LP=CONVERTD RMIP=CONVERTD QCP=CONVERTD RMIQCP=CONVERTD NLP=CONVERTD DNLP=CONVERTD RMINLP=CONVERTD CNS=CONVERTD MIP=CONVERTD MIQCP=CONVERTD MINLP=CONVERTD MCP=CONVERTD MPEC=CONVERTD RMPEC=CONVERTD SCRDIR=loadgms.tmp output=loadgms.tmp/listing optdir=loadgms.tmp optfile=1 pf4=0 solprint=0 limcol=0 limrow=0 pc=2 lo=" << (disp? 3: 0);
+  if( disp ) std::cerr << GamsCall.str().c_str() << std::endl;
   int rc = system( GamsCall.str().c_str() );
   if( rc ){
     std::cerr << "GAMS call returned with code " << rc << ", check loadgms.tmp/listing for details." << std::endl;
@@ -198,7 +200,6 @@ TERMINATE:
 
   return flag;
 }
-#endif
 
 template <typename... ExtOps>
 inline
@@ -243,6 +244,7 @@ GAMSIO<ExtOps...>::read
 
    return _populate( init, disp );
 }
+#endif
 
 template <typename... ExtOps>
 inline
