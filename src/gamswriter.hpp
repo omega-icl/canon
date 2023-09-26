@@ -306,18 +306,19 @@ GAMSWRITER<T,ExtOps...>::_add_var
     _VarFix  << pVar->name() << ".FX = " << d2s(pVar->num().val()) << ";" << std::endl;
   }
 
+  else if( Bnd && Op<T>::l(*Bnd) == Op<T>::u(*Bnd) ){
+    _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
+    _VarBnd << pVar->name() << ".FX = " << d2s(Op<T>::l(*Bnd)) << ";" << std::endl;
+  }
+
   else{
     switch( type ){
       case 0:
         _CVarDec << (_CVarDec.tellp()>0?", ":" ") << pVar->name();
-        if( Bnd && Op<T>::l(*Bnd) == Op<T>::u(*Bnd) )
-          _VarBnd << pVar->name() << ".FX = " << d2s(Op<T>::l(*Bnd)) << ";" << std::endl;
-	else{
-          if( Bnd && Op<T>::l(*Bnd) > -0.999*BASE_OPT::INF )
-            _VarBnd << pVar->name() << ".LO = " << d2s(Op<T>::l(*Bnd)) << ";" << std::endl;
-          if( Bnd && Op<T>::u(*Bnd) <  0.999*BASE_OPT::INF )
-            _VarBnd << pVar->name() << ".UP = " << d2s(Op<T>::u(*Bnd)) << ";" << std::endl;
-        }
+        if( Bnd && Op<T>::l(*Bnd) > -0.999*BASE_OPT::INF )
+          _VarBnd << pVar->name() << ".LO = " << d2s(Op<T>::l(*Bnd)) << ";" << std::endl;
+        if( Bnd && Op<T>::u(*Bnd) <  0.999*BASE_OPT::INF )
+          _VarBnd << pVar->name() << ".UP = " << d2s(Op<T>::u(*Bnd)) << ";" << std::endl;
 	break;
 	
       case 1:

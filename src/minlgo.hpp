@@ -892,6 +892,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::GAMSexport
   if( relax ){
     if( options.DISPLEVEL )
       os << "# EXPORTING RELAXED PREPROCESSED MODEL TO GAMS" << std::endl;
+    _MINLPBND.options = options.MINLPBND;
     return _export_relax( os );
   }
 
