@@ -1864,7 +1864,7 @@ MINLPREF<T,ExtOps...>::export_model
   //}
   for( unsigned i=0; i<_nX0; i++ ){
     GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], Xstart? &Xstart[i]: nullptr );
-    std::cout << _Xvar[i] << " in " << _Xbnd[i] << std::endl;
+    //std::cout << _Xvar[i] << " in " << _Xbnd[i] << std::endl;
 #ifdef MC__MINLPREF_DEBUG_INITIALS
     if( Xstart ) std::cout << "Xstart[ " << i << "] = " << Xstart[i] << std::endl;
 #endif
