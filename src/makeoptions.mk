@@ -49,8 +49,8 @@ INC_DEP  = $(INC_MC) $(INC_CLI) $(INC_SOBOL) $(INC_NLP) $(INC_MIP) $(INC_GAMS)
 # COMPILATION <<-- CHANGE AS APPROPRIATE -->>
 
 DEBUG = -g
-#PROF = -pg
-#OPTIM = -O2 #-Ofast
+PROF = #-pg
+OPTIM = -O2 #-Ofast
 WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-unused-result
 CPP17 = -std=c++17
 

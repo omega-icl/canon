@@ -99,6 +99,7 @@ The return value of mc::MINLPSLV::optimize is per the enumeration mc::MINLPSLV::
 #include <chrono>
 
 #include "interval.hpp"
+#include "spoly.hpp"
 #include "gamsio.hpp"
 #include "nlpslv_snopt.hpp"
 #include "mipslv_gurobi.hpp"
@@ -206,7 +207,7 @@ public:
       NLPSLV(), POLIMG(), MIPSLV()
       { NLPSLV.DISPLEVEL = MIPSLV.DISPLEVEL = 0;
         NLPSLV.TIMELIMIT = MIPSLV.TIMELIMIT = TIMELIMIT;
-        NLPSLV.GRADMETH  = NLP::Options::FAD; }
+        NLPSLV.GRADMETH  = NLP::Options::FSYM; }
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
         SEARCHALG     = options.SEARCHALG;
@@ -389,9 +390,6 @@ protected:
 
   //! @brief Variable values at current relaxation
   std::vector<double>       _Xrel;
-
-  //! @brief Variable values at current relaxation with integer fixing
-  std::vector<double>       _Xreli;
   
   //! @brief subset of continuous participating variables
   std::set<unsigned>        _Xcnt;
@@ -432,6 +430,15 @@ protected:
   //! @brief vector of zeros for offset calculation in functions
   std::vector<double>       _X0;
 
+  //! @brief vector of polynomial variables for linear function gradients
+  std::vector<SPoly<>>      _PXvar;
+
+  //! @brief vector of forward derivatives for linear function gradients
+  std::vector<fadbad::F<double>> _FXval;
+
+  //! @brief vector of backward derivatives for linear function gradients
+  std::vector<fadbad::B<double>> _BXval;
+
   //! @brief number of functions (objective and constraints) in MINLP model
   unsigned                  _nF;
 
@@ -455,6 +462,15 @@ protected:
 
   //! @brief index set of nonlinear functions
   std::set<unsigned>        _Fnlin;
+
+  //! @brief list of operations in nonlinear functions
+  FFSubgraph                _Fop;
+
+  //! @brief vector of forward derivatives for linear function gradients
+  std::vector<fadbad::F<double>> _FFval;
+
+  //! @brief vector of backward derivatives for linear function gradients
+  std::vector<fadbad::B<double>> _BFval;
 
   //!@brief number of nonzero elements in the linear part of each function
   unsigned                  _nA;
@@ -491,6 +507,12 @@ protected:
 
   //! @brief Storage vector for DAG evaluation in double arithmetic
   std::vector<double>       _dwk;
+
+  //! @brief Storage vector for DAG evaluation in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> _Fwk;
+
+  //! @brief Storage vector for DAG evaluation in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> _Bwk;
 
   //! @brief Polyhedral image environment
   PolImg<T>                 _POLenv;
@@ -538,8 +560,12 @@ protected:
   int _propagate_bounds
     ( T* Xbnd );
 
+  //! @brief Set function gradient storage
+  void _set_gradient
+    ();
+
   //! @brief Cleanup gradient storage
-  void _cleanup_grad
+  void _cleanup_gradient
     ();
 
   //! @brief Add outer-approximation cuts to master MIP subproblem
@@ -633,7 +659,7 @@ public:
 
   //! @brief Destructor
   virtual ~MINLPSLV()
-    { _cleanup_grad(); }
+    { _cleanup_gradient(); }
 
   //! @brief Status after last NLP call
   STATUS get_status
@@ -890,62 +916,85 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _Foff.clear();
   _X0.resize( _nX, 0. );
   for( unsigned j=0; j<_nF; j++ ){
-    auto && Fjdep = _Fvar[j].dep();
-    auto it = Fjdep.dep().cbegin();
-    bool islin = true;
     double CtrCst = 0.;
-    for( ; it != Fjdep.dep().cend(); ++it ){
-      if( it->second > FFDep::L ){
-        _Fnlin.insert( j );
-        islin = false;
-        break;
-      }
-    }
-    if( islin ){
+    if( _Fvar[j].dep().worst() > FFDep::L )
+      _Fnlin.insert( j );
+    else{
       _Flin.insert( j );
       _dag->eval( 1, &_Fvar[j], &CtrCst, _nX, _Xvar.data(), _X0.data() );       
     }
     _Foff.push_back(  CtrCst );
   }
+#ifdef MC__MINLPSLV_DEBUG
   assert( _nF == _Flin.size() + _Fnlin.size() );
-  
-  // sparse function gradients
-  _cleanup_grad();
-  switch( options.NLPSLV.GRADMETH ){
-    default:
-    case NLP::Options::FAD: _Fgrad = _dag->SFAD( _nF, _Fvar.data(), _nX, _Xvar.data() ); break;
-    case NLP::Options::BAD: _Fgrad = _dag->SBAD( _nF, _Fvar.data(), _nX, _Xvar.data() ); break;
-  }
+#endif
 
+  // sparse function gradients
+  _set_gradient();
+ /* 
   _iAfun.clear(); _jAvar.clear(); _Aval.clear(); 
+  if( !_Flin.empty() ) _PXvar.resize( _nX );
+  for( auto const& iF : _Flin ){
+    // Initialize participating variables in fadbad::F<double>
+    for( unsigned iX=0; iX<_nX; ++iX )
+      _PXvar[iX].var( iX );
+    SPoly<> POLFvar;
+    _dag->eval( 1, &_Fvar[iF], &POLFvar, _nX, _Xvar.data(), _PXvar.data() );
+    // Gather derivatives
+    for( auto const& [mon,coef] : POLFvar.mapmon() ){
+      if( !mon.tord ) continue;
+#ifdef MC__MINLPSLV_DEBUG
+      assert( mon.tord == 1 && mon.expr.size() == 1 );
+#endif
+      _iAfun.push_back( iF );
+      _jAvar.push_back( mon.expr.cbegin()->first );
+      _Aval.push_back( coef );
+#ifdef MC__MINLPSLV_DEBUG
+      std::cout << "  _Aval[" << iF << "," << mon.expr.cbegin()->first << "] = " 
+                << coef << std::endl;
+#endif
+    }
+  }
+  _nA = _Aval.size();
+
+  // sparse nonlinear function gradients
   _iGfun.clear(); _jGvar.clear(); _Gvar.clear(); 
-  for( unsigned k=0; k<std::get<0>(_Fgrad); ++k ){
-    // derivative term in nonlinear constraint
-    if( _Fnlin.find( std::get<1>(_Fgrad)[k] ) != _Fnlin.end() ){
-      _iGfun.push_back( std::get<1>(_Fgrad)[k] );
+  _nG = 0;
+  for( auto const& iF : _Fnlin ){
+    _cleanup_gradient();
+    // Compute symbolic derivative
+    switch( options.NLPSLV.GRADMETH ){
+      case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      default: break;
+    }
+    // Gather derivative expressions
+    for( unsigned k=0; k<std::get<0>(_Fgrad); ++k ){
+      _iGfun.push_back( iF );
       _jGvar.push_back( std::get<2>(_Fgrad)[k] );
       _Gvar.push_back( std::get<3>(_Fgrad)[k] );
 #ifdef MC__MINLPSLV_DEBUG
-     std::cout << "  _Gvar[" << std::get<1>(_Fgrad)[k] << "," << std::get<2>(_Fgrad)[k]
-               << "] = " << std::get<3>(_Fgrad)[k] << std::endl;
+      std::cout << "  _Gvar[" << iF << "," << std::get<2>(_Fgrad)[k] << "] = " 
+                << std::get<3>(_Fgrad)[k] << std::endl;
 #endif
     }
-    // derivative term in linear constraint
-    else{
-      _iAfun.push_back( std::get<1>(_Fgrad)[k] );
-      _jAvar.push_back( std::get<2>(_Fgrad)[k] );
-      assert( std::get<3>(_Fgrad)[k].cst() );
-      _Aval.push_back( std::get<3>(_Fgrad)[k].num().val() );    
-#ifdef MC__MINLPSLV_DEBUG
-     std::cout << "  _Aval[" << std::get<1>(_Fgrad)[k] << "," << std::get<2>(_Fgrad)[k]
-               << "] = " << std::get<3>(_Fgrad)[k].num().val() << std::endl;
-#endif
-    }
+    _nG += _Fvar[iF].dep().dep().size();
   }
-  _nG = _Gvar.size();
-  _nA = _Aval.size();
-  _Gop = _dag->subgraph( _nG, _Gvar.data() );
+  _cleanup_gradient();
+*/
   _Gval.resize( _nG );
+  if( !_Gvar.empty() ){
+    _Gop = _dag->subgraph( _nG, _Gvar.data() );
+#ifdef MC__MINLPSLV_DEBUG
+    _dag->output( _Gop );
+#endif
+  }
+  else{
+    _Fop = _dag->subgraph( _Fnlin, _Fvar.data() );
+#ifdef MC__MINLPSLV_DEBUG
+    _dag->output( _Fop );
+#endif
+  }
 
   // feasibility pump reference
   _Ffeas = 0.;
@@ -964,12 +1013,83 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_cleanup_grad
+MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
 ()
 {
-  delete[] std::get<1>(_Fgrad);  std::get<1>(_Fgrad) = 0;
-  delete[] std::get<2>(_Fgrad);  std::get<2>(_Fgrad) = 0;
-  delete[] std::get<3>(_Fgrad);  std::get<3>(_Fgrad) = 0;
+  // sparse linear function gradients
+  _iAfun.clear(); _jAvar.clear(); _Aval.clear(); 
+  if( !_Flin.empty() ) _PXvar.resize( _nX );
+  for( auto const& iF : _Flin ){
+    // Initialize participating variables in fadbad::F<double>
+    for( unsigned iX=0; iX<_nX; ++iX )
+      _PXvar[iX].var( iX );
+    SPoly<> POLFvar;
+    _dag->eval( 1, &_Fvar[iF], &POLFvar, _nX, _Xvar.data(), _PXvar.data() );
+    // Gather derivatives
+    for( auto const& [mon,coef] : POLFvar.mapmon() ){
+      if( !mon.tord ) continue;
+#ifdef MC__MINLPSLV_DEBUG
+      assert( mon.tord == 1 && mon.expr.size() == 1 );
+#endif
+      _iAfun.push_back( iF );
+      _jAvar.push_back( mon.expr.cbegin()->first );
+      _Aval.push_back( coef );
+#ifdef MC__MINLPSLV_DEBUG
+      std::cout << "  _Aval[" << iF << "," << mon.expr.cbegin()->first << "] = " 
+                << coef << std::endl;
+#endif
+    }
+  }
+  _nA = _Aval.size();
+
+  // sparse nonlinear function gradients
+  _iGfun.clear(); _jGvar.clear(); _Gvar.clear(); 
+  for( auto const& iF : _Fnlin ){
+    _cleanup_gradient();
+    // Compute symbolic derivative
+    switch( options.NLPSLV.GRADMETH ){
+      case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      default: break;
+    }
+    // Gather derivative expressions
+    for( unsigned k=0; k<std::get<0>(_Fgrad); ++k ){
+      _iGfun.push_back( iF );
+      _jGvar.push_back( std::get<2>(_Fgrad)[k] );
+      _Gvar.push_back( std::get<3>(_Fgrad)[k] );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      std::cout << "  _Gvar[" << iF << "," << std::get<2>(_Fgrad)[k] << "] = " 
+                << std::get<3>(_Fgrad)[k] << std::endl;
+#endif
+    }
+
+    // Gather derivative entries
+    switch( options.NLPSLV.GRADMETH ){
+      case NLP::Options::FAD:
+      case NLP::Options::BAD:
+        for( auto const& [iX,dum] : _Fvar[iF].dep().dep() ){
+          _iGfun.push_back( iF );
+          _jGvar.push_back( iX );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          std::cout << "  _Gvar[" << iF << "," << iX << "]" << std::endl;
+#endif
+        }
+      default: break;
+    }
+  }
+  _nG = _iGfun.size();
+  _cleanup_gradient();
+}
+
+template <typename T, typename NLP, typename MIP, typename... ExtOps>
+inline void
+MINLPSLV<T,NLP,MIP,ExtOps...>::_cleanup_gradient
+()
+{
+  std::get<0>(_Fgrad) = 0;
+  delete[] std::get<1>(_Fgrad);  std::get<1>(_Fgrad) = nullptr;
+  delete[] std::get<2>(_Fgrad);  std::get<2>(_Fgrad) = nullptr;
+  delete[] std::get<3>(_Fgrad);  std::get<3>(_Fgrad) = nullptr;
 }
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
@@ -1032,7 +1152,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_finalize
 {
   _status = status;
   stats.walltime_all += stats.walltime( tstart );
-  _display_final( _iter, stats.walltime_all, os );
+  _display_final( _iter, stats.walltime( tstart ), os );
   return _status;
 }
 
@@ -1320,11 +1440,62 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
   
   // Evaluate nonlinear function derivatives
   try{
-    _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data() );
-#ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
-    for( unsigned ie=0; ie<_nG; ie++ )
-      std::cout << "  _Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = " << _Gval[ie] << std::endl;
+    switch( options.NLPSLV.GRADMETH ){
+      // Compute backward numeric derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::BAD:
+        _BXval.resize( _nX );
+        // Initialize participating variables in fadbad::B<double>
+        for( unsigned iX=0; iX<_nX; ++iX )
+          _BXval[iX] = Xval[iX];
+        _BFval.resize( _nF );
+        _dag->eval( _Fop, _Bwk, _Fnlin, _Fvar.data(), _BFval.data(), _nX, _Xvar.data(), _BXval.data() );
+        _Bwk.clear();
+        for( auto const& iF : _Fnlin )
+          _BFval[iF].diff( iF, _nF );
+        // Gather derivatives
+        for( unsigned ie=0; ie<_nG; ie++ ){
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          std::cout << "  _Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = "
+                    << _BXval[ _jGvar[ie] ].d( iGfun[ie] ) << std::endl;
 #endif
+          _Gval[ie] = _BXval[ _jGvar[ie] ].d( _iGfun[ie] );
+        }
+        break;
+          
+      // Compute forward numeric derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::FAD:
+        _FXval.resize( _nX );
+        // Initialize participating variables in fadbad::F<double>
+        for( unsigned iX=0; iX<_nX; ++iX ){
+          _FXval[iX] = Xval[iX];
+          _FXval[iX].diff( iX, _nX );
+        }
+        _FFval.resize( _nF );
+        _dag->eval( _Fop, _Fwk, _Fnlin, _Fvar.data(), _FFval.data(), _nX, _Xvar.data(), _FXval.data() );
+        // Gather derivatives
+        for( unsigned ie=0; ie<_nG; ie++ ){
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          std::cout << "  _Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = "
+                    << _FFval[ _iGfun[ie] ].d( _jGvar[ie] ) << std::endl;
+#endif
+          _Gval[ie] = _FFval[ _iGfun[ie] ].d( _jGvar[ie] );
+        }
+        break;
+
+      // Compute symbolic derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
+      case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
+        _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data() );
+#ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
+        for( unsigned ie=0; ie<_nG; ie++ )
+          std::cout << "  _Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = " << _Gval[ie] << std::endl;
+#endif
+        break;
+
+      // Other derivative method - error
+      default:
+        throw Exceptions( Exceptions::INTERN );
+    }
   }
   catch(...){
     return false;
@@ -1673,24 +1844,32 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
     _Zrel  = _solution.f[0];
     _Xrel  = _solution.x;
     _Xbndi = _Xbnd;
-    if( _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
+    if( _is_integer_feasible( _Xrel.data(), options.FEASTOL ) ){
       _incumbent = _solution;
       _Zinc = _incumbent.f[0];
       intrel = true;
     }
     else if( _roundf ){
-      _Xreli = _solution.x;
       SOLUTION_OPT soltmp = _solution; // temporary storage
-      _roundf( _Xtyp.size(), _Xtyp.data(), _Xreli.data() );
-      for( auto&& i: _Xint ) _Xbndi[i] = _Xreli[i];
-      if( _solve_local( _tstart, _Xreli.data(), _Xbndi.data(), false, false, os ) 
-       && _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
-        _incumbent = _solution;
-        _Zinc = _incumbent.f[0];
-        intrel = true;
+      _roundf( _Xtyp.size(), _Xtyp.data(), _solution.x.data() );
+      if( _is_integer_feasible( _solution.x.data(), options.FEASTOL ) ){
+        if( _Xint.size() < _nX ){
+          for( auto const& i: _Xint ) _Xbndi[i] = _solution.x[i];
+          if( _solve_local( _tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) ){
+            _incumbent = _solution;
+            _Zinc = _incumbent.f[0];
+            intrel = true;
+          }
+        }
+        else if( _test_feasible( _solution.x.data(), os ) ){
+          _incumbent = _solution;
+          _Zinc = _incumbent.f[0];
+          intrel = true;      
+        }
       }
-      else{
-        _solution = soltmp; // restore solution if rounding unsuccessful
+      // Restore solution if rounding unsuccessful
+      if( !intrel ){
+        _solution = soltmp; 
         _incumbent.reset();
       }
     }
@@ -1698,7 +1877,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
   else{
     _Zrel = _objscal * BASE_OPT::INF;
   }
-  
+
   // Intermediate display
   _display_add( _iter );
   bool updinc = !_incumbent.x.empty();
@@ -1776,8 +1955,12 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
       // Interrupt feasibilitity pump and solve local NLP model
       if( _is_integer_equal( _solution.x.data(), _Xrel.data() ) ){
         pumpfeas = false;
-        for( auto&& i: _Xint ) _Xbndi[i] = _Xrel[i];
-        if( !_solve_local( _tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) )
+        if( _Xint.size() < _nX ){
+          for( auto const& i: _Xint ) _Xbndi[i] = _Xrel[i];
+          if( !_solve_local( _tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) )
+            return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible after feasibility pump
+        }
+        else if( !_test_feasible( _solution.x.data(), os ) )
           return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible after feasibility pump
 #ifdef MC__MINLPSLV_DEBUG
         std::cout << _solution;
@@ -1795,8 +1978,12 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
     
     // Solve local NLP model at current MIP integer fixing outside feasibility pump
     else{
-      for( auto&& i: _Xint ) _Xbndi[i] = _Xrel[i];
-      locfeas = _solve_local( _tstart, _Xrel.data(), _Xbndi.data(), false, false, os );
+      if( _Xint.size() < _nX ){
+        for( auto const& i: _Xint ) _Xbndi[i] = _Xrel[i];
+        locfeas = _solve_local( _tstart, _Xrel.data(), _Xbndi.data(), false, false, os );
+      }
+      else
+        locfeas = _test_feasible( _Xrel.data(), os );
 #ifdef MC__MINLPSLV_DEBUG
       std::cout << _solution;
 #endif
@@ -1913,7 +2100,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_final
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::endl << "#  TERMINATION AFTER ";
-  if( iter ) _odisp << _iter << " ITERATIONS: ";
+  if( iter ) _odisp << _iter-1 << " ITERATIONS: ";
   else       _odisp << "0 ITERATION: ";
   _odisp << std::fixed << std::setprecision(3) << walltime.count()*1e-6 << " SEC"
          << std::endl;

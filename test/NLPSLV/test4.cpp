@@ -264,7 +264,7 @@ int main()
   NLP.options.MAXITER   = 200;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT< mc::FFDOpt, mc::FFDOptGrad >::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT< mc::FFDOpt, mc::FFDOptGrad >::Options::FSYM;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 0;
 #else

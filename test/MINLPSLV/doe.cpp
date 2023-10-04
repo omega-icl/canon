@@ -1,4 +1,5 @@
 #undef MC__MINLPSLV_DEBUG
+#undef MC__FFUNC_SFAD_CLEAR
 
 #include <fstream>
 #include <iomanip>
@@ -36,14 +37,15 @@ namespace mc
 struct FFDOptBase
 {
   // Vector of atom matrices
-  static std::vector< CPPL::dsymatrix > _A;
+  static std::vector< CPPL::dsymatrix >* _A;
 
   // Read atom matrices from file
   static unsigned read
     ( unsigned const dim, std::string filename, bool const disp=false )
     {
       CPPL::dsymatrix Ai( dim );
-      _A.clear();
+      if( !_A ) _A = new std::vector< CPPL::dsymatrix >;
+      _A->clear();
       std::ifstream file( filename );
       if( !file ) throw std::runtime_error("Error: Could not open input file\n");
       std::string line;
@@ -61,19 +63,19 @@ struct FFDOptBase
         }
         i++;
         if( empty ){
-          if( disp ) std::cout << "Atomic matrix #" << _A.size() << ":" << std::endl << Ai;
-          _A.push_back( Ai );
+          if( disp ) std::cout << "Atomic matrix #" << _A->size() << ":" << std::endl << Ai;
+          _A->push_back( Ai );
           i = 0;
           empty = false;
         }
         if( i > dim ) throw std::runtime_error("Error: Could not read input file\n");
       }
-      if( i ) _A.push_back( Ai );
-      return _A.size();
+      if( i ) _A->push_back( Ai );
+      return _A->size();
     }
 };
 
-inline std::vector< CPPL::dsymatrix > FFDOptBase::_A;
+inline std::vector< CPPL::dsymatrix >* FFDOptBase::_A = nullptr;
 
 class FFDOpt
 : public FFOp,
@@ -83,7 +85,7 @@ public:
   // Constructors
   FFDOpt
     ()
-    : FFOp( (int)EXTERN+4 )
+    : FFOp( (int)EXTERN )
     {}
 
   // Functor
@@ -111,12 +113,12 @@ public:
     const
     {
       //std::cout << "FFDOpt::eval: double\n"; 
-      assert( nRes == 1 && nVar == _A.size() && _A.begin() != _A.end() );
-      CPPL::dsymatrix Amat( _A[0].n );
+      assert( nRes == 1 && _A && nVar == _A->size() && _A->begin() != _A->end() );
+      static CPPL::dsymatrix Amat( _A->at(0).n );
       Amat.zero();
       for( unsigned i=0; i<nVar; ++i )
-        if( !i ) Amat  = vVar[0] * _A[0];
-        else     Amat += vVar[i] * _A[i];
+        if( !i ) Amat  = vVar[0] * _A->at(0);
+        else     Amat += vVar[i] * _A->at(i);
       //std::cout << Amat;
       if( dgeqrf( Amat.to_dgematrix(), vRes[0] ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
@@ -131,6 +133,11 @@ public:
       //std::cout << "FFDOpt::eval: FFVar\n"; 
       vRes[0] = operator()( nVar, vVar );
     }
+
+  void eval
+    ( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+      unsigned const* mVar )
+    const;
 
   void eval
     ( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
@@ -157,7 +164,7 @@ public:
   // Constructors
   FFDOptGrad
     ()
-    : FFOp( (int)EXTERN+5 )
+    : FFOp( (int)EXTERN+1 )
     {}
 
   // Functor
@@ -194,21 +201,21 @@ public:
     const
     {
       //std::cout << "FFDOptGrad::eval: double\n"; 
-      assert( nRes == nVar && nVar == _A.size() && _A.begin() != _A.end() );
-      CPPL::dsymatrix Amat( _A[0].n );
+      assert( nRes == nVar && _A && nVar == _A->size() && _A->begin() != _A->end() );
+      static CPPL::dsymatrix Amat( _A->at(0).n );
       Amat.zero();
       for( unsigned i=0; i<nVar; ++i )
-        if( !i ) Amat  = vVar[0] * _A[0];
-        else     Amat += vVar[i] * _A[i];
+        if( !i ) Amat  = vVar[0] * _A->at(0);
+        else     Amat += vVar[i] * _A->at(i);
       //std::cout << Amat;
       // Perform LDL' decomposition
-      CPPL::dgematrix Lmat;
-      std::vector<int> IPIV;
+      static CPPL::dgematrix Lmat;
+      static std::vector<int> IPIV;
       if( dsytrf( Amat, Lmat, IPIV ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
-      CPPL::dgematrix Xmat;
+      static CPPL::dgematrix Xmat;
       for( unsigned i=0; i<nVar; ++i ){
-        if( dsytrs( Lmat, IPIV, _A[i].to_dgematrix(), Xmat ) )
+        if( dsytrs( Lmat, IPIV, _A->at(i).to_dgematrix(), Xmat ) )
           throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
         //std::cout << Xmat;
         for( int j=0; j<Xmat.n; ++j )
@@ -245,26 +252,155 @@ FFDOpt::eval
   unsigned const* mVar )
 const
 {
-  assert( nRes == 1 && nVar == _A.size() && _A.begin() != _A.end() );
-  std::cout << "FFDOpt::eval: fadbad::F<FFVar>\n";
-  std::vector<FFVar> vVarVal( nVar );
+  assert( nRes == 1 && _A && nVar == _A->size() && _A->begin() != _A->end() );
+  //std::cout << "FFDOpt::eval: fadbad::F<FFVar>\n";
+  static std::vector<FFVar> vVarVal( nVar );
   for( unsigned i=0; i<nVar; ++i )
     vVarVal[i] = vVar[i].val();
   vRes[0] = operator()( nVar, vVarVal.data() );
-  FFDOptGrad DOptGrad;
   for( unsigned i=0; i<nVar; ++i )
     vRes[0].setDepend( vVar[i] );
+  static FFDOptGrad DOptGrad;
+  FFVar const*const* vDOptGrad = DOptGrad( nVar, vVarVal.data() );
   for( unsigned j=0; j<vRes[0].size(); ++j ){
     vRes[0][j] = 0.;
     for( unsigned i=0; i<nVar; ++i ){
       if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
-      vRes[0][j] += DOptGrad( i, nVar, vVarVal.data() ) * vVar[i][j];
-      //std::cout << "(" << i << "," << j << ")" << std::endl;
-      //if( !i ) vRes[0][j]  = DOptGrad( 0, nVar, vVarVal.data() ) * vVar[0][j];
-      //else     vRes[0][j] += DOptGrad( i, nVar, vVarVal.data() ) * vVar[i][j];
+      vRes[0][j] += *vDOptGrad[i] * vVar[i][j];
+      //vRes[0][j] += DOptGrad( i, nVar, vVarVal.data() ) * vVar[i][j];
     }
   }
 }
+
+inline void
+FFDOpt::eval
+( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+  unsigned const* mVar )
+const
+{
+  assert( nRes == 1 && _A && nVar == _A->size() && _A->begin() != _A->end() );
+  //std::cout << "FFDOpt::eval: fadbad::F<T>\n";
+  static std::vector<double> vVarVal( nVar );
+  for( unsigned i=0; i<nVar; ++i )
+    vVarVal[i] = vVar[i].val();
+  static double vResVal;
+  eval( 1, &vResVal, nVar, vVarVal.data(), nullptr );
+  vRes[0] = vResVal;
+  for( unsigned i=0; i<nVar; ++i )
+    vRes[0].setDepend( vVar[i] );
+  static FFDOptGrad DOptGrad;
+  static std::vector<double> vDOptGrad( nVar ); 
+  DOptGrad.eval( nVar, vDOptGrad.data(), nVar, vVarVal.data(), nullptr );
+  for( unsigned j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( unsigned i=0; i<nVar; ++i ){
+      if( vVar[i][j] == 0. ) continue;
+      vRes[0][j] += vDOptGrad[i] * vVar[i][j];
+    }
+  }
+}
+
+class FFSum
+: public FFOp
+{
+public:
+  // Constructors
+  FFSum
+    ()
+    : FFOp( (int)EXTERN+2 )
+    {}
+
+  // Functor
+  FFVar& operator()
+    ( unsigned const nVar, FFVar const* pVar )
+    const
+    {
+      auto dep = FFDep();
+      for( unsigned i=0; i<nVar; ++i ) dep += pVar[i].dep();
+      dep.update( FFDep::TYPE::L );
+      return **insert_external_operation( *this, 1, dep, nVar, pVar );
+    }
+
+  // Evaluation overloads
+  template< typename T >
+  void eval
+    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+    const
+    {
+      for( unsigned j=0; j<nRes; ++j )
+        for( unsigned i=0; i<nVar; ++i )
+          if( !i ) vRes[j]  = vVar[i];
+          else     vRes[j] += vVar[i];
+    }
+
+  void eval
+    ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+    const
+    {
+      assert( nRes == 1 );
+      //std::cout << "FFDOpt::eval: FFVar\n"; 
+      vRes[0] = operator()( nVar, vVar );
+    }
+
+  void eval
+    ( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
+      unsigned const* mVar )
+    const
+    {
+      assert( nRes == 1 );
+      std::cout << "FFSum::eval: fadbad::F<T>\n";
+      static std::vector<FFVar> vVarVal( nVar );
+      for( unsigned i=0; i<nVar; ++i )
+        vVarVal[i] = vVar[i].val();
+      static FFVar vResVal;
+      eval( 1, &vResVal, nVar, vVarVal.data(), nullptr );
+      vRes[0] = vResVal;
+      for( unsigned i=0; i<nVar; ++i )
+        vRes[0].setDepend( vVar[i] );
+      for( unsigned j=0; j<vRes[0].size(); ++j ){
+        vRes[0][j] = 0.;
+        for( unsigned i=0; i<nVar; ++i ){
+          if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
+          vRes[0][j] += vVar[i][j];
+        }
+      }
+    }
+
+  void eval
+    ( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+      unsigned const* mVar )
+    const
+    {
+      assert( nRes == 1 );
+      std::cout << "FFSum::eval: fadbad::F<T>\n";
+      static std::vector<double> vVarVal( nVar );
+      for( unsigned i=0; i<nVar; ++i )
+        vVarVal[i] = vVar[i].val();
+      static double vResVal;
+      eval( 1, &vResVal, nVar, vVarVal.data(), nullptr );
+      vRes[0] = vResVal;
+      for( unsigned i=0; i<nVar; ++i )
+        vRes[0].setDepend( vVar[i] );
+      for( unsigned j=0; j<vRes[0].size(); ++j ){
+        vRes[0][j] = 0.;
+        for( unsigned i=0; i<nVar; ++i ){
+          if( vVar[i][j] == 0. ) continue;
+          vRes[0][j] += vVar[i][j];
+        }
+      }
+    }
+
+  // Properties
+  std::string name
+    ()
+    const
+    { return "SUM"; }
+  //! @brief Return whether or not operation is commutative
+  bool commutative
+    ()
+    const
+    { return false; }
+};
 
 }
 
@@ -278,10 +414,10 @@ const
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT< mc::FFDOpt, mc::FFDOptGrad > NLP;
+ typedef mc::NLPSLV_SNOPT< mc::FFDOpt, mc::FFDOptGrad, mc::FFSum > NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT< mc::FFDOpt, mc::FFDOptGrad > NLP;
+ typedef mc::NLPSLV_IPOPT< mc::FFDOpt, mc::FFDOptGrad, mc::FFSum > NLP;
 #endif
 
 #include "minlpslv.hpp"
@@ -294,7 +430,7 @@ nearest
 ( unsigned const n, unsigned const* typ, double* val )
 {
   for( unsigned i=0; i<n; ++i )
-    val[i] = round( val[i] );
+    val[i] = std::round( val[i] );
 }
 
 void
@@ -334,8 +470,10 @@ apportion
 int main()
 ////////////////////////////////////////////////////////////////////////
 {
-  mc::FFGraph< mc::FFDOpt, mc::FFDOptGrad > DAG;
-  const unsigned NS = mc::FFDOptBase::read( 4, "doe_1000.fim" );//_1000.fim" ); 
+  mc::FFGraph< mc::FFDOpt, mc::FFDOptGrad, mc::FFSum > DAG;
+  const unsigned NS = mc::FFDOptBase::read( 5, "han_5000.fim" );
+  //const unsigned NS = mc::FFDOptBase::read( 4, "doe_1000.fim" ); 
+  //const unsigned NS = mc::FFDOptBase::read( 4, "doe_50.fim" ); 
   mc::FFVar S[NS];
   double S0[NS];
   for( unsigned int i=0; i<NS; i++ ){
@@ -343,9 +481,10 @@ int main()
     S0[i] = 1./NS;
   }
   mc::FFDOpt DOpt;
+  mc::FFSum  Sum;
 
-  mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad> MINLP;
-  MINLP.options.SEARCHALG               = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad>::Options::OA;
+  mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum> MINLP;
+  MINLP.options.SEARCHALG               = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum>::Options::OA;
   MINLP.options.DISPLEVEL               = 1;
   MINLP.options.CVRTOL                  = 1e-5;
   MINLP.options.CVATOL                  = 1e-5;
@@ -354,7 +493,7 @@ int main()
   MINLP.options.INCCUT                  = 0;
   MINLP.options.ROOTCUT                 = 1;
   MINLP.options.TIMELIMIT               = 6e2;
-  MINLP.options.LINMETH                 = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad>::Options::CVX;
+  MINLP.options.LINMETH                 = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum>::Options::CVX;
   MINLP.options.MAXITER                 = 20;
   MINLP.options.MSLOC                   = 1;
 #ifdef MC__USE_SNOPT
@@ -362,7 +501,7 @@ int main()
   MINLP.options.NLPSLV.MAXITER          = 100;
   MINLP.options.NLPSLV.FEASTOL          = 1e-8;
   MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
-  MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
+  MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD; //SYM;
   //MINLP.options.NLPSLV.GRADCHECK        = 0;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 #elif  MC__USE_IPOPT
@@ -383,11 +522,12 @@ int main()
   throw std::runtime_error("Error: CPLEX solver not yet implemented");
 #endif
 
-  int const NEXP = 4; 
+  int const NEXP = 5; 
   MINLP.set_dag( &DAG );
   MINLP.set_var( NS, S, 0., NEXP, 1 );
   MINLP.set_obj( mc::BASE_OPT::MAX, DOpt( NS, S ) );
-  MINLP.add_ctr( mc::BASE_OPT::EQ, DAG.sum( NS, S ) - NEXP );
+  MINLP.add_ctr( mc::BASE_OPT::EQ, Sum( NS, S ) - NEXP );
+  //MINLP.add_ctr( mc::BASE_OPT::EQ, DAG.sum( NS, S ) - NEXP );
 
   MINLP.setup();
   //MINLP.optimize( S0 );

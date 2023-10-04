@@ -29,7 +29,7 @@ int main()
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FAD;
+  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FSYM;
   NLP->options.GRADCHECK = false;
   NLP->options.MAXTHREAD = 8;
 #else

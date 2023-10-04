@@ -10,14 +10,14 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-main : main.o gmomcc.o gevmcc.o gcmt.o optcc.o palmcc.o
-	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@ $(LDFLAGS)
+main : main.o gmomcc.o gevmcc.o optcc.o palmcc.o
+	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@ $(LDFLAGS)
 
 doxydoc : doxydoc.o
-	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 doe : doe.o
-	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@

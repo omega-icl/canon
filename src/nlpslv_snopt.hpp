@@ -89,6 +89,7 @@ producing the following display:
 #include "snoptProblem.hpp"
 
 #include "mctime.hpp"
+#include "spoly.hpp"
 #include "base_nlp.hpp"
 #include "gamsio.hpp"
 
@@ -104,6 +105,9 @@ producing the following display:
 
 namespace mc
 {
+
+template <typename... ExtOps>
+class NLPSLV_SNOPT;
 
 //! @brief C++ class for calling SNOPT on local threads
 ////////////////////////////////////////////////////////////////////////
@@ -218,6 +222,10 @@ struct WORKER_SNOPT
   std::vector<double> Xlow;
   //! @brief vector of decision variable upper bounds
   std::vector<double> Xupp;
+  //!@brief vector of variable values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FXval;
+  //!@brief vector of variable values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BXval;
 
   //! @brief vector of function values
   std::vector<double> Fval;
@@ -231,6 +239,10 @@ struct WORKER_SNOPT
   std::vector<double> Flow;
   //! @brief vector of constraint upper bounds
   std::vector<double> Fupp;
+  //!@brief vector of function values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FFval;
+  //!@brief vector of function values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BFval;
 
   //!@brief row coordinates of nonzero elements in the linear part of each function
   std::vector<int>    iAfun;
@@ -247,6 +259,8 @@ struct WORKER_SNOPT
   std::set<unsigned>  Gndx;
   //!@brief values of nonzero elements in the derivative of the nonlinear part of each function
   std::vector<double> Gval;
+  //! @brief Gradient option
+  int                 Gmeth;
 
   //!@brief number of superbasic variables
   int                 nS;
@@ -270,6 +284,10 @@ struct WORKER_SNOPT
   FFSubgraph          op_G;
   //! @brief Storage vector for DAG evaluation in double arithmetic
   std::vector<double> dwk;
+  //! @brief Storage vector for DAG evaluation in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> Fwk;
+  //! @brief Storage vector for DAG evaluation in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> Bwk;
 
   //! @brief Time limit
   double              tMAX;
@@ -306,7 +324,7 @@ struct WORKER_SNOPT
 
   //! @brief Function testing NLP solution stationarity
   bool stationary
-    ( double const GRADTOL, int const nX, int const nA, int const nG );
+    ( double const GRADTOL, int const nX, int const nF, int const nA, int const nG );
 
   //! @brief Function computing NLP cost correction to compensate for infeasibility
   double correction
@@ -446,11 +464,61 @@ WORKER_SNOPT<ExtOps...>::callback
     
     // Needs nonlinear function derivatives
     if( *needG > 0 && !*fdG ){
-      dag.eval( op_G, dwk, *neG, Gvar.data(), G, *neX, Xvar.data(), X );
+
+      switch( Gmeth ){
+        // Compute backward numeric derivative
+        case NLPSLV_SNOPT<ExtOps...>::Options::BAD:
+          BXval.resize( *neX );
+          // Initialize participating variables in fadbad::B<double>
+          for( int iX=0; iX<*neX; ++iX )
+            BXval[iX] = X[iX];
+          BFval.resize( *neF );
+          dag.eval( op_F, Bwk, Gndx, Fvar.data(), BFval.data(), *neX, Xvar.data(), BXval.data() );
+          Bwk.clear();
+          for( auto const& iF : Gndx )
+            BFval[iF].diff( iF, *neF );
+          // Gather derivatives
+          for( int ie=0; ie<*neG; ie++ ){
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-      for( int ie=0; ie<*neG; ie++ )
-        std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << G[ie] << std::endl;
+            std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << BXval[ jGvar[ie]-1 ].d( iGfun[ie]-1 ) << std::endl;
 #endif
+            G[ie] = BXval[ jGvar[ie]-1 ].d( iGfun[ie]-1 ); // SNOPT alters jGvar and iGfun
+          }
+          break;
+          
+        // Compute forward numeric derivative
+        case NLPSLV_SNOPT<ExtOps...>::Options::FAD:
+          FXval.resize( *neX );
+          // Initialize participating variables in fadbad::F<double>
+          for( int iX=0; iX<*neX; ++iX ){
+            FXval[iX] = X[iX];
+            FXval[iX].diff( iX, *neX );
+          }
+          FFval.resize( *neF );
+          dag.eval( op_F, Fwk, Gndx, Fvar.data(), FFval.data(), *neX, Xvar.data(), FXval.data() );
+          // Gather derivatives
+          for( int ie=0; ie<*neG; ie++ ){
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+            std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << FFval[ iGfun[ie]-1 ].d( jGvar[ie]-1 ) << std::endl;
+#endif
+            G[ie] = FFval[ iGfun[ie]-1 ].d( jGvar[ie]-1 ); // SNOPT alters jGvar and iGfun
+          }
+          break;
+
+        // Compute symbolic derivative
+        case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
+        case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
+          dag.eval( op_G, dwk, *neG, Gvar.data(), G, *neX, Xvar.data(), X );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          for( int ie=0; ie<*neG; ie++ )
+            std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << G[ie] << std::endl;
+#endif
+          break;
+
+        // Other derivative method - error
+        default:
+          throw typename NLPSLV_SNOPT<ExtOps...>::Exceptions( NLPSLV_SNOPT<ExtOps...>::Exceptions::INTERN );
+      }
     }
   }
   catch(...){
@@ -503,15 +571,69 @@ template <typename... ExtOps>
 inline
 bool
 WORKER_SNOPT<ExtOps...>::stationary
-( double const GRADTOL, int const nX, int const nA, int const nG )
+( double const GRADTOL, int const nX, int const nF, int const nA, int const nG )
 {
+  Gval.resize( nG );
   try{
-    Gval.resize( nG );
-    dag.eval( op_G, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+    switch( Gmeth ){
+      // Compute backward numeric derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::BAD:
+        BXval.resize( nX );
+        // Initialize participating variables in fadbad::B<double>
+        for( int iX=0; iX<nX; ++iX )
+          BXval[iX] = solution.x[iX];
+        BFval.resize( nF );
+        dag.eval( op_F, Bwk, Gndx, Fvar.data(), BFval.data(), nX, Xvar.data(), BXval.data() );
+        Bwk.clear();
+        for( auto const& iF : Gndx )
+          BFval[iF].diff( iF, nF );
+        // Gather derivatives
+        for( int ie=0; ie<nG; ie++ ){
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << BXval[ jGvar[ie] ].d( iGfun[ie] ) << std::endl;
+#endif
+          Gval[ie] = BXval[ jGvar[ie] ].d( iGfun[ie] );
+        }
+        break;
+          
+      // Compute forward numeric derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::FAD:
+        FXval.resize( nX );
+        // Initialize participating variables in fadbad::F<double>
+        for( int iX=0; iX<nX; ++iX ){
+          FXval[iX] = solution.x[iX];
+          FXval[iX].diff( iX, nX );
+        }
+        FFval.resize( nF );
+        dag.eval( op_F, Fwk, Gndx, Fvar.data(), FFval.data(), nX, Xvar.data(), FXval.data() );
+        // Gather derivatives
+        for( int ie=0; ie<nG; ie++ ){
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << FFval[ iGfun[ie] ].d( jGvar[ie] ) << std::endl;
+#endif
+          Gval[ie] = FFval[ iGfun[ie] ].d( jGvar[ie] );
+        }
+        break;
+
+      // Compute symbolic derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
+      case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
+        dag.eval( op_G, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+        for( int ie=0; ie<nG; ie++ )
+          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << Gval[ie] << std::endl;
+#endif
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_SNOPT<ExtOps...>::Exceptions( NLPSLV_SNOPT<ExtOps...>::Exceptions::INTERN );
+    }
   }
   catch(...){
     return false;
   }
+
   std::vector<double> gradL = solution.ux;
   for( int ie=0; ie<nG; ie++ )
     gradL[jGvar[ie]] += Gval[ie] * solution.uf[iGfun[ie]];
@@ -634,8 +756,8 @@ public:
 
   //! @brief NLP solution status
   enum STATUS{
-     SUCCESSFUL=0,		//!< Optimal solution found (possibly not within required accuracy)
-     INFEASIBLE,	    //!< The problem appears to be infeasible
+     SUCCESSFUL=0,	//!< Optimal solution found (possibly not within required accuracy)
+     INFEASIBLE,	//!< The problem appears to be infeasible
      UNBOUNDED,	        //!< The problem appears to be unbounded
      INTERRUPTED,       //!< Resource limit reached
      FAILURE,           //!< Terminated after numerical difficulties
@@ -670,6 +792,8 @@ private:
   std::vector<double> _X0;
   //! @brief vector of decision variable levels (size _nX0)
   std::vector<double> _Xini;
+  //! @brief vector of polynomial variables for linear function gradients
+  std::vector<SPoly<>> _PXvar;
 
   //! @brief number of functions (objective and constraints) in problem
   int                 _nF;
@@ -701,6 +825,8 @@ private:
   std::vector<int>    _jAvar;
   //!@brief values of nonzero elements in the linear part of each function
   std::vector<double> _Aval;
+  //!@brief set of indices of linear constraints 
+  std::set<unsigned>  _Andx;
 
   //!@brief number of nonzero elements in the derivative of the nonlinear part of each function
   int                 _nG;
@@ -708,13 +834,15 @@ private:
   std::vector<int>    _iGfun;
   //!@brief column coordinates of nonzero elements in the derivative of the nonlinear part of each function
   std::vector<int>    _jGvar;
+  //!@brief values of derivatives in the nonlinear part of each function
+  std::vector<double> _Gval;
   //! @brief vector of derivatives for the nonlinear part of each function
   std::vector<FFVar>  _Gvar;
   //!@brief set of indices of nonlinear constraints 
   std::set<unsigned>  _Gndx;
 
   //! @brief function sparse derivatives
-  std::tuple< unsigned, unsigned const*, unsigned const*, FFVar const* > _fct_grad;
+  std::tuple< unsigned, unsigned const*, unsigned const*, FFVar const* > _Fgrad;
   //!@brief pointer to user array passed to snOptA
   int*  _iusr;
 
@@ -748,6 +876,8 @@ private:
   std::vector<int>    _recjAvar;
   //!@brief values of nonzero elements in the linear part of each function
   std::vector<double> _recAval;
+  //!@brief set of indices of linear constraints 
+  std::set<unsigned>  _recAndx;
 
   //!@brief number of nonzero elements in the derivative of the nonlinear part of each function
   int                 _recnG;
@@ -777,7 +907,7 @@ public:
   //! @brief Destructor
   virtual ~NLPSLV_SNOPT()
     {
-      _cleanup_grad();
+      _cleanup_gradient();
       delete[] _iusr;
       for( auto && th : _worker ) delete th;
     }
@@ -816,8 +946,10 @@ public:
     };
     //! @brief Enumeration type for gradient strategy
     enum GRADIENT_STRATEGY{
-      FAD=0,	//!< Forward AD
-      BAD,		//!< Backward AD
+      FSYM=0,	//!< Forward symbolic AD
+      BSYM,	//!< Backward symbolic AD
+      FAD,	//!< Forward numeric AD
+      BAD,	//!< Backward numeric AD
       FD        //!< Finite differences
     };
     //! @brief Corresponds to "Major feasibility tolerance" in snOptA, which specifies how accurately the nonlinear constraints should be satisfied.
@@ -847,6 +979,30 @@ public:
     //! @brief Maximum number of threads for multistart solve.
     unsigned MAXTHREAD;
   } options;
+
+  //! @brief NLPSLV exceptions
+  class Exceptions
+  {
+  public:
+    //! @brief Enumeration type for MINLPSLV exception handling
+    enum TYPE{
+      INTERN=-33	//!< Internal error
+    };
+    //! @brief Constructor for error <a>ierr</a>
+    Exceptions( TYPE ierr ) : _ierr( ierr ){}
+    //! @brief Inline function returning the error flag
+    int ierr(){ return _ierr; }
+    //! @brief Inline function returning the error description
+    std::string what(){
+      switch( _ierr ){
+        case INTERN:
+        default:
+          return "NLPSLV_SNOPT::Exceptions  Internal error";
+      }
+    }
+  private:
+    TYPE _ierr;
+  };
 
   //! @brief Setup NLP model before solution
   bool setup
@@ -912,6 +1068,14 @@ public:
   double cost_correction
     ( double const* x, double const* ux, double const* uf );
 
+  //! @brief Compute gradients of linear functions
+  std::tuple< unsigned, int*, int*, double* > gradient_linear
+    ();
+
+  //! @brief Compute gradients of nonlinear functions
+  std::tuple< unsigned, int*, int*, double* > gradient_nonlinear
+    ( const double*x );
+
   //! @brief Get solution info
   SOLUTION_OPT const& solution() const
     {
@@ -958,21 +1122,174 @@ protected:
       bool const DISP, int& feasible, SOLUTION_OPT& stat );
 #endif
 
+  //! @brief Set function gradient storage
+  void _set_gradient
+    ();
+
+  //! @brief Add function gradient to storage
+  bool _add_gradient
+    ( unsigned const ndx );
+
   //! @brief Cleanup gradient storage
-  void _cleanup_grad
+  void _cleanup_gradient
     ()
     {
-      delete[] std::get<1>(_fct_grad);  std::get<1>(_fct_grad) = 0;
-      delete[] std::get<2>(_fct_grad);  std::get<2>(_fct_grad) = 0;
-      delete[] std::get<3>(_fct_grad);  std::get<3>(_fct_grad) = 0;
+      delete[] std::get<1>(_Fgrad);  std::get<1>(_Fgrad) = nullptr;
+      delete[] std::get<2>(_Fgrad);  std::get<2>(_Fgrad) = nullptr;
+      delete[] std::get<3>(_Fgrad);  std::get<3>(_Fgrad) = nullptr;
     }
 
 private:
 
   //! @brief Private methods to block default compiler methods
-  NLPSLV_SNOPT( NLPSLV_SNOPT<ExtOps...> const& );
-  NLPSLV_SNOPT<ExtOps...>& operator=( NLPSLV_SNOPT<ExtOps...> const& );
+  NLPSLV_SNOPT( NLPSLV_SNOPT<ExtOps...> const& ) = delete;
+  NLPSLV_SNOPT<ExtOps...>& operator=( NLPSLV_SNOPT<ExtOps...> const& ) = delete;
 };
+
+template <typename... ExtOps>
+inline
+void
+NLPSLV_SNOPT<ExtOps...>::_set_gradient
+()
+{
+  // sparse linear function gradients
+  _iAfun.clear(); _jAvar.clear(); _Aval.clear(); 
+  if( !_Andx.empty() ) _PXvar.resize( _nX );
+  for( auto const& iF : _Andx ){
+    // Initialize participating variables in fadbad::F<double>
+    for( int iX=0; iX<_nX; ++iX )
+      _PXvar[iX].var( iX );
+    SPoly<> POLFvar;
+    _dag->eval( 1, &_Fvar[iF], &POLFvar, _nX, _Xvar.data(), _PXvar.data() );
+    // Gather derivatives
+    for( auto const& [mon,coef] : POLFvar.mapmon() ){
+      if( !mon.tord ) continue;
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      assert( mon.tord == 1 && mon.expr.size() == 1 );
+#endif
+      _iAfun.push_back( iF );
+      _jAvar.push_back( mon.expr.cbegin()->first );
+      _Aval.push_back( coef );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      std::cout << "  _Aval[" << iF << "," << mon.expr.cbegin()->first << "] = " 
+                << coef << std::endl;
+#endif
+    }
+  }
+  _nA = _Aval.size();
+
+  // sparse nonlinear function gradients
+  _iGfun.clear(); _jGvar.clear(); _Gvar.clear(); 
+  for( auto const& iF : _Gndx ){
+    _cleanup_gradient();
+    // Compute symbolic derivative
+    switch( options.GRADMETH ){
+      case Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      case Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      default: break;
+    }
+    // Gather derivative expressions
+    for( unsigned k=0; k<std::get<0>(_Fgrad); ++k ){
+      _iGfun.push_back( iF );
+      _jGvar.push_back( std::get<2>(_Fgrad)[k] );
+      _Gvar.push_back( std::get<3>(_Fgrad)[k] );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      std::cout << "  _Gvar[" << iF << "," << std::get<2>(_Fgrad)[k] << "] = " 
+                << std::get<3>(_Fgrad)[k] << std::endl;
+#endif
+    }
+
+    // Gather derivative entries
+    switch( options.GRADMETH ){
+      case Options::FAD:
+      case Options::BAD:
+        for( auto const& [iX,dum] : _Fvar[iF].dep().dep() ){
+          _iGfun.push_back( iF );
+          _jGvar.push_back( iX );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+          std::cout << "  _Gvar[" << iF << "," << iX << "]" << std::endl;
+#endif
+        }
+      default: break;
+    }
+  }
+  _nG = _iGfun.size();
+  _cleanup_gradient();
+}
+
+template <typename... ExtOps>
+inline
+bool
+NLPSLV_SNOPT<ExtOps...>::_add_gradient
+( unsigned const ndxF )
+{
+  // sparse linear function gradients
+  if( _Andx.find( ndxF ) != _Andx.end() ){
+    // Initialize participating variables in fadbad::F<double>
+    _PXvar.resize( _nX );
+    for( int iX=0; iX<_nX; ++iX )
+      _PXvar[iX].var( iX );
+    SPoly<> POLFvar;
+    _dag->eval( 1, &_Fvar[ndxF], &POLFvar, _nX, _Xvar.data(), _PXvar.data() );
+    // Gather derivatives
+    for( auto const& [mon,coef] : POLFvar.mapmon() ){
+      if( !mon.tord ) continue;
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      assert( mon.tord == 1 && mon.expr.size() == 1 );
+#endif
+      _iAfun.push_back( ndxF );
+      _jAvar.push_back( mon.expr.cbegin()->first );
+      _Aval.push_back( coef );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      std::cout << "  _Aval[" << ndxF << "," << mon.expr.cbegin()->first << "] = " 
+                << coef << std::endl;
+#endif
+    }
+    _nA = _Aval.size();
+    return true;
+  }
+
+  // sparse nonlinear function gradients
+  else if( _Gndx.find( ndxF ) != _Gndx.end() ){
+    _cleanup_gradient();
+    // Compute symbolic derivative
+    switch( options.GRADMETH ){
+      case Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[ndxF], _nX, _Xvar.data() ); break;
+      case Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[ndxF], _nX, _Xvar.data() ); break;
+      default: break;
+    }
+    // Gather derivative expressions
+    for( unsigned k=0; k<std::get<0>(_Fgrad); ++k ){
+      _iGfun.push_back( ndxF );
+      _jGvar.push_back( std::get<2>(_Fgrad)[k] );
+      _Gvar.push_back( std::get<3>(_Fgrad)[k] );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+      std::cout << "  _Gvar[" << ndxF << "," << std::get<2>(_Fgrad)[k] << "] = " 
+                << std::get<3>(_Fgrad)[k] << std::endl;
+#endif
+    }
+
+    // Gather derivative entries
+    switch( options.GRADMETH ){
+      case Options::FAD:
+      case Options::BAD:
+      case Options::FD:
+        for( auto const& [iX,dum] : _Fvar[ndxF].dep().dep() ){
+          _iGfun.push_back( ndxF );
+          _jGvar.push_back( iX );
+        }
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+        std::cout << "  _Gvar[" << ndxF << "," << iX << "]" << std::endl;
+#endif
+      default: break;
+    }
+    _nG = _iGfun.size();
+    _cleanup_gradient();
+    return true;
+  }
+  
+  return false;
+}
 
 template <typename... ExtOps>
 inline
@@ -1018,8 +1335,10 @@ NLPSLV_SNOPT<ExtOps...>::setup
     _ObjMul = -1.; 
     if( _Fvar[ndxF].dep().worst() > FFDep::L )
       _Gndx.insert( ndxF );
-    else
-      _dag->eval( 1, &_Fvar[ndxF], &_ObjAdd, _nX, _Xvar.data(), _X0.data() ); 
+    else{
+      _Andx.insert( ndxF );
+      _dag->eval( 1, &_Fvar[ndxF], &_ObjAdd, _nX, _Xvar.data(), _X0.data() );
+    }
     _Flow.push_back( -BASE_OPT::INF );
     _Fupp.push_back(  BASE_OPT::INF );
     _Foff.push_back( _ObjAdd );
@@ -1038,8 +1357,10 @@ NLPSLV_SNOPT<ExtOps...>::setup
     double CtrCst = 0.;
     if( _Fvar[ndxF].dep().worst() > FFDep::L )
       _Gndx.insert( ndxF );
-    else
+    else{
+      _Andx.insert( ndxF );
       _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
+    }
     switch( std::get<0>(_ctr)[i] ){
       case BASE_OPT::EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
       case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
@@ -1054,53 +1375,20 @@ NLPSLV_SNOPT<ExtOps...>::setup
     double CtrCst = 0.;
     if( _Fvar[ndxF].dep().worst() > FFDep::L )
       _Gndx.insert( ndxF );
-    else
-      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
+    else{
+      _Andx.insert( ndxF );
+      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() );
+    }
     _Flow.push_back( -CtrCst );
     _Fupp.push_back( -CtrCst );
     _Foff.push_back(  CtrCst );
   }
   _nF = _Fvar.size();
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-  assert( _nF == (int)ndxF+1 );
+  assert( _nF == (int)ndxF+1 && _nF == _Gndx.size()+_Andx.size() );
 #endif
 
-  // setup function derivatives
-  _cleanup_grad();
-  switch( options.GRADMETH ){
-    default:
-    case Options::FAD: _fct_grad = _dag->SFAD( _nF, _Fvar.data(), _nX, _Xvar.data() ); break;
-    case Options::BAD: _fct_grad = _dag->SBAD( _nF, _Fvar.data(), _nX, _Xvar.data() ); break;
-  }
-
-  _iAfun.clear(); _jAvar.clear(); _Aval.clear(); 
-  _iGfun.clear(); _jGvar.clear(); _Gvar.clear(); 
-  for( unsigned k=0; k<std::get<0>(_fct_grad); ++k ){
-    // derivative term in nonlinear constraint
-    if( _Gndx.find( std::get<1>(_fct_grad)[k] ) != _Gndx.end() ){
-      _iGfun.push_back( std::get<1>(_fct_grad)[k] );
-      _jGvar.push_back( std::get<2>(_fct_grad)[k] );
-      _Gvar.push_back( std::get<3>(_fct_grad)[k] );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-     std::cout << "  _Gvar[" << std::get<1>(_fct_grad)[k] << "," << std::get<2>(_fct_grad)[k]
-               << "] = " << std::get<3>(_fct_grad)[k] << std::endl;
-#endif
-    }
-    // derivative term in linear constraint
-    else{
-      _iAfun.push_back( std::get<1>(_fct_grad)[k] );
-      _jAvar.push_back( std::get<2>(_fct_grad)[k] );
-      assert( std::get<3>(_fct_grad)[k].cst() );
-      _Aval.push_back( std::get<3>(_fct_grad)[k].num().val() );    
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-     std::cout << "  _Aval[" << std::get<1>(_fct_grad)[k] << "," << std::get<2>(_fct_grad)[k]
-               << "] = " << std::get<3>(_fct_grad)[k].num().val() << std::endl;
-#endif
-    }
-  }
-  _nG = _Gvar.size();
-  _nA = _Aval.size();
-
+  _set_gradient();
   _recModel = false;
   return true;
 }
@@ -1130,6 +1418,7 @@ NLPSLV_SNOPT<ExtOps...>::_record_model
   _reciAfun  = _iAfun;
   _recjAvar  = _jAvar;
   _recAval   = _Aval; 
+  _recAndx   = _Andx;
   _recnA     = _nA;
 
   _recModel = true;
@@ -1158,6 +1447,7 @@ NLPSLV_SNOPT<ExtOps...>::restore_model
   _jGvar.swap( _recjGvar );
   _Gvar.swap( _recGvar );
   _nG = _recnG;
+  _Andx.swap( _recAndx );
   _iAfun.swap( _reciAfun );
   _jAvar.swap( _recjAvar );
   _Aval.swap( _recAval ); 
@@ -1204,10 +1494,11 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
         it_iGfun = _iGfun.erase( it_iGfun );
         it_jGvar = _jGvar.erase( it_jGvar );
         it_Gvar  = _Gvar.erase( it_Gvar );
+        --_nG;
       }
     }
     // Previous objective function was linear
-    else{
+    else if( _Andx.erase( _ObjRow ) ){
       auto it_iAfun = _iAfun.begin();
       auto it_jAvar = _jAvar.begin();
       auto it_Aval  = _Aval.begin();
@@ -1221,6 +1512,7 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
         it_iAfun = _iAfun.erase( it_iAfun );
         it_jAvar = _jAvar.erase( it_jAvar );
         it_Aval  = _Aval.erase( it_Aval );
+        --_nA;
       }    
     }
   }
@@ -1228,45 +1520,15 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
   _ObjMul = -1.; 
   if( _Fvar[_ObjRow].dep().worst() > FFDep::L )
     _Gndx.insert( _ObjRow );
-  else
+  else{
+    _Andx.insert( _ObjRow );
     _dag->eval( 1, &_Fvar[_ObjRow], &_ObjAdd, _nX, _Xvar.data(), _X0.data() ); 
+  }
   _Foff[_ObjRow] = _ObjAdd;
   _nF = _Fvar.size();
   
   // Update objective derivatives
-  _cleanup_grad();
-  switch( options.GRADMETH ){
-    default:
-    case Options::FAD: _fct_grad = _dag->SFAD( 1, &_Fvar[_ObjRow], _nX, _Xvar.data() ); break;
-    case Options::BAD: _fct_grad = _dag->SBAD( 1, &_Fvar[_ObjRow], _nX, _Xvar.data() ); break;
-  }
-  for( unsigned k=0; k<std::get<0>(_fct_grad); ++k ){
-    // derivative term in nonlinear constraint
-    if( _Gndx.find( _ObjRow ) != _Gndx.end() ){
-      _iGfun.push_back( _ObjRow );
-      _jGvar.push_back( std::get<2>(_fct_grad)[k] );
-      _Gvar.push_back( std::get<3>(_fct_grad)[k] );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-     std::cout << "  _Gvar[" << _ObjRow << "," << std::get<2>(_fct_grad)[k]
-               << "] = " << std::get<3>(_fct_grad)[k] << std::endl;
-#endif
-    }
-    // derivative term in linear constraint
-    else{
-      _iAfun.push_back( _ObjRow );
-      _jAvar.push_back( std::get<2>(_fct_grad)[k] );
-      assert( std::get<3>(_fct_grad)[k].cst() );
-      _Aval.push_back( std::get<3>(_fct_grad)[k].num().val() );    
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-     std::cout << "  _Aval[" << _ObjRow << "," << std::get<2>(_fct_grad)[k]
-               << "] = " << std::get<3>(_fct_grad)[k].num().val() << std::endl;
-#endif
-    }
-  }
-  _nG = _Gvar.size();
-  _nA = _Aval.size();
-
-  return true;
+  return _add_gradient( _ObjRow );
 }
 
 template <typename... ExtOps>
@@ -1284,8 +1546,10 @@ NLPSLV_SNOPT<ExtOps...>::add_ctr_lazy
   _Fvar.push_back( ctr );
   if( _Fvar.back().dep().worst() > FFDep::L )
     _Gndx.insert( CtrPos );
-  else
+  else{
+    _Andx.insert( CtrPos );
     _dag->eval( 1, &_Fvar.back(), &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
+  }
   switch( type ){
     case BASE_OPT::EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
     case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
@@ -1295,39 +1559,7 @@ NLPSLV_SNOPT<ExtOps...>::add_ctr_lazy
   _nF = _Fvar.size();
   
   // Append new constraint derivatives
-  _cleanup_grad();
-  switch( options.GRADMETH ){
-    default:
-    case Options::FAD: _fct_grad = _dag->SFAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); break;
-    case Options::BAD: _fct_grad = _dag->SBAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); break;
-  }
-  for( unsigned k=0; k<std::get<0>(_fct_grad); ++k ){
-    // derivative term in nonlinear constraint
-    if( _Gndx.find( CtrPos ) != _Gndx.end() ){
-      _iGfun.push_back( CtrPos );
-      _jGvar.push_back( std::get<2>(_fct_grad)[k] );
-      _Gvar.push_back( std::get<3>(_fct_grad)[k] );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-     std::cout << "  _Gvar[" << CtrPos << "," << std::get<2>(_fct_grad)[k]
-               << "] = " << std::get<3>(_fct_grad)[k] << std::endl;
-#endif
-    }
-    // derivative term in linear constraint
-    else{
-      _iAfun.push_back( CtrPos );
-      _jAvar.push_back( std::get<2>(_fct_grad)[k] );
-      assert( std::get<3>(_fct_grad)[k].cst() );
-      _Aval.push_back( std::get<3>(_fct_grad)[k].num().val() );    
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-     std::cout << "  _Aval[" << CtrPos << "," << std::get<2>(_fct_grad)[k]
-               << "] = " << std::get<3>(_fct_grad)[k].num().val() << std::endl;
-#endif
-    }
-  }
-  _nG = _Gvar.size();
-  _nA = _Aval.size();
-
-  return true;
+  return _add_gradient( CtrPos );
 }
 
 template <typename... ExtOps>
@@ -1360,8 +1592,7 @@ NLPSLV_SNOPT<ExtOps...>::_set_options
  
   switch( options.GRADMETH ){
    case Options::FD:   if( th->snOptA.setIntParameter( "Derivative option", 0 )   ) error++; break;
-   case Options::FAD:
-   case Options::BAD:  if( th->snOptA.setIntParameter( "Derivative option", 1 )   ) error++; break;
+   default:            if( th->snOptA.setIntParameter( "Derivative option", 1 )   ) error++; break;
   }
  
   if( options.FEASPB || !_ObjDir ){
@@ -1389,19 +1620,20 @@ NLPSLV_SNOPT<ExtOps...>::_set_worker
   th->Pvar.resize( _nP );
   th->Xvar.resize( _nX );
   th->Fvar.resize( _nF );
-  th->Gvar.resize( _nG );
+  th->Gvar.resize( _Gvar.size() );
   th->dag.insert( _dag, _nP, _Pvar.data(), th->Pvar.data() );
   th->dag.insert( _dag, _nX, _Xvar.data(), th->Xvar.data() );
   th->dag.insert( _dag, _nF, _Fvar.data(), th->Fvar.data() );
-  th->dag.insert( _dag, _nG, _Gvar.data(), th->Gvar.data() );
+  th->dag.insert( _dag, _Gvar.size(), _Gvar.data(), th->Gvar.data() );
   th->op_F  = th->dag.subgraph( _Gndx, th->Fvar.data() );
-  th->op_G  = th->dag.subgraph( _nG, th->Gvar.data() );
+  th->op_G  = th->dag.subgraph( _Gvar.size(), th->Gvar.data() );
   th->iAfun = _iAfun;
   th->jAvar = _jAvar;
   th->Aval  = _Aval;
   th->iGfun = _iGfun;
   th->jGvar = _jGvar;
   th->Gndx  = _Gndx;
+  th->Gmeth = options.GRADMETH;
   th->Xlow  = _Xlow;
   th->Xupp  = _Xupp;
   th->Flow  = _Flow;
@@ -1679,7 +1911,7 @@ NLPSLV_SNOPT<ExtOps...>::is_stationary
   _worker[th]->solution.x.assign( x, x+_nX );
   _worker[th]->solution.ux.assign( ux, ux+_nX );
   _worker[th]->solution.uf.assign( uf, uf+_nF );
-  return _worker[th]->stationary( GRADTOL, _nX, _nA, _nG );
+  return _worker[th]->stationary( GRADTOL, _nX, _nF, _nA, _nG );
 }
 
 template <typename... ExtOps>
@@ -1692,7 +1924,7 @@ NLPSLV_SNOPT<ExtOps...>::is_stationary
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _worker[th]->solution = _solution;
-  return _worker[th]->stationary( GRADTOL, _nX, _nA, _nG );
+  return _worker[th]->stationary( GRADTOL, _nX, _nF, _nA, _nG );
 }
 
 template <typename... ExtOps>
@@ -1722,6 +1954,26 @@ NLPSLV_SNOPT<ExtOps...>::cost_correction
   _resize_workers( noth );
   _worker[th]->solution = _solution;
   return _worker[th]->correction( _nF, _nX, _ObjRow, _nA );
+}
+
+template <typename... ExtOps>
+inline
+std::tuple< unsigned, int*, int*, double* >
+NLPSLV_SNOPT<ExtOps...>::gradient_linear
+()
+{
+  return std::make_tuple( _nA, _iAfun.data(), _jAvar.data(), _Aval.data() );
+}
+
+template <typename... ExtOps>
+inline
+std::tuple< unsigned, int*, int*, double* >
+NLPSLV_SNOPT<ExtOps...>::gradient_nonlinear
+( const double*x )
+{
+  _Gval.resize( _nG );
+  dag.eval( _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), x );
+  return std::make_tuple( _nG, _iGfun.data(), _jGvar.data(), _Gval.data() );
 }
 
 } // end namescape mc
