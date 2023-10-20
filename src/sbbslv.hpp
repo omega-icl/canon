@@ -566,7 +566,7 @@ public:
 
 private:
   //! @brief Private default constructor
-  SBBNode<T>(){};
+  SBBNode(){};
 
   //! @brief Pointer to underlying branch-and-bound tree
   SBBSLV<T> *_pSBB;

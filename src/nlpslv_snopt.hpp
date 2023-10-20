@@ -447,18 +447,20 @@ WORKER_SNOPT<ExtOps...>::callback
     return;
   }
   
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-  for( int i=0; i<*neX; i++ )
-    std::cout << "  X[" << i << "] = " << X[i] << std::endl;
+#ifdef MC__NLPSLV_SNOPT_DEBUG_CALLBACK
+  for( int i=0; i<*neX; i++ ){
+    if( std::fabs(X[i])<1e-7 ) continue;
+    std::cout << "NLPSLV::X[" << i << "] = " << X[i] << std::endl;
+  }
 #endif
 
   try{
     // Needs nonlinear function values
     if( *needF > 0 ){
       dag.eval( op_F, dwk, Gndx, Fvar.data(), F, *neX, Xvar.data(), X );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-      for( auto && i : Gndx )
-        std::cout << "  F[" << i << "] = " << F[i] << std::endl;
+#ifdef MC__NLPSLV_SNOPT_DEBUG_CALLBACK
+      for( auto const& i : Gndx )
+        std::cout << "NLPSLV::F[" << i << "] = " << F[i] << std::endl;
 #endif
     }
     
@@ -479,8 +481,8 @@ WORKER_SNOPT<ExtOps...>::callback
             BFval[iF].diff( iF, *neF );
           // Gather derivatives
           for( int ie=0; ie<*neG; ie++ ){
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-            std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << BXval[ jGvar[ie]-1 ].d( iGfun[ie]-1 ) << std::endl;
+#ifdef MC__NLPSLV_SNOPT_DEBUG_CALLBACK
+            std::cout << "NLPSLV::G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << BXval[ jGvar[ie]-1 ].d( iGfun[ie]-1 ) << std::endl;
 #endif
             G[ie] = BXval[ jGvar[ie]-1 ].d( iGfun[ie]-1 ); // SNOPT alters jGvar and iGfun
           }
@@ -498,8 +500,8 @@ WORKER_SNOPT<ExtOps...>::callback
           dag.eval( op_F, Fwk, Gndx, Fvar.data(), FFval.data(), *neX, Xvar.data(), FXval.data() );
           // Gather derivatives
           for( int ie=0; ie<*neG; ie++ ){
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-            std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << FFval[ iGfun[ie]-1 ].d( jGvar[ie]-1 ) << std::endl;
+#ifdef MC__NLPSLV_SNOPT_DEBUG_CALLBACK
+            std::cout << "NLPSLV::G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << FFval[ iGfun[ie]-1 ].d( jGvar[ie]-1 ) << std::endl;
 #endif
             G[ie] = FFval[ iGfun[ie]-1 ].d( jGvar[ie]-1 ); // SNOPT alters jGvar and iGfun
           }
@@ -509,9 +511,9 @@ WORKER_SNOPT<ExtOps...>::callback
         case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
         case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
           dag.eval( op_G, dwk, *neG, Gvar.data(), G, *neX, Xvar.data(), X );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
+#ifdef MC__NLPSLV_SNOPT_DEBUG_CALLBACK
           for( int ie=0; ie<*neG; ie++ )
-            std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << G[ie] << std::endl;
+            std::cout << "NLPSLV::G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << G[ie] << std::endl;
 #endif
           break;
 
@@ -1203,7 +1205,9 @@ NLPSLV_SNOPT<ExtOps...>::_set_gradient
     switch( options.GRADMETH ){
       case Options::FAD:
       case Options::BAD:
-        for( auto const& [iX,dum] : _Fvar[iF].dep().dep() ){
+        //for( auto const& [iX,dum] : _Fvar[iF].dep().dep() ){
+        for( int iX=0; iX<_nX; ++iX ){
+          if( !_Fvar[iF].dep().dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
           _jGvar.push_back( iX );
 #ifdef MC__NLPSLV_SNOPT_DEBUG
@@ -1274,7 +1278,9 @@ NLPSLV_SNOPT<ExtOps...>::_add_gradient
       case Options::FAD:
       case Options::BAD:
       case Options::FD:
-        for( auto const& [iX,dum] : _Fvar[ndxF].dep().dep() ){
+        //for( auto const& [iX,dum] : _Fvar[ndxF].dep().dep() ){
+        for( int iX=0; iX<_nX; ++iX ){
+          if( !_Fvar[ndxF].dep().dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( ndxF );
           _jGvar.push_back( iX );
         }
@@ -1488,12 +1494,12 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
         if( *it_iGfun != _ObjRow ){
           ++it_iGfun;
           ++it_jGvar;
-          ++it_Gvar;
+          if( !_Gvar.empty() ) ++it_Gvar;
           continue;
         }
         it_iGfun = _iGfun.erase( it_iGfun );
         it_jGvar = _jGvar.erase( it_jGvar );
-        it_Gvar  = _Gvar.erase( it_Gvar );
+        if( !_Gvar.empty() ) it_Gvar  = _Gvar.erase( it_Gvar );
         --_nG;
       }
     }
@@ -1626,6 +1632,9 @@ NLPSLV_SNOPT<ExtOps...>::_set_worker
   th->dag.insert( _dag, _nF, _Fvar.data(), th->Fvar.data() );
   th->dag.insert( _dag, _Gvar.size(), _Gvar.data(), th->Gvar.data() );
   th->op_F  = th->dag.subgraph( _Gndx, th->Fvar.data() );
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+  _dag->output( th->op_F );
+#endif
   th->op_G  = th->dag.subgraph( _Gvar.size(), th->Gvar.data() );
   th->iAfun = _iAfun;
   th->jAvar = _jAvar;

@@ -1,7 +1,7 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
 PATH_CANON = $(shell cd ../.. ; pwd)
-LIB_CANON = #-L$(PATH_CANON)/lib -Wl,-rpath=$(PATH_CANON)/lib -lcanon
+LIB_CANON = -larmadillo #-L$(PATH_CANON)/lib -Wl,-rpath=$(PATH_CANON)/lib -lcanon
 INC_CANON = -I$(PATH_CANON)/include
 
 include $(PATH_CANON)/src/makeoptions.mk
@@ -19,6 +19,9 @@ doxydoc : doxydoc.o
 doe : doe.o
 	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
+doe% : doe%.o
+	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
 
@@ -31,5 +34,5 @@ doe : doe.o
 #####
 
 clean:
-	rm -f doxydoc main doe dict.txt *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
+	rm -f doxydoc main doe doe? dict.txt *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
 

@@ -108,12 +108,18 @@ operator<<
 {
   std::cout << "STATUS: " << sol.stat << std::endl;
   std::cout << std::scientific << std::setprecision(6) << std::right;
-  for( unsigned int i=0; i<sol.x.size(); i++ )
-    std::cout << "X[" << i << "]:  LEVEL = " << std::setw(13) << sol.x[i]
-              << "  MARGINAL = " << std::setw(13) << sol.ux[i] << std::endl;
-  for( unsigned int j=0; j<sol.f.size(); j++ )
-    std::cout << "F[" << j << "]:  LEVEL = " << std::setw(13) << sol.f[j]
-              << "  MARGINAL = " << std::setw(13) << sol.uf[j] << std::endl;
+  for( unsigned int i=0; i<sol.x.size(); i++ ){
+    std::cout << "X[" << i << "]:  LEVEL = " << std::setw(13) << sol.x[i];
+    if( i < sol.ux.size() )
+      std::cout << "  MARGINAL = " << std::setw(13) << sol.ux[i];
+    std::cout << std::endl;
+  }
+  for( unsigned int j=0; j<sol.f.size(); j++ ){
+    std::cout << "F[" << j << "]:  LEVEL = " << std::setw(13) << sol.f[j];
+    if( j < sol.uf.size() )
+      std::cout << "  MARGINAL = " << std::setw(13) << sol.uf[j] << std::endl;
+    std::cout << std::endl;
+  }
   return out;
 }
 

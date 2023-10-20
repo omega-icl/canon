@@ -52,7 +52,7 @@ DEBUG = -g
 PROF = #-pg
 OPTIM = -O2 #-Ofast
 WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-unused-result
-CPP17 = -std=c++17
+CPP17 = -std=c++20
 
 CC  = gcc-11
 CPP = g++-11

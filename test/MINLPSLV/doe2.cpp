@@ -1,6 +1,4 @@
-//#define MC__NLPSLV_SNOPT_DEBUG_CALLBACK
-//#define MC__MINLPSLV_DEBUG_LINEARIZATION
-//#define MC__REVAL_DEBUG
+#undef MC_MINLPSLV_DEBUG
 #undef MC__FFUNC_SFAD_CLEAR
 
 #include <fstream>
@@ -101,22 +99,13 @@ public:
 
   // Functor
   FFVar& operator()
-    ( unsigned const idep, unsigned const nVar, FFVar const* pVar )
-    const
-    {
-      auto dep = FFDep();
-      for( unsigned i=0; i<nVar; ++i ) dep += pVar[i].dep();
-      dep.update( FFDep::TYPE::N );
-      return *(insert_external_operation( *this, nRep, dep, nVar, pVar )[idep]);
-    }
-  FFVar** operator()
     ( unsigned const nVar, FFVar const* pVar )
     const
     {
       auto dep = FFDep();
       for( unsigned i=0; i<nVar; ++i ) dep += pVar[i].dep();
       dep.update( FFDep::TYPE::N );
-      return insert_external_operation( *this, nRep, dep, nVar, pVar );
+      return **insert_external_operation( *this, 1, dep, nVar, pVar );
     }
 
   // Evaluation overloads
@@ -133,7 +122,7 @@ public:
     const
     {
       //std::cout << "FFDOpt::eval: double\n"; 
-      assert( nRes == nRep && nVar * nRep == M.size() );
+      assert( nRes == 1 && nVar * nRep == M.size() );
       arma::mat Mmat;//( M[0].size(), arma::fill::none );
       double logdet;
       for( unsigned s=0; s<nRep; ++s ){
@@ -143,19 +132,20 @@ public:
         //std::cout << Mmat;
         if( rank( Mmat ) < Mmat.n_rows || !arma::log_det_sympd( logdet, Mmat ) )
           throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
-        //std::cout << s << ": " << logdet << std::endl;
-        vRes[s]  = logdet;
+        //std::cout << s << ": " << logdet << "  " << vRes[0] << std::endl;
+        if( !s ) vRes[0]  = logdet;
+        else     vRes[0] += logdet;
       }
+      vRes[0] /= nRep;
     }
 
   void eval
     ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
     const
     {
-      assert( nRes == nRep );
+      assert( nRes == 1 );
       //std::cout << "FFDOpt::eval: FFVar\n"; 
-      FFVar** ppRes = operator()( nVar, vVar );
-      for( unsigned j=0; j<nRes; ++j ) vRes[j] = *(ppRes[j]);
+      vRes[0] = operator()( nVar, vVar );
     }
 
   void eval
@@ -199,7 +189,7 @@ public:
       auto dep = FFDep();
       for( unsigned i=0; i<nVar; ++i ) dep += pVar[i].dep();
       dep.update( FFDep::TYPE::N );
-      return *(insert_external_operation( *this, nRep * nVar, dep, nVar, pVar )[idep]);
+      return *(insert_external_operation( *this, nVar, dep, nVar, pVar )[idep]);
     }
   FFVar** operator()
     ( unsigned const nVar, FFVar const* pVar )
@@ -208,7 +198,7 @@ public:
       auto dep = FFDep();
       for( unsigned i=0; i<nVar; ++i ) dep += pVar[i].dep();
       dep.update( FFDep::TYPE::N );
-      return insert_external_operation( *this, nRep * nVar, dep, nVar, pVar );
+      return insert_external_operation( *this, nVar, dep, nVar, pVar );
     }
 
   // Evaluation overloads
@@ -225,7 +215,7 @@ public:
     const
     {
       //std::cout << "FFDOptGrad::eval: double\n";
-      assert( nRes == nRep * nVar && nVar * nRep == M.size() );
+      assert( nRes == nVar && nVar * nRep == M.size() );
       arma::mat Mmat, Lmat, Xmat, Ymat;
       for( unsigned s=0; s<nRep; ++s ){
         for( unsigned i=0; i<nVar; ++i )
@@ -240,10 +230,13 @@ public:
             throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
           if( !solve( Xmat, trimatu(trans(Lmat)), Ymat ) )  // indicate that Lmat is lower triangular
             throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
-          vRes[s*nVar+i] = arma::trace( Xmat );
-          //std::cout << "vRes[" << s << "," << i << "]: " << vRes[s*nVar+i] << std::endl;
+          if( !s ) vRes[i]  = arma::trace( Xmat );
+          else     vRes[i] += arma::trace( Xmat );
+          //std::cout << "vRes[" << i << "]: " << vRes[i] << std::endl;
         }
       }
+      for( unsigned i=0; i<nVar; ++i )
+        vRes[i] /= nRep;
       //{ int dum; std::cout << "Press 1"; std::cin >> dum; }
     }
 
@@ -251,7 +244,7 @@ public:
     ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
     const
     {
-      assert( nRes == nRep * nVar );
+      assert( nRes == nVar );
       //std::cout << "FFDOptGrad::eval: FFVar\n"; 
       FFVar** ppRes = operator()( nVar, vVar );
       for( unsigned j=0; j<nRes; ++j ) vRes[j] = *(ppRes[j]);
@@ -275,28 +268,21 @@ FFDOpt::eval
   unsigned const* mVar )
 const
 {
-  assert( nRes == nRep && nVar * nRep == M.size() );
+  assert( nRes == 1 && nVar * nRep == M.size() );
   //std::cout << "FFDOpt::eval: fadbad::F<FFVar>\n";
-
   static std::vector<FFVar> vVarVal( nVar );
   for( unsigned i=0; i<nVar; ++i )
     vVarVal[i] = vVar[i].val();
-  FFVar const*const* vDOpt = operator()( nVar, vVarVal.data() );
-  for( unsigned s=0; s<nRep; ++s ){
-    vRes[s] = *vDOpt[s];
-    for( unsigned i=0; i<nVar; ++i )
-      vRes[s].setDepend( vVar[i] );
-  }
-
+  vRes[0] = operator()( nVar, vVarVal.data() );
+  for( unsigned i=0; i<nVar; ++i )
+    vRes[0].setDepend( vVar[i] );
   static FFDOptGrad DOptGrad;
-  FFVar const*const* vDOptGrad = DOptGrad( nVar, vVarVal.data() ); 
-  for( unsigned s=0; s<nRep; ++s ){
-    for( unsigned j=0; j<vRes[0].size(); ++j ){
-      vRes[s][j] = 0.;
-      for( unsigned i=0; i<nVar; ++i ){
-        if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
-        vRes[s][j] += *vDOptGrad[s*nVar+i] * vVar[i][j];
-      }
+  FFVar const*const* vDOptGrad = DOptGrad( nVar, vVarVal.data() );
+  for( unsigned j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( unsigned i=0; i<nVar; ++i ){
+      if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
+      vRes[0][j] += *vDOptGrad[i] * vVar[i][j];
     }
   }
 }
@@ -307,30 +293,24 @@ FFDOpt::eval
   unsigned const* mVar )
 const
 {
-  assert( nRes == nRep && nVar * nRep == M.size() );
+  assert( nRes == 1 && nVar * nRep == M.size() );
   //std::cout << "FFDOpt::eval: fadbad::F<T>\n";
-
   static std::vector<double> vVarVal( nVar );
   for( unsigned i=0; i<nVar; ++i )
     vVarVal[i] = vVar[i].val();
-  static std::vector<double> vResVal( nRep ); 
-  eval( nRep, vResVal.data(), nVar, vVarVal.data(), nullptr );
-  for( unsigned s=0; s<nRep; ++s ){
-    vRes[s] = vResVal[s];
-    for( unsigned i=0; i<nVar; ++i )
-      vRes[s].setDepend( vVar[i] );
-  }
-
+  static double vResVal;
+  eval( 1, &vResVal, nVar, vVarVal.data(), nullptr );
+  vRes[0] = vResVal;
+  for( unsigned i=0; i<nVar; ++i )
+    vRes[0].setDepend( vVar[i] );
   static FFDOptGrad DOptGrad;
-  static std::vector<double> vDOptGrad( nRep * nVar ); 
-  DOptGrad.eval( nRep * nVar, vDOptGrad.data(), nVar, vVarVal.data(), nullptr );
-  for( unsigned s=0; s<nRep; ++s ){
-    for( unsigned j=0; j<vRes[0].size(); ++j ){
-      vRes[s][j] = 0.;
-      for( unsigned i=0; i<nVar; ++i ){
-        if( vVar[i][j] == 0. ) continue;
-        vRes[s][j] += vDOptGrad[s*nVar+i] * vVar[i][j];
-      }
+  static std::vector<double> vDOptGrad( nVar ); 
+  DOptGrad.eval( nVar, vDOptGrad.data(), nVar, vVarVal.data(), nullptr );
+  for( unsigned j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( unsigned i=0; i<nVar; ++i ){
+      if( vVar[i][j] == 0. ) continue;
+      vRes[0][j] += vDOptGrad[i] * vVar[i][j];
     }
   }
 }
@@ -352,15 +332,6 @@ public:
     {
       auto dep = FFDep();
       for( unsigned i=0; i<nVar; ++i ) dep += pVar[i].dep();
-      dep.update( FFDep::TYPE::L );
-      return **insert_external_operation( *this, 1, dep, nVar, pVar );
-    }
-  FFVar& operator()
-    ( unsigned const nVar, FFVar const*const* pVar )
-    const
-    {
-      auto dep = FFDep();
-      for( unsigned i=0; i<nVar; ++i ) dep += pVar[i]->dep();
       dep.update( FFDep::TYPE::L );
       return **insert_external_operation( *this, 1, dep, nVar, pVar );
     }
@@ -392,7 +363,7 @@ public:
     const
     {
       assert( nRes == 1 );
-      //std::cout << "FFSum::eval: fadbad::F<T>\n";
+      std::cout << "FFSum::eval: fadbad::F<T>\n";
       static std::vector<FFVar> vVarVal( nVar );
       for( unsigned i=0; i<nVar; ++i )
         vVarVal[i] = vVar[i].val();
@@ -416,7 +387,7 @@ public:
     const
     {
       assert( nRes == 1 );
-      //std::cout << "FFSum::eval: fadbad::F<T>\n";
+      std::cout << "FFSum::eval: fadbad::F<T>\n";
       static std::vector<double> vVarVal( nVar );
       for( unsigned i=0; i<nVar; ++i )
         vVarVal[i] = vVar[i].val();
@@ -519,30 +490,20 @@ apportion
 int main()
 ////////////////////////////////////////////////////////////////////////
 {
-  const unsigned nEff = mc::FFDOptBase::read( 4, "fim/ester_1080_1.fim", true );
-  for( int s=2; s<=100; ++s )
-    mc::FFDOptBase::read( 4, "fim/ester_1080_"+std::to_string(s)+".fim", false );
-  const unsigned nRep = mc::FFDOptBase::nRep;
-  assert( nEff * nRep == mc::FFDOptBase::M.size() );
+  const unsigned NS = mc::FFDOptBase::read( 4, "fim/ester_1080.fim" );
+  //const unsigned NS = mc::FFDOptBase::read( 5, "fim/han_5000.fim" );
+  //const unsigned NS = mc::FFDOptBase::read( 4, "fim/doe_1000.fim" ); 
+  //const unsigned NS = mc::FFDOptBase::read( 4, "fim/doe_50.fim" ); 
 
-  int const nExp = 8; 
   mc::FFGraph< mc::FFDOpt, mc::FFDOptGrad, mc::FFSum > DAG;
+  mc::FFVar S[NS];
+  double S0[NS];
+  for( unsigned int i=0; i<NS; i++ ){
+    S[i].set( &DAG );
+    S0[i] = 1./NS;
+  }
   mc::FFDOpt DOpt;
   mc::FFSum  Sum;
-  mc::FFVar E[nEff];
-  for( unsigned int i=0; i<nEff; i++ )
-    E[i].set( &DAG );
-
-  double const beta = 9e-1;
-  mc::FFVar D[nRep], V( &DAG );
-  for( unsigned int s=0; s<nRep; s++ )
-    D[s].set( &DAG );
-
-  std::vector<double> ini( nEff, 1./nEff );
-  ini.resize( nEff+nRep+1, 0e0 );
-
-///////////////////////
-// RISK-NEUTRAL DESIGN
 
   mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum> MINLP;
   MINLP.options.SEARCHALG               = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum>::Options::OA;
@@ -554,15 +515,14 @@ int main()
   MINLP.options.ROOTCUT                 = 1;
   MINLP.options.TIMELIMIT               = 6e2;
   MINLP.options.LINMETH                 = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum>::Options::CVX;
-  MINLP.options.MAXITER                 = 40;
+  MINLP.options.MAXITER                 = 30;
   MINLP.options.MSLOC                   = 1;
-  MINLP.options.CPMAX                   = 5;
 #ifdef MC__USE_SNOPT
   MINLP.options.NLPSLV.DISPLEVEL        = 0;
   MINLP.options.NLPSLV.MAXITER          = 100;
-  MINLP.options.NLPSLV.FEASTOL          = 1e-8;
-  MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
-  MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
+  MINLP.options.NLPSLV.FEASTOL          = 1e-7;
+  MINLP.options.NLPSLV.OPTIMTOL         = 1e-7;
+  MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD; //SYM;
   MINLP.options.NLPSLV.GRADCHECK        = 0;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 #elif  MC__USE_IPOPT
@@ -577,79 +537,30 @@ int main()
 #ifdef MC__USE_GUROBI
   MINLP.options.MIPSLV.DISPLEVEL        = 0;
   MINLP.options.MIPSLV.THREADS          = 0;
-  MINLP.options.MIPSLV.MIPRELGAP        = 1e-7;
-  MINLP.options.MIPSLV.MIPABSGAP        = 1e-7;
+  MINLP.options.MIPSLV.MIPRELGAP        = 1e-5;
   MINLP.options.MIPSLV.OUTPUTFILE       = "doe.lp";
 #elif  MC__USE_CPLEX
   throw std::runtime_error("Error: CPLEX solver not yet implemented");
 #endif
 
+  int const NEXP = 5; 
   MINLP.set_dag( &DAG );
-  MINLP.set_var( nEff, E, 0., nExp, 1 );
-  MINLP.set_obj( mc::BASE_OPT::MAX, Sum( nRep, DOpt( nEff, E ) ) / nRep );
-  MINLP.add_ctr( mc::BASE_OPT::EQ, Sum( nEff, E ) - nExp );
+  MINLP.set_var( NS, S, 0., NEXP, 1 );
+  MINLP.set_obj( mc::BASE_OPT::MAX, DOpt( NS, S ) );
+  MINLP.add_ctr( mc::BASE_OPT::EQ, Sum( NS, S ) - NEXP );
+  //MINLP.add_ctr( mc::BASE_OPT::EQ, DAG.sum( NS, S ) - NEXP );
 
   MINLP.setup();
-  //MINLP.optimize( ini.data() );
-  MINLP.optimize( ini.data(), nullptr, apportion );
+  //MINLP.optimize( S0 );
+  MINLP.optimize( S0, nullptr, apportion );
   MINLP.stats.display();
 
-  std::cout << "Optimal efforts:" << std::endl;
+  std::cout << "Optimal effort:" << std::endl;
   unsigned i=0;
   for( auto const& Xi : MINLP.get_incumbent().x ){
     if( Xi > 1e-1 ) std::cout << "X[" << i << "]: " << Xi << std::endl;
     ++i;
   }
-  //return 0;
   
-///////////////////////
-// RISK-AVERSE DESIGN
-
-  mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum> MINLP2;
-  MINLP2.options = MINLP.options;
-
-  MINLP2.set_dag( &DAG );
-  MINLP2.set_var( nEff, E, 0., nExp, 1 );
-  MINLP2.add_var( nRep, D, 0., 1e2 );
-  MINLP2.add_var( V, 0., 1e2 );
-  MINLP2.set_obj( mc::BASE_OPT::MAX, V - Sum( nRep, D ) / ((1-beta) * nRep) ); //DOpt( nEff, E ) ) / nRep );
-  MINLP2.add_ctr( mc::BASE_OPT::EQ, Sum( nEff, E ) - nExp );
-  for( unsigned int s=0; s<nRep; s++ )
-    MINLP2.add_ctr( mc::BASE_OPT::LE, V - D[s] - DOpt( s, nEff, E ) );
-
-  MINLP2.setup();
-  //MINLP2.optimize( ini.data() );
-  MINLP2.optimize( ini.data(), nullptr, apportion );
-  MINLP2.stats.display();
-
-  std::cout << "Optimal efforts:" << std::endl;
-  i=0;
-  for( auto const& Xi : MINLP2.get_incumbent().x ){
-    if( i >= nEff ) break;
-    if( Xi > 1e-1 ) std::cout << "X[" << i << "]: " << Xi << std::endl;
-    ++i;
-  }
-
-  std::vector<I> bnd( nEff+nRep+1 );
-  for( unsigned i=0; i<nEff; ++i ){
-    ini[i] = MINLP2.get_incumbent().x[i];
-    bnd[i] = ini[i];
-  }
-  MINLP.local_solver().options.DISPLEVEL = 1;
-  MINLP.local_solver().solve( ini.data(), bnd.data() );
-  std::cout << "Suboptimal average:" << MINLP.local_solver().solution().f[0] << std::endl;
-
-  for( unsigned i=0; i<nEff; ++i ){
-    ini[i] = MINLP.get_incumbent().x[i];
-    bnd[i] = ini[i];
-  }
-  for( unsigned i=nEff; i<nEff+nRep+1; ++i ){
-    ini[i] = 0;
-    bnd[i] = I(0e0,1e2);
-  }
-  MINLP2.local_solver().options.DISPLEVEL = 1;
-  MINLP2.local_solver().solve( ini.data(), bnd.data() );
-  std::cout << "Suboptimal risk:" << MINLP2.local_solver().solution().f[0] << std::endl;
-
   return 0;
 }
