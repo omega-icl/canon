@@ -209,7 +209,7 @@ public:
         NLPSLV.TIMELIMIT = MIPSLV.TIMELIMIT = TIMELIMIT;
         NLPSLV.GRADMETH  = NLP::Options::FSYM; }
     //! @brief Assignment operator
-    Options& operator= ( Options&options ){
+    Options& operator= ( Options const& options ){
         SEARCHALG     = options.SEARCHALG;
         LINMETH       = options.LINMETH;
         FEASPUMP      = options.FEASPUMP;
@@ -1225,7 +1225,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_init_master
 
   // Reinitialize MIP solver
   _MIPSLV.options = options.MIPSLV;
-  _MIPSLV.set_cuts( &_POLenv, true );
+  //_MIPSLV.set_cuts( &_POLenv, true );
 
   stats.walltime_slvnlp += stats.walltime( tMIP );
 }

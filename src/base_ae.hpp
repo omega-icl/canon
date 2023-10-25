@@ -221,6 +221,18 @@ public:
   std::vector<FFVar> const& var() const
     { return _var; }
 
+  //! @brief Get decision variable types
+  std::vector<unsigned> const& vartyp() const
+    { return _vartyp; }
+
+  //! @brief Get decision variable lower bounds
+  std::vector<double> const& varlb() const
+    { return _varlb; }
+
+  //! @brief Get decision variable upper bounds
+  std::vector<double> const& varub() const
+    { return _varub; }
+
   //! @brief Set decision variables
   void set_var
     ( std::vector<FFVar> const& var,

@@ -176,6 +176,9 @@ public:
   using BASE_AE<ExtOps...>::add_par;
   using BASE_AE<ExtOps...>::reset_par;
   using BASE_AE<ExtOps...>::var;
+  using BASE_AE<ExtOps...>::vartyp;
+  using BASE_AE<ExtOps...>::varlb;
+  using BASE_AE<ExtOps...>::varub;
   using BASE_AE<ExtOps...>::set_var;
   using BASE_AE<ExtOps...>::add_var;
   using BASE_AE<ExtOps...>::reset_var;

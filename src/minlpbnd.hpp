@@ -318,14 +318,14 @@ public:
         CMODEL.MIG_ATOL        = 1e-13; // compatibility with GUROBI
         POLIMG.BREAKPOINT_TYPE = PolImg<T,ExtOps...>::Options::BIN;
         MIPSLV.DISPLEVEL       = 0;
-        MIPSLV.DUALRED         = 0;
+        //MIPSLV.DUALRED         = 1;
         //MIPSLV.PRESOLVE        = 1;
         MIPSLV.TIMELIMIT       = TIMELIMIT;
         SCQUAD.BASIS            = t_quad::Options::CHEB;
         SCQUAD.ORDER            = t_quad::Options::INC;
         SCQUAD.REDUC            = false; }
     //! @brief Assignment operator
-    Options& operator= ( Options&options ){
+    Options& operator= ( Options const& options ){
         MINLPREF<T,ExtOps...>::Options::operator=( options );
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
@@ -798,15 +798,21 @@ MINLPBND<T,MIP,ExtOps...>::_reduce
   std::multimap<double,std::pair<unsigned,bool>> vardomred, vardomredupd;
   std::pair<unsigned,bool> varini;
   for( unsigned i=0; i<_nX; i++ ){
-    // do not reduce variables whose domain is less than OBBTMIG
+    // do not reduce variable whose domain is less than OBBTMIG
     if( Op<T>::diam( _Xbnd[i] ) < options.OBBTMIG ) continue;
-
+    // do not reduce variable that does not participate in relaxation
+    auto itv = _POLenv.Vars().find( &_Xvar[i] );
+    if( itv == _POLenv.Vars().end() || !itv->second->has_cuts() ) continue;
+    
     varini.first = i;
     varini.second = false; // lower bound
     double dist = 1.;
     vardomred.insert( std::pair<double,std::pair<unsigned,bool>>(dist,varini) );
     varini.second = true;  // upper bound
     vardomred.insert( std::pair<double,std::pair<unsigned,bool>>(dist,varini) );
+#ifdef MC__MINLPBND_DEBUG
+    std::cout << "Reduction candidate: " << _Xvar[i] << std::endl;
+#endif
   }
   
   // anything to reduce?
@@ -902,6 +908,11 @@ MINLPBND<T,MIP,ExtOps...>::reduce_bounds
 #ifdef MC__MINLPBND_DEBUG
   std::cout << _POLenv;
 #endif
+#ifdef MC__MINLPBND_SHOW_REDUC
+  std::cout << "\nOriginal Box:\n";
+  for( unsigned i=0; i<_nX; i++ )
+    std::cout << _Xvar[i] << " = " << _Xbnd[i] << std::endl;
+#endif
 
   // Main loop for relaxation and domain reduction
   double vred = 0.;
@@ -914,6 +925,7 @@ MINLPBND<T,MIP,ExtOps...>::reduce_bounds
     if( !_Flin.empty() && options.OBBTLIN < 2 ){
       update_polrelax( 0, options.OBBTCONT, true );
 #ifdef MC__MINLPBND_DEBUG
+      //std::cout << *_dag;
       std::cout << _POLenv;
 #endif
       flag = _reduce();
@@ -939,6 +951,7 @@ MINLPBND<T,MIP,ExtOps...>::reduce_bounds
       else
         update_polrelax( 2, options.OBBTCONT, true );
 #ifdef MC__MINLPBND_DEBUG
+      //std::cout << *_dag;
       std::cout << _POLenv;
 #endif
       flag = _reduce();
@@ -1152,6 +1165,8 @@ MINLPBND<T,MIP,ExtOps...>::refine_polrelax
   
   // Update discretization with optimum point of relaxation
   for( auto itv=_POLenv.Vars().begin(); itv!=_POLenv.Vars().end(); ++itv ){
+    // do not update variable that does not participate in relaxation
+    if( !itv->second->has_cuts() ) continue;
     double Xval = _MIPSLV->get_variable( *itv->second );
     itv->second->add_breakpt( Xval );
 #ifdef MC__MINLPBND_SHOW_BREAKPTS
@@ -1162,16 +1177,22 @@ MINLPBND<T,MIP,ExtOps...>::refine_polrelax
     std::cout << std::endl;
 #endif
   }
-  auto itX = _POLXvar.begin();
-  for( unsigned i=0; itX!=_POLXvar.end(); ++itX, i++ ){
-    double Xval = _MIPSLV->get_variable( *itX );
-    itX->add_breakpt( Xval );
-    itX->update( _Xbnd[i] );
+  //auto itX = _POLXvar.begin();
+  //for( unsigned i=0; itX!=_POLXvar.end(); ++itX, i++ ){
+  for( unsigned i=0; i<_nX; i++ ){
+    auto itv = _POLenv.Vars().find( &_Xvar[i] );
+    if( itv == _POLenv.Vars().end() || !itv->second->has_cuts() ) continue;
+    //double Xval = _MIPSLV->get_variable( *itX );
+    //itX->add_breakpt( Xval );
+    //itX->update( _Xbnd[i] );
+    double Xval = _MIPSLV->get_variable( *itv->second );
+    _POLXvar[i].add_breakpt( Xval );
+    _POLXvar[i].update( _Xbnd[i] );
   }
 
   // Update discetization with incumbent
   if( Xinc ){
-    itX = _POLXvar.begin();
+    auto itX = _POLXvar.begin();
     for( unsigned i=0; i<_nX0 && itX!=_POLXvar.end(); ++itX, i++ ){
       itX->add_breakpt( Xinc[i] );
       auto itv = _POLenv.Vars().find( &_Xvar[i] );

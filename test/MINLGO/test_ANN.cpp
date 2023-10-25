@@ -1,7 +1,10 @@
-#define TEST4       // <-- select test function here
-#define USE_MCISM      // <-- select relaxation approach here: USE_ISM / USE_MC / USE_MCISM
+#define TEST2       // <-- select test function here
+#define USE_ISM     // <-- select relaxation approach here: USE_ISM / USE_MC / USE_MCISM
 
 #undef MC__MINLPBND_DEBUG_DRL
+#undef MC__MINLPBND_SHOW_REDUC
+#undef MC__MINLGO_DEBUG_SBB
+
 
 #ifdef MC__USE_PROFIL
  #include "mcprofil.hpp"
@@ -28,9 +31,11 @@
 #include "mccormick.hpp"
 #include "minlgo.hpp"
 
-unsigned const NP = 2;
-unsigned const ISMDIV = 64;
-bool const     ISMCONT = true;//false;
+unsigned const NP        = 2;
+unsigned const ISMDIV    = 16;
+bool const     ISMCONT   = true;
+bool const     ISMSLOPE  = true;
+bool const     ISMSHADOW = false;
 
 namespace mc
 {
@@ -341,6 +346,8 @@ public:
 
 #if defined( USE_ISM )
       // evaluate interval superposition
+      ISMEnv.options.SLOPE_USE  = ISMSLOPE;
+      ISMEnv.options.SHADOW_USE = ISMSHADOW;
       for( unsigned i=0; i<nVar; ++i )
         ISMVar[i].set( &ISMEnv, i, vVar[i].range() );
       ISMRes[0] = myANN( nVar, ISMVar.data() );
@@ -363,6 +370,8 @@ public:
 
 #elif defined( USE_MCISM )
       // compute McCormick relaxation with ISM bounds at mid-point with subgradient in each direction
+      ISMEnv.options.SLOPE_USE  = ISMSLOPE;
+      ISMEnv.options.SHADOW_USE = ISMSHADOW;
       for( unsigned i=0; i<nVar; ++i )
         MCISMVar[i] = McCormick<ISVar<I>>( ISVar<I>( &ISMEnv, i, vVar[i].range() ), Op<I>::mid( vVar[i].range() ) ).sub( nVar, i );
       MCISMRes[0] = myANN( nVar, MCISMVar.data() );
@@ -570,12 +579,15 @@ int main()
   //MINLP.options.PRESOLVE                    = 0;
   MINLP.options.STRATEGY                    = mc::MINLGO<I,NLP,MIP,mc::FFExt>::Options::SBB;
   MINLP.options.DISPLEVEL                   = 1;
-  MINLP.options.CVATOL                      = 1e-4;
-  MINLP.options.CVRTOL                      = 1e-4;
+  MINLP.options.CVATOL                      = 1e-3;
+  MINLP.options.CVRTOL                      = 1e-3;
   MINLP.options.MAXITER                     = 0;
   MINLP.options.MINLPBND.OBBTMAX            = 5;
+  MINLP.options.MINLPBND.MIPSLV.FEASTOL     = 1e-7;
+  MINLP.options.MINLPBND.MIPSLV.OPTIMTOL    = 1e-7;
+  MINLP.options.MINLPBND.MIPSLV.DUALRED     = 0;
   MINLP.options.MINLPBND.MIPSLV.DISPLEVEL   = 0;
-  //MINLP.options.MINLPBND.MIPSLV.OUTPUTFILE  = "test_ANN.lp";
+  MINLP.options.MINLPBND.MIPSLV.OUTPUTFILE  = "test_ANN.lp";
   MINLP.setup();
   MINLP.presolve();
   //MINLP.GAMSexport();

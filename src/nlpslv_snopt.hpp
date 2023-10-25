@@ -924,7 +924,7 @@ public:
       FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
       {}
     //! @brief Assignment operator
-    Options& operator= ( Options&options ){
+    Options& operator= ( Options const& options ){
         FEASTOL      = options.FEASTOL;
         OPTIMTOL     = options.OPTIMTOL;
         MAXITER      = options.MAXITER;
