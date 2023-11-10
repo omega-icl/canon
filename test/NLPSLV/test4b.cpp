@@ -1,7 +1,7 @@
 #include <fstream>
 #include <iomanip>
+#include <armadillo>
 
-#include "mclapack.hpp"
 #include "interval.hpp"
 #ifdef MC__USE_SNOPT
   #include "nlpslv_snopt.hpp"
@@ -18,14 +18,14 @@ namespace mc
 struct FFDOptBase
 {
   // Vector of atom matrices
-  static std::vector< CPPL::dsymatrix > _A;
+  static std::vector< arma::mat > M;
 
   // Read atom matrices from file
   static unsigned read
     ( unsigned const dim, std::string filename, bool const disp=false )
     {
-      CPPL::dsymatrix Ai( dim );
-      _A.clear();
+      arma::mat Mi( dim, dim, arma::fill::none );
+      M.clear();
       std::ifstream file( filename );
       if( !file ) throw std::runtime_error("Error: Could not open input file\n");
       std::string line;
@@ -34,28 +34,29 @@ struct FFDOptBase
       while( std::getline( file, line ) ){
         std::istringstream iss( line );
         for( unsigned j=0; j<dim; j++ ){
-          if( !(iss >> Ai(i,j) ) ){
+          //std::cout << "reading (" << i << "," << j << ")" << std::endl;
+          if( i >= dim || !(iss >> Mi(i,j) ) ){
             if( j ) throw std::runtime_error("Error: Could not read input file\n");
             empty = true;
             break;
           }
-          //std::cout << "reading (" << i << "," << j << "): " << Ai(i,j) << std::endl;
+          //std::cout << "reading (" << i << "," << j << "): " << Mi(i,j) << std::endl;
         }
         i++;
         if( empty ){
-          if( disp ) std::cout << "Atomic matrix #" << _A.size() << ":" << std::endl << Ai;
-          _A.push_back( Ai );
+          if( disp ) std::cout << "Atomic matrix #" << M.size() << ":" << std::endl << Mi;
+          M.push_back( Mi );
           i = 0;
           empty = false;
         }
         if( i > dim ) throw std::runtime_error("Error: Could not read input file\n");
       }
-      if( i ) _A.push_back( Ai );
-      return _A.size();
+      if( i ) M.push_back( Mi );
+      return M.size();
     }
 };
 
-inline std::vector< CPPL::dsymatrix > FFDOptBase::_A;
+inline std::vector< arma::mat > FFDOptBase::M;
 
 class FFDOpt
 : public FFOp,
@@ -93,16 +94,14 @@ public:
     const
     {
       //std::cout << "FFDOpt::eval: double\n"; 
-      assert( nRes == 1 && nVar == _A.size() && _A.begin() != _A.end() );
-      CPPL::dsymatrix Amat( _A[0].n );
-      Amat.zero();
+      assert( nRes == 1 && nVar == M.size() && M.begin() != M.end() );
+      arma::mat Mmat;//( M[0].size(), arma::fill::none );
       for( unsigned i=0; i<nVar; ++i )
-        if( !i ) Amat  = vVar[0] * _A[0];
-        else     Amat += vVar[i] * _A[i];
-      //std::cout << Amat;
-      if( dgeqrf( Amat.to_dgematrix(), vRes[0] ) )
+        if( !i ) Mmat  = vVar[0] * M[0];
+        else     Mmat += vVar[i] * M[i];
+      //std::cout << Mmat;
+      if( !arma::log_det_sympd( vRes[0], Mmat ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
-      vRes[0] = std::log( vRes[0] );
     }
 
   void eval
@@ -176,29 +175,25 @@ public:
     const
     {
       //std::cout << "FFDOptGrad::eval: double\n"; 
-      assert( nRes == nVar && nVar == _A.size() && _A.begin() != _A.end() );
-      CPPL::dsymatrix Amat( _A[0].n );
-      Amat.zero();
+      assert( nRes == nVar && nVar == M.size() && M.begin() != M.end() );
+      arma::mat Mmat;
       for( unsigned i=0; i<nVar; ++i )
-        if( !i ) Amat  = vVar[0] * _A[0];
-        else     Amat += vVar[i] * _A[i];
-      //std::cout << Amat;
-      // Perform LDL' decomposition
-      CPPL::dgematrix Lmat;
-      std::vector<int> IPIV;
-      if( dsytrf( Amat, Lmat, IPIV ) )
+        if( !i ) Mmat  = vVar[0] * M[0];
+        else     Mmat += vVar[i] * M[i];
+      //std::cout << Mmat;
+      arma::mat Lmat, Xmat, Ymat;
+      if( !arma::chol( Lmat, Mmat, "lower" ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
-      CPPL::dgematrix Xmat;
+      //std::cout << Lmat;
       for( unsigned i=0; i<nVar; ++i ){
-        if( dsytrs( Lmat, IPIV, _A[i].to_dgematrix(), Xmat ) )
+        if( !solve( Ymat, trimatl(Lmat), M[i] ) )  // indicate that Lmat is lower triangular
           throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
-        //std::cout << Xmat;
-        for( int j=0; j<Xmat.n; ++j )
-          if( !j ) vRes[i]  = Xmat(0,0);
-          else     vRes[i] += Xmat(j,j);
+        if( !solve( Xmat, trimatu(trans(Lmat)), Ymat ) )  // indicate that Lmat is lower triangular
+          throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+        vRes[i] = arma::trace( Xmat );
         //std::cout << "vRes[" << i << "]: " << vRes[i] << std::endl;
       }
-      //{ int dum; std::cout << "Press 1"; std::cin >> dum; }
+      //{ int dum; std::cout << "Press 1"; std::cin >> dum; }      
     }
 
   void eval
@@ -229,7 +224,8 @@ FFDOpt::eval
   unsigned const* mVar )
 const
 {
-  assert( nRes == 1 && nVar == _A.size() && _A.begin() != _A.end() );
+  assert( nRes == 1 && nVar == M.size() && M.begin() != M.end() );
+//  assert( nRes == 1 && nVar == _A.size() && _A.begin() != _A.end() );
   std::cout << "FFDOpt::eval: fadbad::F<FFVar>\n";
   std::vector<FFVar> vVarVal( nVar );
   for( unsigned i=0; i<nVar; ++i )

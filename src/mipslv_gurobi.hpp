@@ -487,8 +487,8 @@ MIPSLV_GUROBI<T>::_add_var
       case PolVar<T>::VARINT:
       case PolVar<T>::AUXINT:
         if( options.CONTRELAX )
-        var = _GRBmodel->addVar( Op<T>::l(pVar->range()), Op<T>::u(pVar->range()),
-          0., GRB_CONTINUOUS, pVar->name() );
+          var = _GRBmodel->addVar( Op<T>::l(pVar->range()), Op<T>::u(pVar->range()),
+            0., GRB_CONTINUOUS, pVar->name() );
         else if( isequal( Op<T>::l(pVar->range()), 0. ) && isequal( Op<T>::u(pVar->range()), 1. ) )
           var = _GRBmodel->addVar( 0., 1., 0., GRB_BINARY, pVar->name() );
         else

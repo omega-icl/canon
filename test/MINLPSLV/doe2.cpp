@@ -485,6 +485,79 @@ apportion
     if( val[i] > TOLZERO ) std::cout << "X[" << i << "]: " << val[i] << std::endl;
   }
 }
+void
+effrounding
+( unsigned const n, unsigned const* typ, double* val )
+{
+  double const TOLZERO = 1e-10;
+  //double const TOLINT  = 1e-5;
+
+  std::cout << "Initial efforts:" << std::endl;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    if( val[i] > TOLZERO ) std::cout << "X0[" << i << "]: " << val[i] << std::endl;
+  }
+
+  double sum = 0.;
+  unsigned supp = 0;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    sum += val[i];
+    if( val[i] >= TOLZERO ) supp++;
+  }
+  sum = std::round( sum );
+
+  static std::vector<double> intval( n );
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    intval[i] = std::ceil( (1.-supp/(2*sum)) * val[i] );
+  }
+
+  for( ; ; ){
+    std::cout << "Intermediate efforts:" << std::endl;
+    double intsum = 0.;
+    for( unsigned i=0; i<n; ++i ){
+      if( !typ[i] ) continue;
+      intsum += intval[i];
+      if( val[i] > TOLZERO ) std::cout << "X1[" << i << "]: " << intval[i] << std::endl;
+    }
+    if( std::fabs( sum - intsum ) < TOLZERO ) break;
+    if( sum > intsum ){
+      int imin = -1;
+      double effmin = 1.;
+      for( unsigned i=0; i<n; ++i ){
+        if( !typ[i] || val[i] < TOLZERO ) continue;
+        if( intval[i]/val[i] < effmin ){
+          imin = i;
+          effmin = intval[i]/val[i];
+        }
+      }
+      assert( imin >= 0 );
+      intval[imin] += 1;
+    }
+    else{
+      int imax = -1;
+      double effmax = 1.;
+      for( unsigned i=0; i<n; ++i ){
+        if( !typ[i] || val[i] < TOLZERO ) continue;
+        if( intval[i]/val[i] > effmax ){
+          imax   = i;
+          effmax = intval[i]/val[i];
+        }
+      }
+      assert( imax >= 0 );
+      intval[imax] -= 1;
+    }
+  }
+  
+  std::cout << "Apportioned efforts:" << std::endl;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    val[i] = intval[i];
+    if( val[i] > TOLZERO ) std::cout << "X[" << i << "]: " << val[i] << std::endl;
+  }
+  //{ int dum; std::cout << "ENTER <1>"; std::cin >> dum; }
+}
 
 ////////////////////////////////////////////////////////////////////////
 int main()
@@ -509,7 +582,7 @@ int main()
   MINLP.options.SEARCHALG               = mc::MINLPSLV<I,NLP,MIP,mc::FFDOpt,mc::FFDOptGrad,mc::FFSum>::Options::OA;
   MINLP.options.DISPLEVEL               = 1;
   MINLP.options.CVRTOL                  = 1e-5;
-  MINLP.options.CVATOL                  = 1e-5;
+  MINLP.options.CVATOL                  = 1e-9;
   MINLP.options.FEASTOL                 = 1e-5;
   MINLP.options.FEASPUMP                = 0;
   MINLP.options.ROOTCUT                 = 1;
@@ -537,8 +610,9 @@ int main()
 #ifdef MC__USE_GUROBI
   MINLP.options.MIPSLV.DISPLEVEL        = 0;
   MINLP.options.MIPSLV.THREADS          = 0;
-  MINLP.options.MIPSLV.MIPRELGAP        = 1e-5;
-  MINLP.options.MIPSLV.OUTPUTFILE       = "doe.lp";
+  MINLP.options.MIPSLV.MIPRELGAP        = 1e-6;
+  MINLP.options.MIPSLV.MIPABSGAP        = 1e-9;
+  MINLP.options.MIPSLV.OUTPUTFILE       = "";//"doe.lp";
 #elif  MC__USE_CPLEX
   throw std::runtime_error("Error: CPLEX solver not yet implemented");
 #endif
@@ -552,7 +626,8 @@ int main()
 
   MINLP.setup();
   //MINLP.optimize( S0 );
-  MINLP.optimize( S0, nullptr, apportion );
+  //MINLP.optimize( S0, nullptr, apportion );
+  MINLP.optimize( S0, nullptr, effrounding );
   MINLP.stats.display();
 
   std::cout << "Optimal effort:" << std::endl;

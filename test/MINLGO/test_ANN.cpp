@@ -1,10 +1,9 @@
-#define TEST2       // <-- select test function here
-#define USE_ISM     // <-- select relaxation approach here: USE_ISM / USE_MC / USE_MCISM
+#define TEST4       // <-- select test function here
+#define USE_ASM     // <-- select relaxation approach here: USE_MC / USE_ISM / USE_MCISM / USE_ASM
 
 #undef MC__MINLPBND_DEBUG_DRL
 #undef MC__MINLPBND_SHOW_REDUC
 #undef MC__MINLGO_DEBUG_SBB
-
 
 #ifdef MC__USE_PROFIL
  #include "mcprofil.hpp"
@@ -27,15 +26,17 @@
  #endif
 #endif
 
-#include "ismodel.hpp"
 #include "mccormick.hpp"
+#include "ismodel.hpp"
+#include "asmodel.hpp"
 #include "minlgo.hpp"
 
 unsigned const NP        = 2;
 unsigned const ISMDIV    = 16;
 bool const     ISMCONT   = true;
 bool const     ISMSLOPE  = true;
-bool const     ISMSHADOW = false;
+bool const     ISMSHADOW = true;
+bool const     CUTSHADOW = false;
 
 namespace mc
 {
@@ -136,6 +137,13 @@ ISVar<T> ReLU
 }
 
 template <typename T>
+ASVar<T> ReLU
+( ASVar<T> const& x )
+{
+  return relu( x );
+}
+
+template <typename T>
 fadbad::F<T> ReLU
 ( fadbad::F<T> const& x )
 {
@@ -167,6 +175,13 @@ T ReLU
 template <typename T>
 ISVar<T> ReLU
 ( ISVar<T> const& x )
+{
+  return relu( x );
+}
+
+template <typename T>
+ASVar<T> ReLU
+( ASVar<T> const& x )
 {
   return relu( x );
 }
@@ -254,17 +269,17 @@ class FFExt
 {
 public:
 
-#if defined( USE_ISM )
+#if defined( USE_MC )
+  static std::vector<McCormick<I>> MCVar;
+  static std::vector<McCormick<I>> MCRes;
+
+#elif defined( USE_ISM )
   static ISModel<I> ISMEnv;
   static std::vector<ISVar<I>> ISMVar;
   static std::vector<ISVar<I>> ISMRes;
   static std::vector<std::vector<PolVar<I>>> POLISMAux;
   static std::vector<double> DLISMAux;
   static std::vector<double> DUISMAux;
-
-#elif defined( USE_MC )
-  static std::vector<McCormick<I>> MCVar;
-  static std::vector<McCormick<I>> MCRes;
 
 #elif defined( USE_MCISM )
   static ISModel<I> ISMEnv;
@@ -275,6 +290,15 @@ public:
   static std::vector<double> DUISMAux;
   static std::vector<McCormick<ISVar<I>>> MCISMVar;
   static std::vector<McCormick<ISVar<I>>> MCISMRes;
+
+#elif defined( USE_ASM )
+  static ASModel<I> ASMEnv;
+  static std::vector<ASVar<I>>  ASMVar;
+  static std::vector<ASVar<I>>  ASMRes;
+  static std::vector<PolVar<I>> POLLASMAux;
+  static std::vector<PolVar<I>> POLUASMAux;
+  static std::vector<double> DXASMAux;
+  static std::vector<double> DYASMAux;
 #endif
 
   // Constructors
@@ -344,18 +368,7 @@ public:
       assert( img && dag );
       FFVar* pRes = dag->curOp()->varout[0];
 
-#if defined( USE_ISM )
-      // evaluate interval superposition
-      ISMEnv.options.SLOPE_USE  = ISMSLOPE;
-      ISMEnv.options.SHADOW_USE = ISMSHADOW;
-      for( unsigned i=0; i<nVar; ++i )
-        ISMVar[i].set( &ISMEnv, i, vVar[i].range() );
-      ISMRes[0] = myANN( nVar, ISMVar.data() );
-      //std::cout << "MCRes[0] in " << ISMRes[0];
-      vRes[0].set( img, *pRes, ISMRes[0].B() );
-      //std::cout << "vRes[0] in " << vRes[0].range() << std::endl;
-
-#elif defined( USE_MC )
+#if defined( USE_MC )
       //for( unsigned i=0; i<nVar; ++i )
       //  IVar[i] = vVar[i].range();
       //IRes[0] = myANN( nVar, IVar.data() );
@@ -368,6 +381,17 @@ public:
       vRes[0].set( img, *pRes, MCRes[0].I() );
       //std::cout << "vRes[0] in " << vRes[0].range() << std::endl;
 
+#elif defined( USE_ISM )
+      // evaluate interval superposition
+      ISMEnv.options.SLOPE_USE  = ISMSLOPE;
+      ISMEnv.options.SHADOW_USE = ISMSHADOW;
+      for( unsigned i=0; i<nVar; ++i )
+        ISMVar[i].set( &ISMEnv, i, vVar[i].range() );
+      ISMRes[0] = myANN( nVar, ISMVar.data() );
+      //std::cout << "MCRes[0] in " << ISMRes[0];
+      vRes[0].set( img, *pRes, ISMRes[0].B() );
+      //std::cout << "vRes[0] in " << vRes[0].range() << std::endl;
+
 #elif defined( USE_MCISM )
       // compute McCormick relaxation with ISM bounds at mid-point with subgradient in each direction
       ISMEnv.options.SLOPE_USE  = ISMSLOPE;
@@ -377,6 +401,22 @@ public:
       MCISMRes[0] = myANN( nVar, MCISMVar.data() );
       //std::cout << "MCISMRes[0] in " << MCISMRes[0] << std::endl;
       vRes[0].set( img, *pRes, MCISMRes[0].I().B() );
+      //std::cout << "vRes[0] in " << vRes[0].range() << std::endl;
+
+#elif defined( USE_ASM )
+      // evaluate interval superposition
+      UnivarPWLE<double>::nbpsMax = 1000;       
+      ASMEnv.options.SLOPE_USE  = ISMSLOPE;
+      ASMEnv.options.SHADOW_USE = ISMSHADOW;
+      for( unsigned i=0; i<nVar; ++i ){
+        ASMVar[i].set( &ASMEnv, i, vVar[i].range() );
+        //std::cout << "ASMVar[" << i << "] in " << ASMVar[i];
+      }
+      ASMRes[0] = myANN( nVar, ASMVar.data() );
+      //std::cout << "ASMRes[0] in " << ASMRes[0];
+      //{int dum; std::cout << "PAUSED, ENTER 1"; std::cin >> dum;}
+      //std::cout << "Active shadow: " << ASMRes[0].get_shadow_info()[0] << ASMRes[0].get_shadow_info()[1] << std::endl;
+      vRes[0].set( img, *pRes, ASMRes[0].B() );
       //std::cout << "vRes[0] in " << vRes[0].range() << std::endl;
 #endif
     }
@@ -401,7 +441,19 @@ public:
       FFOp* pop = vVar[0].var().opdef().first;
       assert( img && pop );
 
-#if defined( USE_ISM )
+#if defined( USE_MC )
+      // polyhedral cut generation
+      //std::cout << "MCRes[0] in " << MCRes[0] << std::endl;
+      double rhs1 = -MCRes[0].cv(),
+             rhs2 = -MCRes[0].cc();
+      for( unsigned i=0; i<nVar; ++i ){
+        rhs1 += MCRes[0].cvsub(i)*MCVar[i].cv();
+        rhs2 += MCRes[0].ccsub(i)*MCVar[i].cc();
+      }
+      img->add_cut( pop, PolCut<I>::LE, rhs1, nVar, vVar, MCRes[0].cvsub(), vRes[0], -1. );
+      img->add_cut( pop, PolCut<I>::GE, rhs2, nVar, vVar, MCRes[0].ccsub(), vRes[0], -1. );
+
+#elif defined( USE_ISM )
       assert( ISMEnv.ndiv() == ISMDIV );
       // define auxiliary variables 
       for( unsigned i=0; i<nVar; ++i ){
@@ -429,9 +481,7 @@ public:
       for( unsigned i=0; i<nVar; i++ ){
         if( POLISMAux[i].empty() ) continue;
         // auxiliaries add up to 1
-        for( unsigned jsub=0; jsub<ISMEnv.ndiv(); jsub++ )
-          DLISMAux[jsub] = 1.;
-        img->add_cut( pop, PolCut<I>::EQ, 1., ISMEnv.ndiv(), POLISMAux[i].data(), DLISMAux.data() );
+        img->add_cut( pop, PolCut<I>::EQ, 1., ISMEnv.ndiv(), POLISMAux[i].data(), 1. );
 
         // link auxiliaries to model variables
         PolVar<I> POLvarL( 0. ), POLvarU( 0. );
@@ -444,18 +494,6 @@ public:
         img->add_cut( pop, PolCut<I>::LE, 0., ISMEnv.ndiv(), POLISMAux[i].data(), DLISMAux.data(), vVar[i], -1. );
         img->add_cut( pop, PolCut<I>::GE, 0., ISMEnv.ndiv(), POLISMAux[i].data(), DUISMAux.data(), vVar[i], -1. );
       }
-
-#elif defined( USE_MC )
-      // polyhedral cut generation
-      //std::cout << "MCRes[0] in " << MCRes[0] << std::endl;
-      double rhs1 = -MCRes[0].cv(),
-             rhs2 = -MCRes[0].cc();
-      for( unsigned i=0; i<nVar; ++i ){
-        rhs1 += MCRes[0].cvsub(i)*MCVar[i].cv();
-        rhs2 += MCRes[0].ccsub(i)*MCVar[i].cc();
-      }
-      img->add_cut( pop, PolCut<I>::LE, rhs1, nVar, vVar, MCRes[0].cvsub(), vRes[0], -1. );
-      img->add_cut( pop, PolCut<I>::GE, rhs2, nVar, vVar, MCRes[0].ccsub(), vRes[0], -1. );
 
 #elif defined( USE_MCISM )
       assert( ISMEnv.ndiv() == ISMDIV );
@@ -485,9 +523,7 @@ public:
       for( unsigned i=0; i<nVar; i++ ){
         if( POLISMAux[i].empty() ) continue;
         // auxiliaries add up to 1
-        for( unsigned jsub=0; jsub<ISMEnv.ndiv(); jsub++ )
-          DLISMAux[jsub] = 1.;
-        img->add_cut( pop, PolCut<I>::EQ, 1., ISMEnv.ndiv(), POLISMAux[i].data(), DLISMAux.data() );
+        img->add_cut( pop, PolCut<I>::EQ, 1., ISMEnv.ndiv(), POLISMAux[i].data(), 1. );
 
         // link ISM auxiliaries to model variables
         PolVar<I> POLvarL( 0. ), POLvarU( 0. );
@@ -511,10 +547,72 @@ public:
       }
       img->add_cut( pop, PolCut<I>::LE, rhs1, nVar, vVar, MCISMRes[0].cvsub(), vRes[0], -1. );
       img->add_cut( pop, PolCut<I>::GE, rhs2, nVar, vVar, MCISMRes[0].ccsub(), vRes[0], -1. );
+
+#elif defined( USE_ASM )
+      //img->options.BREAKPOINT_TYPE = mc::PolBase<I>::Options::BIN;//SOS2;
+      //img->options.BREAKPOINT_RTOL = img->options.BREAKPOINT_ATOL = 0e0;
+      // polyhedral cut generation for ASM
+      append_ASMcuts( nRes, vRes, nVar, vVar, img, pop, ASMRes[0].get_lst() );
+      if( ISMSHADOW && CUTSHADOW )
+        append_ASMcuts( nRes, vRes, nVar, vVar, img, pop, ASMRes[0].get_shadow() );
+      //std::cout << *img;
+      //{int dum; std::cout << "PAUSED, ENTER 1"; std::cin >> dum;}
 #endif
       return true;
     }
 
+#if defined( USE_ASM )
+  void append_ASMcuts
+    ( unsigned const nRes, PolVar<I> const* vRes, unsigned const nVar, PolVar<I>* vVar,
+      PolBase<I>* img, FFOp* pop, std::vector<UnivarPWL<I>> const& pwlEst )
+    const
+    {
+      for( unsigned i=0; i<nVar; ++i ){
+        UnivarPWLE<double> const& uest = pwlEst[i].undEst;
+        if( uest.empty() )
+          POLLASMAux[i].set( img, I(0.), true );
+        else{
+          POLLASMAux[i].set( img, I(uest.get_lb(),uest.get_ub()), true );
+          auto const [ucst,isuCst] = uest.get_cst();
+          if( isuCst )
+            img->add_cut( pop, PolCut<I>::EQ, ucst, POLLASMAux[i], 1. );
+          else{
+            unsigned NK = uest.first.size()-1;
+            assert( uest.second.size() == uest.first.size() );
+            DXASMAux.assign( NK, uest.first[0] );
+            DYASMAux.assign( NK, uest.second[0] );
+	    for( unsigned j=0; j<NK; ++j ){
+	      DXASMAux[j] += uest.first[j+1];
+	      DYASMAux[j] += uest.second[j+1];
+	    }
+	    img->add_semilinear_cuts( pop, NK, vVar[i], DXASMAux.data(), POLLASMAux[i], DYASMAux.data(), mc::PolCut<I>::EQ );
+	  }
+	}
+        UnivarPWLE<double> const& oest = pwlEst[i].oveEst;
+        if( oest.empty() )
+          POLUASMAux[i].set( img, I(0.), true );
+        else{
+          POLUASMAux[i].set( img, I(oest.get_lb(),oest.get_ub()), true );
+          auto const [ocst,isoCst] = oest.get_cst();
+          if( isoCst )
+            img->add_cut( pop, PolCut<I>::EQ, ocst, POLUASMAux[i], 1. );
+          else{
+            unsigned NK = oest.first.size()-1;
+            assert( oest.second.size() == oest.first.size() );
+            DXASMAux.assign( NK, oest.first[0] );
+            DYASMAux.assign( NK, oest.second[0] );
+	    for( unsigned j=0; j<NK; ++j ){
+	      DXASMAux[j] += oest.first[j+1];
+	      DYASMAux[j] += oest.second[j+1];
+	    }
+	    img->add_semilinear_cuts( pop, NK, vVar[i], DXASMAux.data(), POLUASMAux[i], DYASMAux.data(), mc::PolCut<I>::EQ );
+	  }
+	}
+      }
+      img->add_cut( pop, PolCut<I>::LE, 0., nVar, POLLASMAux.data(), 1., vRes[0], -1. );
+      img->add_cut( pop, PolCut<I>::GE, 0., nVar, POLUASMAux.data(), 1., vRes[0], -1. );
+    }
+#endif
   // Properties
   std::string name
     ()
@@ -522,17 +620,17 @@ public:
     { return "EXT"; }
 };
 
-#if defined( USE_ISM )
+#if defined( USE_MC )
+  inline std::vector<McCormick<I>> FFExt::MCVar = std::vector<McCormick<I>>( NP );
+  inline std::vector<McCormick<I>> FFExt::MCRes = std::vector<McCormick<I>>( 1 );
+
+#elif defined( USE_ISM )
   inline ISModel<I> FFExt::ISMEnv = ISModel<I>( NP, ISMDIV );
   inline std::vector<ISVar<I>> FFExt::ISMVar = std::vector<ISVar<I>>( NP );
   inline std::vector<ISVar<I>> FFExt::ISMRes = std::vector<ISVar<I>>( 1 );
   inline std::vector<std::vector<PolVar<I>>> FFExt::POLISMAux = std::vector<std::vector<PolVar<I>>>( NP );
   inline std::vector<double> FFExt::DLISMAux = std::vector<double>( ISMDIV );
   inline std::vector<double> FFExt::DUISMAux = std::vector<double>( ISMDIV );
-
-#elif defined( USE_MC )
-  inline std::vector<McCormick<I>> FFExt::MCVar = std::vector<McCormick<I>>( NP );
-  inline std::vector<McCormick<I>> FFExt::MCRes = std::vector<McCormick<I>>( 1 );
 
 #elif defined( USE_MCISM )
   inline ISModel<I> FFExt::ISMEnv = ISModel<I>( NP, ISMDIV );
@@ -541,6 +639,15 @@ public:
   inline std::vector<double> FFExt::DUISMAux = std::vector<double>( ISMDIV );
   inline std::vector<McCormick<ISVar<I>>> FFExt::MCISMVar = std::vector<McCormick<ISVar<I>>>( NP );
   inline std::vector<McCormick<ISVar<I>>> FFExt::MCISMRes = std::vector<McCormick<ISVar<I>>>( 1 );
+
+#elif defined( USE_ASM )
+  inline ASModel<I> FFExt::ASMEnv = ASModel<I>( NP, ISMDIV );
+  inline std::vector<ASVar<I>> FFExt::ASMVar = std::vector<ASVar<I>>( NP );
+  inline std::vector<ASVar<I>> FFExt::ASMRes = std::vector<ASVar<I>>( 1 );
+  inline std::vector<PolVar<I>> FFExt::POLLASMAux = std::vector<PolVar<I>>( NP );
+  inline std::vector<PolVar<I>> FFExt::POLUASMAux = std::vector<PolVar<I>>( NP );
+  inline std::vector<double> FFExt::DXASMAux = std::vector<double>();
+  inline std::vector<double> FFExt::DYASMAux = std::vector<double>();
 #endif
 
 } // end namespace mc
@@ -582,12 +689,17 @@ int main()
   MINLP.options.CVATOL                      = 1e-3;
   MINLP.options.CVRTOL                      = 1e-3;
   MINLP.options.MAXITER                     = 0;
-  MINLP.options.MINLPBND.OBBTMAX            = 5;
+  MINLP.options.MINLPBND.OBBTMAX            = 10;
+  MINLP.options.MINLPBND.POLIMG.BREAKPOINT_TYPE = mc::PolBase<I>::Options::CONT;//BIN;//SOS2;
+  MINLP.options.MINLPBND.POLIMG.BREAKPOINT_RTOL =
+  MINLP.options.MINLPBND.POLIMG.BREAKPOINT_ATOL = 0e0;
+  MINLP.options.MINLPBND.MIPSLV.CONTRELAX   = ISMCONT;
   MINLP.options.MINLPBND.MIPSLV.FEASTOL     = 1e-7;
   MINLP.options.MINLPBND.MIPSLV.OPTIMTOL    = 1e-7;
   MINLP.options.MINLPBND.MIPSLV.DUALRED     = 0;
   MINLP.options.MINLPBND.MIPSLV.DISPLEVEL   = 0;
-  MINLP.options.MINLPBND.MIPSLV.OUTPUTFILE  = "test_ANN.lp";
+  MINLP.options.MINLPBND.MIPSLV.OUTPUTFILE  = "";//"test_ANN.lp";
+  MINLP.options.MINLPPRE                    = MINLP.options.MINLPBND;
   MINLP.setup();
   MINLP.presolve();
   //MINLP.GAMSexport();

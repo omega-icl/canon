@@ -1433,7 +1433,7 @@ SBBSLV<T>::_display_time
 ()
 {
   if( options.DISPLAY_LEVEL <= 1 ) return;
-  _odisp << std::right << std::fixed << std::setprecision(1) << std::setw(9) 
+  _odisp << std::right << std::fixed << std::setprecision(2) << std::setw(9) 
          << stats.to_time( stats.walltime( _tstart ) ) << "s";
 }
 

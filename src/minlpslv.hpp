@@ -2144,7 +2144,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   if( options.DISPLEVEL < 1 ) return;
-  _odisp << std::right << std::fixed << std::setprecision(1)
+  _odisp << std::right << std::fixed << std::setprecision(2)
          << std::setw(7) << stats.to_time( stats.walltime( tstart ) ) << "s";
 }
 
