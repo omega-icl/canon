@@ -709,6 +709,7 @@ MINLPBND<T,MIP,ExtOps...>::relax_model
 
   // Set-up variable initial guess and branch priority
   for( unsigned i=0; i<_nX0; i++ ){
+    //std::cout << "Initialize " << _POLXvar[i] << "(DAG: " << _POLXvar[i].var() << ")" << std::endl;
     assert( _MIPSLV->set_variable( _POLXvar[i], Xinc? &Xinc[i]: nullptr, options.BCHPRIM ) );
 #ifdef MC__MINLPBND_DEBUG_INITIALS
     if( Xinc ) std::cout << "Xinc[ " << i << "] = " << Xinc[i] << std::endl;
@@ -898,7 +899,7 @@ MINLPBND<T,MIP,ExtOps...>::reduce_bounds
   int cpred = _propagate_bounds();
   if( cpred < 0 ) return MIP::INFEASIBLE;
   if( _tight() ){
-    for( unsigned i=0; X && i<_nX; i++ ) X[i] = _Xbnd[i];
+    for( unsigned i=0; X && i<_nX0; i++ ) X[i] = _Xbnd[i];
     return MIP::OPTIMAL;
   }
 
