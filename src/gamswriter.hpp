@@ -587,44 +587,49 @@ GAMSWRITER<T,ExtOps...>::_add_cut
       switch( pCut->op()->type ){
 
         case FFOp::IPOW:
-          if( pCut->op()->varin[1]->num().n < 0 )
+          if( pCut->op()->varin[1]->num().n == -1 )
+            _EqnDef << pCut->var()[0].name() << " * " << pCut->var()[1].name()
+                    << " =E= 1;" << std::endl;
+          else if( pCut->op()->varin[1]->num().n < 0 )
             _EqnDef << pCut->var()[0].name() << " * POWER(" << pCut->var()[1].name()
                     << "," << -pCut->op()->varin[1]->num().n << ") =E= 1;" << std::endl;
           else if( pCut->op()->varin[1]->num().n == 0 )
             _EqnDef << pCut->var()[0].name() << " =E= 1;" << std::endl;
+          else if( pCut->op()->varin[1]->num().n == 1 )
+            _EqnDef << pCut->var()[0].name() << " =E= 1;" << std::endl;
           else
-            _EqnDef << pCut->var()[0].name() << " - POWER(" << pCut->var()[1].name()
-                    << "," << pCut->op()->varin[1]->num().n << ") =E= 0;" << std::endl;
+            _EqnDef << pCut->var()[0].name() << " =E= POWER(" << pCut->var()[1].name()
+                    << "," << pCut->op()->varin[1]->num().n << ");" << std::endl;
           break;
 
         case FFOp::DPOW:{
-          _EqnDef << pCut->var()[0].name() << " - RPOWER(" << pCut->var()[1].name()
-                  << "," << d2s(pCut->op()->varin[1]->num().x) << " =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= " << pCut->var()[1].name()
+                  << "**" << d2s(pCut->op()->varin[1]->num().x) << ";" << std::endl;
           break;
 
         case FFOp::CHEB:{
           unsigned const ncoef = pCut->op()->varin[1]->num().n+1;
           std::vector<double>&& coef = chebcoef( ncoef-1 );
-          _EqnDef << pCut->var()[0].name() << " - POLY(" << pCut->var()[1].name();
+          _EqnDef << pCut->var()[0].name() << " =E= POLY(" << pCut->var()[1].name();
           for( int k=ncoef; k>0; ) _EqnDef << "," << coef[--k];
           for( int k=ncoef; k<3; ++k ) _EqnDef << ",0"; // at least quadratic
-          _EqnDef << ") =E= 0;" << std::endl;
+          _EqnDef << ");" << std::endl;
           break;}
 
         case FFOp::SQR:
-          _EqnDef << pCut->var()[0].name() << " - SQR(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= POWER(" << pCut->var()[1].name() << ",2);" << std::endl;
           break;
 
         case FFOp::SQRT:
-          _EqnDef << pCut->var()[0].name() << " - SQRT(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= SQRT(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::EXP:
-          _EqnDef << pCut->var()[0].name() << " - EXP(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= EXP(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::LOG:
-          _EqnDef << pCut->var()[0].name() << " - LOG(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= LOG(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::XLOG:
@@ -632,67 +637,67 @@ GAMSWRITER<T,ExtOps...>::_add_cut
           break;
 
         case FFOp::COS:
-          _EqnDef << pCut->var()[0].name() << " - COS(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= COS(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::SIN:
-          _EqnDef << pCut->var()[0].name() << " - SIN(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= SIN(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::TAN:
-          _EqnDef << pCut->var()[0].name() << " - TAN(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= TAN(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::ACOS:
-          _EqnDef << pCut->var()[0].name() << " - ARCCOS(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= ACOS(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::ASIN:
-          _EqnDef << pCut->var()[0].name() << " - ARCSIN(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= ASIN(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::ATAN:
-          _EqnDef << pCut->var()[0].name() << " - ARCTAN(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= ATAN(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::COSH:
-          _EqnDef << pCut->var()[0].name() << " - COSH(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= COSH(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::SINH:
-          _EqnDef << pCut->var()[0].name() << " - SINH(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= SINH(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::TANH:
-          _EqnDef << pCut->var()[0].name() << " - TANH(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= TANH(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::ERF:
-          _EqnDef << pCut->var()[0].name() << " - ERRORF(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= ERRORF(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::FABS:
-          _EqnDef << pCut->var()[0].name() << " - ABS(" << pCut->var()[1].name() << ") =E= 0;" << std::endl;
+          _EqnDef << pCut->var()[0].name() << " =E= ABS(" << pCut->var()[1].name() << ");" << std::endl;
           break;
 
         case FFOp::MINF:
-          _EqnDef << pCut->var()[0].name() << " - MIN(" << pCut->var()[1].name();
+          _EqnDef << pCut->var()[0].name() << " =E= MIN(" << pCut->var()[1].name();
           if( pCut->nvar() == 2 )
             _EqnDef << "," << pCut->rhs();
           else
             for( unsigned k=2; k<pCut->nvar(); ++k )
               _EqnDef << "," << pCut->var()[k].name();
-          _EqnDef << ") =E= 0;" << std::endl;
+          _EqnDef << ");" << std::endl;
           break;
 
         case FFOp::MAXF:
-          _EqnDef << pCut->var()[0].name() << " - MAX(" << pCut->var()[1].name();
+          _EqnDef << pCut->var()[0].name() << " =E= MAX(" << pCut->var()[1].name();
           if( pCut->nvar() == 2 )
             _EqnDef << "," << pCut->rhs();
           else
             for( unsigned k=2; k<pCut->nvar(); ++k )
               _EqnDef << "," << pCut->var()[k].name();
-          _EqnDef << ") =E= 0;" << std::endl;
+          _EqnDef << ");" << std::endl;
           break;
 
         default:

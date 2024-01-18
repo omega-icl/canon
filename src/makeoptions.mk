@@ -33,7 +33,7 @@ PATH_CONCERT = /opt/ibm/ILOG/CPLEX_Studio1210/concert
 #FLAG_MIP    = -DMC__USE_CPLEX -m64 -fPIC -fexceptions -DIL_STD -Wno-ignored-attributes
 
 PATH_GUROBI = $(GUROBI_HOME)
-LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_g++5.2 -lgurobi100 -pthread
+LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_g++8.5 -lgurobi110 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 
@@ -54,8 +54,8 @@ OPTIM = -O2 #-Ofast
 WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-unused-result
 CPP17 = -std=c++20
 
-CC  = gcc-11
-CPP = g++-11
+CC  = gcc-12
+CPP = g++-12
 # CPP = icpc
 FLAG_CPP = $(DEBUG) $(PROF) $(OPTIM) $(CPP17) $(WARN) $(FLAG_DEP) 
 

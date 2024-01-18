@@ -1024,8 +1024,10 @@ MINLGO<T,NLP,MIP,ExtOps...>::subproblems
           f = _objscal * BASE_OPT::INF;
           status = SBBSLV<T>::INFEASIBLE;
           break;
-        case MIP::UNBOUNDED:
         case MIP::TIMELIMIT:
+          //status = SBBSLV<T>::FATAL;
+          //break;
+        case MIP::UNBOUNDED:
         default:
           status = SBBSLV<T>::FAILURE;
           break;
@@ -1094,7 +1096,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::_optimize_pwr
       default:
         return _finalize( STATUS::FAILED, os );
     }
-
+/*
     // Retrieve MIP solution - use bound on objective, not incumbent!
     _Zrel = _MINLPBND.relax_solver()->get_objective_bound();
     for( unsigned i=0; i<_var.size(); i++ )
@@ -1104,7 +1106,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::_optimize_pwr
     for( unsigned i=0; i<_var.size(); i++ )
       std::cout << "_Xrel[" << i << "] = " << _Xrel[i] << std::endl;
 #endif
-
+*/
     // Solve local NLP model (integer variable bounds fixed to relaxed solution if MIP)
     for( unsigned i=0; i<_var.size(); i++ ){
       if( _vartyp[i] ) _Xbndi[i] = _Xrel[i];
@@ -1247,6 +1249,18 @@ MINLGO<T,NLP,MIP,ExtOps...>::_solve_relax
   //                                  options.INIINC? _incumbent.x.data(): nullptr, 0, false, _iter>1? false: true,
   //                                  "", os );
   stats.walltime_slvrel += stats.walltime( tMIP );
+
+  if( flag == MIP::OPTIMAL
+   || flag == MIP::TIMELIMIT ){
+    _Zrel = _MINLPBND.relax_solver()->get_objective_bound();
+    for( unsigned i=0; i<_var.size(); i++ )
+      _Xrel[i] = _MINLPBND.relax_solver()->get_variable( _var[i] );
+#ifdef MC__MINLGO_DEBUG
+    std::cout << "_Zrel = " << _Zrel << std::endl;
+    for( unsigned i=0; i<_var.size(); i++ )
+      std::cout << "_Xrel[" << i << "] = " << _Xrel[i] << std::endl;
+#endif
+  }
 
   return flag;
 }
@@ -1423,7 +1437,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::_set_options_sbbslv
   SBBSLV<T>::options.STOPPING_RELTOL = options.CVRTOL;
   SBBSLV<T>::options.DISPLAY_LEVEL   = options.DISPLEVEL?2:0;
   SBBSLV<T>::options.MAX_NODES       = options.MAXITER;
-  SBBSLV<T>::options.MAX_WALLTIME    = options.TIMELIMIT;
+  SBBSLV<T>::options.MAX_WALLTIME    = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
 }
 
 template <typename T, typename NLP, typename MIP, typename... ExtOps>
@@ -1497,7 +1511,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
   MINLPPRE.MIPSLV.LPWARMSTART                                       = 2;
   MINLPPRE.MIPSLV.MIPRELGAP       = MINLPBND.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPPRE.MIPSLV.MIPABSGAP       = MINLPBND.MIPSLV.MIPABSGAP       = 1e-5;
-  MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-3;
+  MINLPPRE.MIPSLV.FUNCNONLINEAR   = MINLPBND.MIPSLV.FUNCNONLINEAR   = 1;
+  MINLPPRE.MIPSLV.FUNCMAXVAL      = MINLPBND.MIPSLV.FUNCMAXVAL      = 1e6;
+  MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-5;
   MINLPPRE.MIPSLV.HEURISTICS      = MINLPBND.MIPSLV.HEURISTICS      = 5e-2;
   MINLPPRE.MIPSLV.NUMERICFOCUS    = MINLPBND.MIPSLV.NUMERICFOCUS    = 0;
   MINLPPRE.MIPSLV.SCALEFLAG       = MINLPBND.MIPSLV.SCALEFLAG       = -1;
@@ -1585,7 +1601,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPBND.MIPPRESOLVE",   opt::value<int>(&MINLPBND.MIPSLV.PRESOLVE),             "presolve level in MIP solver" )
     ( "MINLPBND.MIPRELGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPRELGAP),         "convergence relative tolerance of MIP solver" )
     ( "MINLPBND.MIPABSGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPABSGAP),         "convergence absolute tolerance of MIP solver" )
-    ( "MINLPBND.MIPPWLRELGAP",  opt::value<double>(&MINLPBND.MIPSLV.PWLRELGAP),         "tolerance in piecewise-linear approximation of nonlinear univariate terms" )
+    ( "MINLPBND.MIPFUNCNONLINEAR", opt::value<int>(&MINLPBND.MIPSLV.FUNCNONLINEAR),     "static or dynamic piecewise-linear approximation of nonlinear univariate terms" )
+    ( "MINLPBND.MIPFUNCMAXVAL", opt::value<double>(&MINLPBND.MIPSLV.FUNCMAXVAL),        "maximum allowed range in piecewise-linear approximation of nonlinear univariate terms" )
+    ( "MINLPBND.MIPPWLRELGAP",  opt::value<double>(&MINLPBND.MIPSLV.PWLRELGAP),         "maximum relative error tolerance in piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPHEURISTICS", opt::value<double>(&MINLPBND.MIPSLV.HEURISTICS),        "fraction of time spent in MIP heuristics" )
     ( "MINLPBND.MIPNUMERIC",    opt::value<int>(&MINLPBND.MIPSLV.NUMERICFOCUS),         "control of numerical issues by MIP solver" )
     ( "MINLPBND.MIPSCALE",      opt::value<int>(&MINLPBND.MIPSLV.SCALEFLAG),            "control of model scaling by MIP solver" )

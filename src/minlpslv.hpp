@@ -1932,8 +1932,18 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
     // Retrieve MIP solution
     if( !pumpfeas )
       _Zrel = _objscal * _MIPSLV.get_variable( _POLSvar.front() );
-    for( unsigned i=0; i<_nX; i++ )
-      _Xrel[i] = _MIPSLV.get_variable( _POLXvar[i] );
+    for( unsigned i=0; i<_nX; i++ ){
+      //std::cout << "Retrieve " << _POLXvar[i] << "(DAG: " << _POLXvar[i].var() << ")" << std::endl;
+      try{
+        _Xrel[i] = _MIPSLV.get_variable( _POLXvar[i] );
+      }
+      catch( const std::runtime_error& e){
+//#ifdef MC__MINLPSLV_DEBUG
+        std::cerr << "**MINLPSLV: Variable " << _POLXvar[i] << "(DAG: " << _POLXvar[i].var() << ") not in master MIP" << std::endl; 
+//#endif
+        _Xrel[i] = 0.;
+      }
+    }
 #ifdef MC__MINLPSLV_DEBUG
     std::cout << "_Zrel = " << _Zrel << std::endl;
     for( unsigned i=0; i<_nX; i++ )

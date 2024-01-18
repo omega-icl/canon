@@ -20,6 +20,12 @@ doxydoc : doxydoc.o
 test_ANN : test_ANN.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
+test_GANN : test_GANN.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
+ReLUANN : ReLUANN.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
 

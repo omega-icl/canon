@@ -1,5 +1,6 @@
 # GAMS export
-GAMSEXPORT    = canon.gms
+GAMSEXPORT    = 
+#GAMSEXPORT    = canon.gms
 # Presolve level
 PRESOLVE      = 1
 # Presolve wall-time limit in seconds
@@ -9,7 +10,7 @@ REFORM        = 2
 # Convergence absolute tolerance
 CVATOL        = 1e-5
 # Convergence relative tolerance
-CVRTOL        = 1e-3
+CVRTOL        = 1e-5
 # Feasibility tolerance
 FEASTOL       = 1e-5
 # Search and append redundant polynomial cuts
@@ -90,11 +91,15 @@ OBBTMIG          = 1e-6
 # Presolve level of MIP solver during main iteration - -1: automatic; 0: none; 1: presolve; 2: aggressive
 MIPPRESOLVE      = -1
 # Convergence relative tolerance of MIP solver during main iteration
-MIPRELGAP        = 1e-3
+MIPRELGAP        = 1e-5
 # Convergence absolute tolerance of MIP solver during main iteration
 MIPABSGAP        = 1e-5
-# Tolerance in piecewise-linear approximation of nonlinear univariate terms during main iteration
-MIPPWLRELGAP     = 1e-3
+# Static or dynamic piecewise-linear approximation of nonlinear univariate terms
+MIPFUNCNONLINEAR = 1
+# Maximum allowed range in piecewise-linear approximation of nonlinear univariate terms
+MIPFUNCMAXVAL    = 1e6
+# Maximum relative error tolerance in piecewise-linear approximation of nonlinear univariate terms
+MIPPWLRELGAP     = 1e-5
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
@@ -121,7 +126,7 @@ MONOPTIM         = 0
 # Add redundant cuts within quadratisation
 REDQUADCUTS      = 0
 # Add PSD cuts within quadratisation - 0: none; 1: 2-by-2 cuts; >2: 3-by-3 cuts
-PSDQUADCUTS      = 1
+PSDQUADCUTS      = 0
 # Separate linear constraints prior to relaxation
 LINCTRSEP        = 1
 # Keep linear and quadratic expressions aggregated

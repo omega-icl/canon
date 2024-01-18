@@ -86,38 +86,40 @@ public:
     //! @brief Constructor
     Options():
       ALGO( -1 ), PRESOLVE( -1 ), LPWARMSTART( 1 ), 
-      CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( 2 ), 
+      CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( -1 ), 
       FEASTOL( 1e-6 ), OPTIMTOL( 1e-6 ), MIPRELGAP( 1e-4 ), MIPABSGAP( 1e-10 ),
       OBBT( -1 ), NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), HEURISTICS( 0.05 ),
-      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), PWLRELGAP( 1e-5 ), FUNCMAXVAL( 1e6 ),
+      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), 
+      FUNCNONLINEAR( 1 ), FUNCMAXVAL( 1e6 ), PWLRELGAP( 1e-5 ),
       TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
       LOGFILE(), OUTPUTFILE()
       {}
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
-        ALGO         = options.ALGO;
-        PRESOLVE     = options.PRESOLVE;
-        LPWARMSTART  = options.LPWARMSTART;        
-        CONTRELAX    = options.CONTRELAX;
-        DUALRED      = options.DUALRED;
-        NONCONVEX    = options.NONCONVEX;
-        FEASTOL      = options.FEASTOL;
-        OPTIMTOL     = options.OPTIMTOL;
-        MIPRELGAP    = options.MIPRELGAP;
-        MIPABSGAP    = options.MIPABSGAP;
-        OBBT         = options.OBBT;
-        NUMERICFOCUS = options.NUMERICFOCUS;
-        SCALEFLAG    = options.SCALEFLAG;
-        HEURISTICS   = options.HEURISTICS;
-        PRESOS1BIGM  = options.PRESOS1BIGM;
-        PRESOS2BIGM  = options.PRESOS2BIGM;
-        PWLRELGAP    = options.PWLRELGAP;
-        FUNCMAXVAL   = options.FUNCMAXVAL;
-        TIMELIMIT    = options.TIMELIMIT;
-        THREADS      = options.THREADS;
-        DISPLEVEL    = options.DISPLEVEL;
-        LOGFILE      = options.LOGFILE;
-        OUTPUTFILE   = options.OUTPUTFILE;
+        ALGO          = options.ALGO;
+        PRESOLVE      = options.PRESOLVE;
+        LPWARMSTART   = options.LPWARMSTART;        
+        CONTRELAX     = options.CONTRELAX;
+        DUALRED       = options.DUALRED;
+        NONCONVEX     = options.NONCONVEX;
+        FEASTOL       = options.FEASTOL;
+        OPTIMTOL      = options.OPTIMTOL;
+        MIPRELGAP     = options.MIPRELGAP;
+        MIPABSGAP     = options.MIPABSGAP;
+        OBBT          = options.OBBT;
+        NUMERICFOCUS  = options.NUMERICFOCUS;
+        SCALEFLAG     = options.SCALEFLAG;
+        HEURISTICS    = options.HEURISTICS;
+        PRESOS1BIGM   = options.PRESOS1BIGM;
+        PRESOS2BIGM   = options.PRESOS2BIGM;
+        FUNCNONLINEAR = options.FUNCNONLINEAR;
+        FUNCMAXVAL    = options.FUNCMAXVAL;
+        PWLRELGAP     = options.PWLRELGAP;
+        TIMELIMIT     = options.TIMELIMIT;
+        THREADS       = options.THREADS;
+        DISPLEVEL     = options.DISPLEVEL;
+        LOGFILE       = options.LOGFILE;
+        OUTPUTFILE    = options.OUTPUTFILE;
         return *this ;
       }
     //! @brief Algorithm used to solve continuous models or the root node of a MIP model. The default options is: -1=automatic. Other options are: 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent, 5=deterministic concurrent simplex. 
@@ -130,7 +132,7 @@ public:
     bool CONTRELAX;
     //! @brief Determines whether dual reductions are performed in presolve. The default value of 1 enables these redutions. You can set the parameter to 0 to disable these reductions if you received an optimization status of INF_OR_UNBD and would like a more definitive conclusion. 
     int DUALRED;
-    //! @brief Sets the strategy for handling non-convex quadratic objectives or non-convex quadratic constraints. With setting 0, an error is reported if the original user model contains non-convex quadratic constructs. With setting 1, an error is reported if non-convex quadratic constructs could not be discarded or linearized during presolve. With the default setting 2, non-convex quadratic problems are solved by means of translating them into bilinear form and applying spatial branching. The default -1 setting is currently equivalent to 1, and may change in future GUROBI releases to be equivalent to 2. 
+    //! @brief Sets the strategy for handling non-convex quadratic objectives or non-convex quadratic constraints. With setting 0, an error is reported if the original user model contains non-convex quadratic constructs. With setting 1, an error is reported if non-convex quadratic constructs could not be discarded or linearized during presolve. With the default setting 2, non-convex quadratic problems are solved by means of translating them into bilinear form and applying spatial branching. The default -1 setting is currently almost equivalent to 2, except that it takes less care to avoid presolve reductions that might transform a convex constraint into one that can no longer be detected to be convex, and thus can sometimes perform more presolve reductions.
     int NONCONVEX;
     //! @brief All constraints must be satisfied to this tolerance. Tightening this tolerance can produce smaller constraint violations, but for numerically challenging models it can sometimes lead to much larger iteration counts. 
     double FEASTOL;
@@ -152,10 +154,12 @@ public:
     double PRESOS1BIGM;
     //! @brief Controls the automatic reformulation of SOS2 constraints into binary form. SOS2 constraints are often handled more efficiently using a binary representation. The reformulation often requires big-M values to be introduced as coefficients. This parameter specifies the largest big-M that can be introduced by presolve when performing this reformulation. Larger values increase the chances that an SOS2 constraint will be reformulated, but very large values (e.g., 1e8) can lead to numerical issues. The default value of 0 disables the reformulation. You can set the parameter to -1 to choose an automatic approach, or a large value to force reformulation. 
     double PRESOS2BIGM;
-    //! @brief Sets the maximum relative error in the piecewise-linear approximations of the nonlinear functions. Gurobi will choose pieces, typically of different sizes, to achieve that error bound. Note that the number of pieces required may be quite large when setting a tight error tolerance. The default value of 0.05 specifies a 5% maximal relative error gap.  
-    double PWLRELGAP;
+    //! @brief Controls whether general function constraints are treated as nonlinear functions (1) or are approximated via the piecewise-linear approximation approach (0). The default value is 1. In the piecewise-linear approach, it is of paramount important to fine-tune the values of the options PWLRELGAP and FUNCMAXVAL.
+    int FUNCNONLINEAR;
     //! @brief Sets the maximum allowed value for x and y variables in function constraints. Very large values in piecewise-linear approximations can cause numerical errors. The default value is 1e+6. This parameter limits the bounds on the variables that participate in function constraints - any bound larger than this limit will be truncated.
     double FUNCMAXVAL;
+     //! @brief Sets the maximum relative error in the piecewise-linear approximations of the nonlinear functions. Gurobi will choose pieces, typically of different sizes, to achieve that error bound. Note that the number of pieces required may be quite large when setting a tight error tolerance. The default value of 0.05 specifies a 5% maximal relative error gap.
+    double PWLRELGAP;
     //! @brief Limits the total time expended (in seconds). Optimization returns with a TIMELIMIT status if the limit is exceeded.
     double TIMELIMIT;
     //! @brief Limits the number of threads used by the MIP solver. The default value of 0 allows to use all available threads.
@@ -176,7 +180,7 @@ public:
       const;
     //! @brief Piecewise-linear approximation range check
     void check_pwl
-      ( GRBVar const& x, GRBVar const& y )
+      ( T const& x, T const& y )
       const; 
   };
   //! @brief MIP options
@@ -259,7 +263,8 @@ public:
     const
     {
       auto itv = _MIPvar.find( const_cast<PolVar<T>*>(&X) );
-      assert( itv != _MIPvar.end() );
+      if( itv == _MIPvar.end() )
+        throw std::runtime_error("MIPSLV_GUROBI - Error: Querying non-partipating variable");
       return itv->second.get( GRB_DoubleAttr_X );
     }
 
@@ -271,7 +276,8 @@ public:
       auto itp = _POLenv->Vars().find( const_cast<FFVar*>(&X) );
       auto itv = _MIPvar.find( itp->second );
       if( itv == _MIPvar.end() ) std::cerr << *itp->first << " " << *itp->second << std::endl;
-      assert( itv != _MIPvar.end() );
+      if( itv == _MIPvar.end() )
+        throw std::runtime_error("MIPSLV_GUROBI - Error: Querying non-partipating variable");
       return itv->second.get( GRB_DoubleAttr_X );
     }
 
@@ -397,35 +403,6 @@ MIPSLV_GUROBI<T>::solve
       std::cout << pvar.second->var().name() << " = "
                 << get_variable( *pvar.second ) << std::endl;
   }
-}
-
-template <typename T>
-inline void
-MIPSLV_GUROBI<T>::_set_options
-()
-{
-  // Gurobi options
-  _GRBmodel->getEnv().set( GRB_IntParam_LogToConsole,      options.LOGFILE!=""? 0:1 );
-  _GRBmodel->getEnv().set( GRB_StringParam_LogFile,        options.LOGFILE );
-  _GRBmodel->getEnv().set( GRB_IntParam_OutputFlag,        options.DISPLEVEL>0?1:0 );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_TimeLimit,      options.TIMELIMIT );
-  _GRBmodel->getEnv().set( GRB_IntParam_Method,            options.ALGO );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_OptimalityTol,  options.OPTIMTOL );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_FeasibilityTol, options.FEASTOL );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGap,         options.MIPRELGAP );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGapAbs,      options.MIPABSGAP );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_Heuristics,     options.HEURISTICS );
-  _GRBmodel->getEnv().set( GRB_IntParam_OBBT,              options.OBBT );
-  _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
-  _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
-  _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
-  _GRBmodel->getEnv().set( GRB_IntParam_LPWarmStart,       options.LPWARMSTART );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS1BigM,    options.PRESOS1BIGM );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS2BigM,    options.PRESOS2BIGM );
-  _GRBmodel->getEnv().set( GRB_DoubleParam_FuncMaxVal,     options.FUNCMAXVAL );
-  _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );
-  _GRBmodel->getEnv().set( GRB_IntParam_NonConvex,         options.NONCONVEX );
-  _GRBmodel->getEnv().set( GRB_IntParam_Threads,           options.THREADS );
 }
 
 template <typename T>
@@ -735,21 +712,21 @@ MIPSLV_GUROBI<T>::_add_cut
           case FFOp::IPOW:{
             unsigned const ncoef = pCut->op()->varin[1]->num().n+1;
             std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
           case FFOp::DPOW:{
             double const& dExp = pCut->op()->varin[1]->num().val();
             if( dExp < 0 ) throw std::runtime_error("MIPSLV_GUROBI - Error: Nonlinear cut not yet implemented");
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], dExp, "", options.pwl() );
             break;}
 
           case FFOp::CHEB:{
             unsigned const ncoef = pCut->op()->varin[1]->num().n+1;
             std::vector<double>&& coef = chebcoef( ncoef-1 );
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
@@ -757,52 +734,52 @@ MIPSLV_GUROBI<T>::_add_cut
             //_GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 2, "", options.pwl() );
             unsigned const ncoef = 3;
             std::vector<double> coef( ncoef, 0. ); coef[0] = 1.;
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrPoly( _cutvar[1], _cutvar[0], ncoef, coef.data(), "", options.pwl() );
             break;}
 
           case FFOp::SQRT:{
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrPow( _cutvar[1], _cutvar[0], 0.5, "", options.pwl() );
             break;}
 
           case FFOp::EXP:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrExp( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::LOG:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrLog( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::COS:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrCos( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::SIN:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrSin( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::TAN:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrTan( _cutvar[1], _cutvar[0], "", options.pwl() );
             break;
 
           case FFOp::ACOS:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrCos( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
 
           case FFOp::ASIN:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrSin( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
 
           case FFOp::ATAN:
-            options.check_pwl( _cutvar[0], _cutvar[1] );
+            options.check_pwl( _bndvar[0], _bndvar[1] );
             _GRBmodel->addGenConstrTan( _cutvar[0], _cutvar[1], "", options.pwl() );
             break;
 
@@ -812,8 +789,8 @@ MIPSLV_GUROBI<T>::_add_cut
             _GRBmodel->addConstr( grbvarx, GRB_EQUAL, 2.*_cutvar[1] );
             T bndy = 0.5 * ( Op<T>::tanh( _bndvar[1] ) + 1. );
             GRBVar grbvary = _GRBmodel->addVar( Op<T>::l(bndy), Op<T>::u(bndy), 0., GRB_CONTINUOUS );
-            _GRBmodel->update();
-            options.check_pwl( grbvarx, grbvary );
+            //_GRBmodel->update();
+            options.check_pwl( bndx, bndy );
             _GRBmodel->addGenConstrLogistic( grbvarx, grbvary, "", options.pwl() );
             _GRBmodel->addConstr( _cutvar[0], GRB_EQUAL, 2.*grbvary-1. );
             break;}
@@ -851,44 +828,100 @@ MIPSLV_GUROBI<T>::_add_cut
 
 template <typename T>
 inline void
+MIPSLV_GUROBI<T>::_set_options
+()
+{
+  // Gurobi options
+  _GRBmodel->getEnv().set( GRB_IntParam_LogToConsole,      options.LOGFILE!=""? 0:1 );
+  _GRBmodel->getEnv().set( GRB_StringParam_LogFile,        options.LOGFILE );
+  _GRBmodel->getEnv().set( GRB_IntParam_OutputFlag,        options.DISPLEVEL>0?1:0 );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_TimeLimit,      options.TIMELIMIT>0?options.TIMELIMIT:0. );
+  _GRBmodel->getEnv().set( GRB_IntParam_Method,            options.ALGO );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_OptimalityTol,  options.OPTIMTOL );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_FeasibilityTol, options.FEASTOL );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGap,         options.MIPRELGAP );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGapAbs,      options.MIPABSGAP );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_Heuristics,     options.HEURISTICS );
+  _GRBmodel->getEnv().set( GRB_IntParam_OBBT,              options.OBBT );
+  _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
+  _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
+  _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
+  _GRBmodel->getEnv().set( GRB_IntParam_LPWarmStart,       options.LPWARMSTART );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS1BigM,    options.PRESOS1BIGM );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_PreSOS2BigM,    options.PRESOS2BIGM );
+  //_GRBmodel->getEnv().set( GRB_IntParam_FuncNonlinear,     options.FUNCNONLINEAR );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_FuncMaxVal,     options.FUNCMAXVAL );
+  _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );
+  _GRBmodel->getEnv().set( GRB_IntParam_NonConvex,         options.NONCONVEX );
+  _GRBmodel->getEnv().set( GRB_IntParam_Threads,           options.THREADS );
+}
+
+template <typename T>
+inline void
 MIPSLV_GUROBI<T>::Options::display
-( std::ostream&out ) const
+( std::ostream&out )
+const
 {
   // Display MIP options
   out << std::left << std::scientific << std::setprecision(1)
-      << std::setw(15) << "  ALGO"        << ALGO        << std::endl
-      << std::setw(15) << "  PRESOLVE"    << PRESOLVE    << std::endl
-      << std::setw(15) << "  DUALRED"     << DUALRED     << std::endl
-      << std::setw(15) << "  NONCONVEX"   << NONCONVEX   << std::endl
-      << std::setw(15) << "  FEASTOL"     << FEASTOL     << std::endl
-      << std::setw(15) << "  OPTIMTOL"    << OPTIMTOL    << std::endl
-      << std::setw(15) << "  MIPRELGAP"   << MIPRELGAP   << std::endl
-      << std::setw(15) << "  MIPABSGAP"   << MIPABSGAP   << std::endl
-      << std::setw(15) << "  HEURISTICS"  << HEURISTICS  << std::endl
-      << std::setw(15) << "  PRESOS1BIGM" << PRESOS1BIGM << std::endl
-      << std::setw(15) << "  PRESOS2BIGM" << PRESOS2BIGM << std::endl
-      << std::setw(15) << "  TIMELIMIT"   << TIMELIMIT   << std::endl
-      << std::setw(15) << "  DISPLEVEL"   << DISPLEVEL   << std::endl
-      << std::setw(15) << "  OUTPUTFILE"  << OUTPUTFILE  << std::endl;
+      << std::setw(15) << "  ALGO"          << ALGO                       << std::endl
+      << std::setw(15) << "  PRESOLVE"      << PRESOLVE                   << std::endl
+      << std::setw(15) << "  FEASTOL"       << FEASTOL                    << std::endl
+      << std::setw(15) << "  OPTIMTOL"      << OPTIMTOL                   << std::endl
+      << std::setw(15) << "  MIPRELGAP"     << MIPRELGAP                  << std::endl
+      << std::setw(15) << "  MIPABSGAP"     << MIPABSGAP                  << std::endl
+      << std::setw(15) << "  OBBT"          << OBBT                       << std::endl
+      << std::setw(15) << "  HEURISTICS"    << HEURISTICS                 << std::endl
+      << std::setw(15) << "  NUMERICFOCUS"  << NUMERICFOCUS               << std::endl
+      << std::setw(15) << "  SCALEFLAG"     << SCALEFLAG                  << std::endl
+      << std::setw(15) << "  LPWARMSTART"   << LPWARMSTART                << std::endl
+      << std::setw(15) << "  PRESOS1BIGM"   << PRESOS1BIGM                << std::endl
+      << std::setw(15) << "  PRESOS2BIGM"   << PRESOS2BIGM                << std::endl
+      << std::setw(15) << "  FUNCNONLINEAR" << FUNCNONLINEAR              << std::endl
+      << std::setw(15) << "  PWLRELGAP"     << PWLRELGAP                  << std::endl
+      << std::setw(15) << "  FUNCMAXVAL"    << FUNCMAXVAL                 << std::endl
+      << std::setw(15) << "  DUALRED"       << DUALRED                    << std::endl
+      << std::setw(15) << "  NONCONVEX"     << NONCONVEX                  << std::endl
+      << std::setw(15) << "  THREADS"       << THREADS                    << std::endl
+      << std::setw(15) << "  TIMELIMIT"     << (TIMELIMIT>0?TIMELIMIT:0.) << std::endl
+      << std::setw(15) << "  DISPLEVEL"     << (DISPLEVEL>0?1:0)          << std::endl
+      << std::setw(15) << "  OUTPUTFILE"    << OUTPUTFILE                 << std::endl;
 }
 
 template <typename T>
 inline std::string
 MIPSLV_GUROBI<T>::Options::pwl
-() const
+()
+const
 {
   std::ostringstream oline;
-  oline << "FuncPieces=-2, FuncPieceError=" << PWLRELGAP;
+  oline << "FuncNonlinear=" << FUNCNONLINEAR;
+  if( !FUNCNONLINEAR )
+    oline << " FuncPieces=-2 FuncPieceError=" << PWLRELGAP;
+  //std::cout << "MIPSLV_GUROBI::Options::pwl: " << oline.str() << std::endl;
   return oline.str();
 }
-
+/*
 template <typename T>
 inline void
 MIPSLV_GUROBI<T>::Options::check_pwl
-( GRBVar const& x, GRBVar const& y ) const
+( GRBVar const& x, GRBVar const& y )
+const
 {
   if( x.get(GRB_DoubleAttr_LB) < -FUNCMAXVAL || x.get(GRB_DoubleAttr_UB) > FUNCMAXVAL
    || y.get(GRB_DoubleAttr_LB) < -FUNCMAXVAL || y.get(GRB_DoubleAttr_UB) > FUNCMAXVAL )
+    throw std::runtime_error("MIPSLV_GUROBI - Error: Parameter FuncMaxVal too small for piecewise-linear approximation of function constraints");
+}
+*/
+template <typename T>
+inline void
+MIPSLV_GUROBI<T>::Options::check_pwl
+( T const& x, T const& y )
+const
+{
+  if( FUNCNONLINEAR ) return;
+  if( Op<T>::l(x) < -FUNCMAXVAL || Op<T>::u(x) > FUNCMAXVAL
+   || Op<T>::l(y) < -FUNCMAXVAL || Op<T>::u(y) > FUNCMAXVAL )
     throw std::runtime_error("MIPSLV_GUROBI - Error: Parameter FuncMaxVal too small for piecewise-linear approximation of function constraints");
 }
 
