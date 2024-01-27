@@ -58,20 +58,21 @@ size_t const NX = 2;
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT<mc::FFANN<I,0>> NLP;
+ typedef mc::NLPSLV_SNOPT<mc::FFANN<I,0>,mc::FFGRADANN<I,0>> NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT<mc::FFANN<I,0>> NLP;
+ typedef mc::NLPSLV_IPOPT<mc::FFANN<I,0>,mc::FFGRADANN<I,0>> NLP;
 #endif
 
 #include "minlgo.hpp"
+typedef mc::MINLGO<I,NLP,MIP,mc::FFANN<I,0>,mc::FFGRADANN<I,0>> MINLP;
 
 int main()
 {
   // Create ANN
   mc::ANN<I> f;
   f.options.ACTIV     = mc::ANN<I>::Options::RELU;
-  f.options.RELAX     = mc::ANN<I>::Options::POL;//ASM;//MC;//POL;//MCISM;
+  f.options.RELAX     = mc::ANN<I>::Options::ASM;//MC;//AUX;//MCISM;
   f.options.ISMDIV    = 1024;
   f.options.ASMBPS    = 8;
   f.options.ISMCONT   = true;
@@ -82,7 +83,7 @@ int main()
   f.set( MLPCOEF );
 
   // Create DAG
-  mc::FFGraph< mc::FFANN<I,0> > DAG;
+  mc::FFGraph<mc::FFANN<I,0>,mc::FFGRADANN<I,0>> DAG;
   mc::FFVar X[NX];
   for( unsigned int i=0; i<NX; i++ ) X[i].set( &DAG );
   mc::FFANN<I,0> MLP;
@@ -90,40 +91,40 @@ int main()
   std::cout << DAG;
 
   // Create optimization model
-  mc::MINLGO<I,NLP,MIP,mc::FFANN<I,0>> MINLP;
-  MINLP.set_dag( &DAG );  // DAG
-  MINLP.set_var( NX, X, XL, XU, 0 ); // decision variables
-  MINLP.set_obj( mc::BASE_OPT::MIN, F ); // objective
+  MINLP MODEL;
+  MODEL.set_dag( &DAG );  // DAG
+  MODEL.set_var( NX, X, XL, XU, 0 ); // decision variables
+  MODEL.set_obj( mc::BASE_OPT::MIN, F ); // objective
 
   // Set optimization options
-  //MINLP.options.GAMSEXPORT                  = "test_ANN.gms";
-  //MINLP.options.PRESOLVE                    = 0;
-  MINLP.options.STRATEGY                    = mc::MINLGO<I,NLP,MIP,mc::FFANN<I,0>>::Options::SBB;
-  MINLP.options.DISPLEVEL                   = 1;
-  MINLP.options.CVATOL                      = 1e-4;
-  MINLP.options.CVRTOL                      = 1e-4;
-  MINLP.options.MAXITER                     = 0;
-  MINLP.options.TIMELIMIT                   = 600;
-  MINLP.options.MINLPBND.OBBTMAX            = 10;
-  MINLP.options.MINLPBND.POLIMG.BREAKPOINT_TYPE = mc::PolBase<I>::Options::CONT;//BIN;//SOS2;
-  MINLP.options.MINLPBND.POLIMG.BREAKPOINT_RTOL =
-  MINLP.options.MINLPBND.POLIMG.BREAKPOINT_ATOL = 0e0;
-  MINLP.options.MINLPBND.MIPSLV.CONTRELAX   = true;
-  MINLP.options.MINLPBND.MIPSLV.FEASTOL     = 1e-7;
-  MINLP.options.MINLPBND.MIPSLV.OPTIMTOL    = 1e-7;
-  MINLP.options.MINLPBND.MIPSLV.DUALRED     = 0;
-  MINLP.options.MINLPBND.MIPSLV.DISPLEVEL   = 1;
-  MINLP.options.MINLPBND.MIPSLV.OUTPUTFILE  = "";//"test_ANN.lp";
-  MINLP.options.MINLPPRE                    = MINLP.options.MINLPBND;
-  MINLP.options.MINLPSLV.NLPSLV.DISPLEVEL   = 0;
-  MINLP.options.MINLPSLV.NLPSLV.GRADMETH    = NLP::Options::FAD;
+  //MODEL.options.GAMSEXPORT                  = "test_ANN.gms";
+  //MODEL.options.PRESOLVE                    = 0;
+  MODEL.options.STRATEGY                    = MINLP::Options::SBB;
+  MODEL.options.DISPLEVEL                   = 1;
+  MODEL.options.CVATOL                      = 1e-4;
+  MODEL.options.CVRTOL                      = 1e-4;
+  MODEL.options.MAXITER                     = 0;
+  MODEL.options.TIMELIMIT                   = 600;
+  MODEL.options.MINLPBND.OBBTMAX            = 10;
+  MODEL.options.MINLPBND.POLIMG.BREAKPOINT_TYPE = mc::PolBase<I>::Options::CONT;//BIN;//SOS2;
+  MODEL.options.MINLPBND.POLIMG.BREAKPOINT_RTOL =
+  MODEL.options.MINLPBND.POLIMG.BREAKPOINT_ATOL = 0e0;
+  MODEL.options.MINLPBND.MIPSLV.CONTRELAX   = true;
+  MODEL.options.MINLPBND.MIPSLV.FEASTOL     = 1e-7;
+  MODEL.options.MINLPBND.MIPSLV.OPTIMTOL    = 1e-7;
+  MODEL.options.MINLPBND.MIPSLV.DUALRED     = 0;
+  MODEL.options.MINLPBND.MIPSLV.DISPLEVEL   = 0;
+  MODEL.options.MINLPBND.MIPSLV.OUTPUTFILE  = "";//"test_ANN.lp";
+  MODEL.options.MINLPPRE                    = MODEL.options.MINLPBND;
+  MODEL.options.MINLPSLV.NLPSLV.DISPLEVEL   = 0;
+  MODEL.options.MINLPSLV.NLPSLV.GRADMETH    = NLP::Options::FSYM;
 
   // Solve optimization model
-  MINLP.setup();
-  MINLP.presolve();
-  //MINLP.GAMSexport();
-  MINLP.optimize();
-  MINLP.stats.display();
+  MODEL.setup();
+  MODEL.presolve();
+  //MODEL.GAMSexport();
+  MODEL.optimize();
+  MODEL.stats.display();
 
   return 0;
 }
