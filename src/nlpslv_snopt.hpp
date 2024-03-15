@@ -702,24 +702,19 @@ class NLPSLV_SNOPT
 {
 public:
 
-  using BASE_AE<ExtOps...>::dag;
-  using BASE_AE<ExtOps...>::set_dag;
-  using BASE_AE<ExtOps...>::par;
-  using BASE_AE<ExtOps...>::set_par;
-  using BASE_AE<ExtOps...>::add_par;
-  using BASE_AE<ExtOps...>::reset_par;
-  using BASE_AE<ExtOps...>::var;
-  using BASE_AE<ExtOps...>::set_var;
-  using BASE_AE<ExtOps...>::add_var;
-  using BASE_AE<ExtOps...>::reset_var;
-  using BASE_AE<ExtOps...>::update_vartyp;
-  using BASE_AE<ExtOps...>::dep;
-  using BASE_AE<ExtOps...>::set_dep;
-  using BASE_AE<ExtOps...>::add_dep;
-  using BASE_AE<ExtOps...>::reset_dep;
-  using BASE_AE<ExtOps...>::sys;
-  using BASE_AE<ExtOps...>::add_sys;
-  using BASE_AE<ExtOps...>::reset_sys;
+  using BASE_NLP<ExtOps...>::dag;
+  using BASE_NLP<ExtOps...>::set_dag;
+  
+  using BASE_NLP<ExtOps...>::par;
+  using BASE_NLP<ExtOps...>::set_par;
+  using BASE_NLP<ExtOps...>::add_par;
+  using BASE_NLP<ExtOps...>::reset_par;
+  
+  using BASE_NLP<ExtOps...>::var;
+  using BASE_NLP<ExtOps...>::set_var;
+  using BASE_NLP<ExtOps...>::add_var;
+  using BASE_NLP<ExtOps...>::reset_var;
+  using BASE_NLP<ExtOps...>::update_vartyp;
 
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
@@ -731,22 +726,14 @@ public:
 
 protected:
 
-  using BASE_AE<ExtOps...>::_dag;
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_vartyp;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varum;
-  using BASE_AE<ExtOps...>::_dep;
-  using BASE_AE<ExtOps...>::_deplb;
-  using BASE_AE<ExtOps...>::_deplm;
-  using BASE_AE<ExtOps...>::_depub;
-  using BASE_AE<ExtOps...>::_depum;
-  using BASE_AE<ExtOps...>::_sys;
-  using BASE_AE<ExtOps...>::_sysm;
-  using BASE_AE<ExtOps...>::_par;
-
+  using BASE_NLP<ExtOps...>::_dag;
+  using BASE_NLP<ExtOps...>::_var;
+  using BASE_NLP<ExtOps...>::_vartyp;
+  using BASE_NLP<ExtOps...>::_varlb;
+  using BASE_NLP<ExtOps...>::_varlm;
+  using BASE_NLP<ExtOps...>::_varub;
+  using BASE_NLP<ExtOps...>::_varum;
+  using BASE_NLP<ExtOps...>::_par;
   using BASE_NLP<ExtOps...>::_obj;
   using BASE_NLP<ExtOps...>::_ctr;
 
@@ -786,6 +773,8 @@ private:
   int                 _nX;
   //! @brief vector of decision variables in DAG
   std::vector<FFVar>  _Xvar;
+  //! @brief vector of decision variable dependencies
+  std::vector<FFDep>  _Xdep;
   //! @brief vector of decision variable lower bounds
   std::vector<double> _Xlow;
   //! @brief vector of decision variable upper bounds
@@ -801,6 +790,8 @@ private:
   int                 _nF;
   //! @brief vector of functions in DAG
   std::vector<FFVar>  _Fvar;
+  //! @brief vector of functions dependencies
+  std::vector<FFDep>  _Fdep;
   //! @brief vector of function offsets
   std::vector<double> _Foff;
   //! @brief vector of function lower bounds
@@ -1205,9 +1196,8 @@ NLPSLV_SNOPT<ExtOps...>::_set_gradient
     switch( options.GRADMETH ){
       case Options::FAD:
       case Options::BAD:
-        //for( auto const& [iX,dum] : _Fvar[iF].dep().dep() ){
         for( int iX=0; iX<_nX; ++iX ){
-          if( !_Fvar[iF].dep().dep( _Xvar[iX].id().second ).first ) continue;
+          if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
           _jGvar.push_back( iX );
 #ifdef MC__NLPSLV_SNOPT_DEBUG
@@ -1278,9 +1268,8 @@ NLPSLV_SNOPT<ExtOps...>::_add_gradient
       case Options::FAD:
       case Options::BAD:
       case Options::FD:
-        //for( auto const& [iX,dum] : _Fvar[ndxF].dep().dep() ){
         for( int iX=0; iX<_nX; ++iX ){
-          if( !_Fvar[ndxF].dep().dep( _Xvar[iX].id().second ).first ) continue;
+          if( !_Fdep[ndxF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( ndxF );
           _jGvar.push_back( iX );
         }
@@ -1309,9 +1298,13 @@ NLPSLV_SNOPT<ExtOps...>::setup
   
   // full set of decision variables (independent & dependent)
   _Xvar = _var;
-  _Xvar.insert( _Xvar.end(), _dep.begin(), _dep.end() );
   _nX = _Xvar.size();
   _X0.resize( _nX, 0. );
+
+  // set dependencies of decision variables
+  _Xdep.resize( _nX );
+  for( int i=0; i<_nX; ++i )
+    _Xdep[i].indep( _Xvar[i].id().second );
   
   // full set of variable initial values from GAMS
 #if defined (MC__WITH_GAMS)
@@ -1323,23 +1316,25 @@ NLPSLV_SNOPT<ExtOps...>::setup
   // full set of variable bounds (independent & dependent)
   _Xlow = _varlb;
   _Xupp = _varub;
-  _Xlow.insert( _Xlow.end(), _deplb.begin(), _deplb.end() );
-  _Xupp.insert( _Xupp.end(), _depub.begin(), _depub.end() );
 
   // full set of nonlinear functions (cost, constraints & equations)
   _Fvar.clear();
   _Flow.clear();
   _Fupp.clear();
   _Foff.clear();
+  _Fdep.clear();
   
   int ndxF = 0;
+  FFDep depF;
   if( std::get<0>(_obj).size() ){   // First, cost function
     _Fvar.push_back( std::get<1>(_obj)[0] );
     _ObjDir = (std::get<0>(_obj)[0]==BASE_OPT::MIN? -1: 1 );
     _ObjRow = ndxF;
     _ObjAdd =  0.;
-    _ObjMul = -1.; 
-    if( _Fvar[ndxF].dep().worst() > FFDep::L )
+    _ObjMul = -1.;
+    _dag->eval( 1, &_Fvar[ndxF], &depF, _nX, _Xvar.data(), _Xdep.data() ); 
+    _Fdep.push_back( depF );
+    if( _Fdep[ndxF].worst() > FFDep::L )
       _Gndx.insert( ndxF );
     else{
       _Andx.insert( ndxF );
@@ -1358,10 +1353,13 @@ NLPSLV_SNOPT<ExtOps...>::setup
 
   for( unsigned i=0; i<std::get<0>(_ctr).size(); i++ ){ // Then, regular constraints
     if( std::get<3>(_ctr)[i] ) continue; // ignore if redundant
-    ndxF++;
+    ++ndxF;
     _Fvar.push_back( std::get<1>(_ctr)[i] );
+    //_dag->output( _dag->subgraph( 1, &_Fvar[ndxF] ) );
+    _dag->eval( 1, &_Fvar[ndxF], &depF, _nX, _Xvar.data(), _Xdep.data() ); 
+    _Fdep.push_back( depF );
     double CtrCst = 0.;
-    if( _Fvar[ndxF].dep().worst() > FFDep::L )
+    if( _Fdep[ndxF].worst() > FFDep::L )
       _Gndx.insert( ndxF );
     else{
       _Andx.insert( ndxF );
@@ -1375,20 +1373,6 @@ NLPSLV_SNOPT<ExtOps...>::setup
     _Foff.push_back( CtrCst );
   }
 
-  for( auto its=_sys.begin(); its!=_sys.end(); ++its ){ // Last, dependent equations
-    ndxF++;
-    _Fvar.push_back( *its );
-    double CtrCst = 0.;
-    if( _Fvar[ndxF].dep().worst() > FFDep::L )
-      _Gndx.insert( ndxF );
-    else{
-      _Andx.insert( ndxF );
-      _dag->eval( 1, &_Fvar[ndxF], &CtrCst, _nX, _Xvar.data(), _X0.data() );
-    }
-    _Flow.push_back( -CtrCst );
-    _Fupp.push_back( -CtrCst );
-    _Foff.push_back(  CtrCst );
-  }
   _nF = _Fvar.size();
 #ifdef MC__NLPSLV_SNOPT_DEBUG
   assert( _nF == (int)ndxF+1 && _nF == _Gndx.size()+_Andx.size() );
@@ -1473,18 +1457,24 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
   //if( _recModel && _Fvar[_ObjRow] == obj
   // && (type == BASE_OPT::MIN? _ObjDir == -1: _ObjDir == 1) ) return false;
   _record_model();
+
+  // Dependencies
+  FFDep dep;
+  _dag->eval( 1, &obj, &dep, _nX, _Xvar.data(), _Xdep.data() ); 
   
   // Change to new objective
   _ObjDir = (type==BASE_OPT::MIN? -1: 1 );
   if( _ObjRow < 0 ){
     _ObjRow = 0;
     _Fvar.insert( _Fvar.begin(), obj );
+    _Fdep.insert( _Fdep.begin(), dep );
     _Flow.insert( _Flow.begin(), -BASE_OPT::INF );
     _Fupp.insert( _Fupp.begin(),  BASE_OPT::INF );
     _Foff.insert( _Foff.begin(), 0. );
   }
   else{
     _Fvar[_ObjRow] = obj;
+    _Fdep[_ObjRow] = dep;
     // Previous objective function was nonlinear
     if( _Gndx.erase( _ObjRow ) ){
       auto it_iGfun = _iGfun.begin();
@@ -1524,7 +1514,7 @@ NLPSLV_SNOPT<ExtOps...>::set_obj_lazy
   }
   _ObjAdd =  0.;
   _ObjMul = -1.; 
-  if( _Fvar[_ObjRow].dep().worst() > FFDep::L )
+  if( _Fdep[_ObjRow].worst() > FFDep::L )
     _Gndx.insert( _ObjRow );
   else{
     _Andx.insert( _ObjRow );
@@ -1545,27 +1535,33 @@ NLPSLV_SNOPT<ExtOps...>::add_ctr_lazy
 {
   // Keep track of original model 
   _record_model();
-  
+
+  // Dependencies
+  FFDep dep;
+  _dag->eval( 1, &ctr, &dep, _nX, _Xvar.data(), _Xdep.data() ); 
+
   // Append new constraint
-  unsigned CtrPos = _Fvar.size();
-  double CtrCst = 0.;
+  unsigned pos = _Fvar.size();
   _Fvar.push_back( ctr );
-  if( _Fvar.back().dep().worst() > FFDep::L )
-    _Gndx.insert( CtrPos );
+  _Fdep.push_back( dep );
+  double cst = 0.;
+
+  if( dep.worst() > FFDep::L )
+    _Gndx.insert( pos );
   else{
-    _Andx.insert( CtrPos );
-    _dag->eval( 1, &_Fvar.back(), &CtrCst, _nX, _Xvar.data(), _X0.data() ); 
+    _Andx.insert( pos );
+    _dag->eval( 1, &_Fvar.back(), &cst, _nX, _Xvar.data(), _X0.data() ); 
   }
   switch( type ){
-    case BASE_OPT::EQ: _Flow.push_back( -CtrCst );        _Fupp.push_back( -CtrCst );        break;
-    case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -CtrCst );        break;
-    case BASE_OPT::GE: _Flow.push_back( -CtrCst );        _Fupp.push_back(  BASE_OPT::INF ); break;
+    case BASE_OPT::EQ: _Flow.push_back( -cst );           _Fupp.push_back( -cst );        break;
+    case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( -cst );        break;
+    case BASE_OPT::GE: _Flow.push_back( -cst );           _Fupp.push_back(  BASE_OPT::INF ); break;
   }
-  _Foff.push_back( CtrCst );
+  _Foff.push_back( cst );
   _nF = _Fvar.size();
   
   // Append new constraint derivatives
-  return _add_gradient( CtrPos );
+  return _add_gradient( pos );
 }
 
 template <typename... ExtOps>

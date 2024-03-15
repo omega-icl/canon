@@ -1,26 +1,40 @@
-SETS
-  N      time stages  / 1*4 /
+VARIABLE objvar;
 
-VARIABLES
-  x(N)   decision variables
-  z      cost variable;
+VARIABLES  V0, V1, V2, V3, V5, V6, V7;
 
-x.lo(N) = 1;
-x.up(N) = 5;
+EQUATIONS  E1, E2, E3, E4, E5, E6, E7;
 
-EQUATIONS
-  F       Objective function
-  G1      Constraint #1
-  G2      Constraint #2;
+E1 .. objvar =E= V0 * V7 + V2 + V3 * V5 + V3 * V6;
+E2 .. V6 * V7 - 25 =L= 16.962716833963;
+E3 .. V6 * V7 - 25 =G= 0;
+E4 .. POWER( V3, 2 ) + POWER( V2, 2 ) + POWER( V1, 2 ) + V5 - 40 =E= 0;
+E5 .. V0 * V1 + ( - V6 ) =E= 0;
+E6 .. V2 * V3 + ( - V7 ) =E= 0;
+E7 .. POWER( V0, 2 ) + ( - V5 ) =E= 0;
 
-F  ..  z =E= (x('1')*x('4'))*(x('1')+x('2')+x('3'))+x('3');
-G1 .. (x('1')*x('4'))*x('2')*x('3') =G= 25;
-G2 .. power(x('1'),2)+power(x('2'),2)+power(x('3'),2)+power(x('4'),2) =E= 40;
+V0.LO = 1;
+V0.UP = 1.423328216664;
+V1.LO = 3.332536672584;
+V1.UP = 5;
+V2.LO = 3.0126270786235;
+V2.UP = 5;
+V3.LO = 1;
+V3.UP = 1.9743897469327;
+V5.LO = 1;
+V5.UP = 2.0258632123518;
+V6.LO = 4.0942571199778;
+V6.UP = 6.8722460868424;
+V7.LO = 3.6378208352965;
+V7.UP = 6.1061138241694;
 
-*OPTION NLP = BARON;
-OPTION OPTCR = 1e-3;
-OPTION OPTCA = 1e-5;
+V0.L = 1;
+V1.L = 4.743;
+V2.L = 3.82115;
+V3.L = 1.37941;
+V5.L = 1;
+V6.L = 4.743;
+V7.L = 5.27092;
 
-MODEL doxydoc /ALL/;
-SOLVE doxydoc USING NLP MINIMIZING z;
-
+MODEL canon / ALL /;
+canon.OPTFILE = 1;
+SOLVE canon USING QCP MINIMIZING objvar;

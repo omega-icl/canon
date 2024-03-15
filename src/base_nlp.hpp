@@ -5,8 +5,10 @@
 #ifndef MC__BASE_NLP_HPP
 #define MC__BASE_NLP_HPP
 
+#include <assert.h>
+#include "ffunc.hpp"
 #include "base_opt.hpp"
-#include "base_ae.hpp"
+
 
 namespace mc
 {
@@ -17,36 +19,314 @@ namespace mc
 ////////////////////////////////////////////////////////////////////////
 template <typename... ExtOps>
 class BASE_NLP
-: public virtual BASE_OPT,
-  public virtual BASE_AE<ExtOps...>
+: public virtual BASE_OPT
 {
 protected:
-  using BASE_AE<ExtOps...>::_dag;
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varum;
-  using BASE_AE<ExtOps...>::_dep;
-  using BASE_AE<ExtOps...>::_deplb;
-  using BASE_AE<ExtOps...>::_deplm;
-  using BASE_AE<ExtOps...>::_depub;
-  using BASE_AE<ExtOps...>::_depum;
-  using BASE_AE<ExtOps...>::_sys;
-  using BASE_AE<ExtOps...>::_sysm;
+  //! @brief pointer to DAG of equation
+  FFGraph<ExtOps...>*    _dag;
+
+  //! @brief parameters
+  std::vector<FFVar>     _par;
+
+  //! @brief decision variables
+  std::vector<FFVar>     _var;
+
+  //! @brief variable lower bounds
+  std::vector<double>    _varlb;
+
+  //! @brief variable upper bounds
+  std::vector<double>    _varub;
+
+  //! @brief variable lower bound multipliers
+  std::vector<FFVar>     _varlm;
+
+  //! @brief variable upper bound multipliers
+  std::vector<FFVar>     _varum;
+
+  //! @brief variable types
+  std::vector<unsigned>  _vartyp;
 
 public:
   //! @brief Class constructor
-  BASE_NLP()
-    : BASE_OPT(), BASE_AE<ExtOps...>()
+  BASE_NLP
+    ()
+    : BASE_OPT(),
+      _dag( nullptr )
     {}
 
   //! @brief Class destructor
-  virtual ~BASE_NLP()
+  virtual ~BASE_NLP
+    ()
     {}
 
+  //! @brief Get pointer to DAG
+  FFGraph<ExtOps...>* dag
+    ()
+    const
+    { return _dag; }
+
+  //! @brief Set pointer to DAG
+  void set_dag
+    ( FFGraph<ExtOps...>* dag )
+    { _dag = dag; }
+
+  //! @brief Get parameters
+  std::vector<FFVar> const& par
+    ()
+    const
+    { return _par; }
+
+  //! @brief Set parameters
+  void set_par
+    ( std::vector<FFVar> const& par, std::vector<double> const& val=std::vector<double>() )
+    { _par = par;
+      for( unsigned i=0; i<val.size() && i<_par.size(); i++ ){
+        _par[i].set( val[i] );
+      }
+    }
+
+  //! @brief Add parameters
+  void add_par
+    ( std::vector<FFVar> const& par, std::vector<double> const& val=std::vector<double>() )
+    { _par.insert( _par.end(), par.begin(), par.end() );
+      for( unsigned i=0; i<val.size() && i<par.size(); i++ ){
+        _par[_par.size()-par.size()+i].set( val[i] );
+      }
+    }
+
+  //! @brief Set parameters
+  void set_par
+    ( unsigned const npar, FFVar const* par, double const* val=nullptr )
+    { _par.assign( par, par+npar );
+      for( unsigned i=0; val && i<_par.size(); i++ ){
+        _par[i].set( val[i] );
+      }
+    }
+
+  //! @brief Add parameters
+  void add_par
+    ( unsigned const npar, FFVar const* par, double const* val=nullptr )
+    { _par.insert( _par.end(), par, par+npar );
+      for( unsigned i=0; val && i<npar; i++ ){
+        _par[_par.size()-npar+i].set( val[i] );
+      }
+    }
+
+  //! @brief Set parameters
+  void set_par
+    ( FFVar const& par )
+    { _par.assign( &par, &par+1 );
+    }
+
+  //! @brief Set parameters
+  void set_par
+    ( FFVar const& par, double const& val )
+    { _par.assign( &par, &par+1 );
+      _par[0].set( val );
+    }
+
+  //! @brief Add parameter
+  void add_par
+    ( FFVar const& par )
+    { _par.push_back( par );
+    }
+
+  //! @brief Add parameter
+  void add_par
+    ( FFVar const& par, double const& val )
+    { _par.push_back( par );
+      _par.back().set( val );
+    }
+
+  //! @brief Reset parameters
+  void reset_par
+    ()
+    { _par.clear();
+    }
+
+  //! @brief Get decision variables
+  std::vector<FFVar> const& var
+    ()
+    const
+    { return _var; }
+
+  //! @brief Get decision variable types
+  std::vector<unsigned> const& vartyp
+    ()
+    const
+    { return _vartyp; }
+
+  //! @brief Get decision variable lower bounds
+  std::vector<double> const& varlb
+    ()
+    const
+    { return _varlb; }
+
+  //! @brief Get decision variable upper bounds
+  std::vector<double> const& varub
+    ()
+    const
+    { return _varub; }
+
+  //! @brief Set decision variables
+  void set_var
+    ( std::vector<FFVar> const& var,
+      std::vector<double> const& lb=std::vector<double>(),
+      std::vector<double> const& ub=std::vector<double>(),
+      std::vector<unsigned> const& typ=std::vector<unsigned>() )
+    { _var = var;
+      _varlb  = lb;
+      _varub  = ub;
+      _vartyp = typ;
+      if( _varlb.size()  < _var.size() ) _varlb.insert( _varlb.end(), _var.size()-_varlb.size(), -INF );
+      if( _varub.size()  < _var.size() ) _varub.insert( _varub.end(), _var.size()-_varub.size(),  INF );
+      if( _vartyp.size() < _var.size() ) _vartyp.insert( _vartyp.end(), _var.size()-_vartyp.size(), 0 );
+      _varlm.clear();
+      _varum.clear();
+      for( unsigned i=0; i<_var.size(); i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Set decision variables
+  void set_var
+    ( std::vector<FFVar> const& var, double const& lb=-INF, double const& ub=INF, unsigned const typ=0 )
+    { _var = var;
+      _varlb.assign(  var.size(), lb  );
+      _varub.assign(  var.size(), ub  );
+      _vartyp.assign( var.size(), typ );
+      _varlm.clear();
+      _varum.clear();
+      for( unsigned i=0; i<var.size(); i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Add decision variables
+  void add_var
+    ( std::vector<FFVar> const& var,
+      std::vector<double> const& lb=std::vector<double>(),
+      std::vector<double> const& ub=std::vector<double>(),
+      std::vector<unsigned> const& typ=std::vector<unsigned>() )
+    { _var.insert( _var.end(), var.begin(), var.end() );
+      _varlb.insert( _varlb.end(), lb.begin(), lb.end() );
+      _varub.insert( _varub.end(), ub.begin(), ub.end() );
+      _vartyp.insert( _vartyp.end(), typ.begin(), typ.end() );
+      if( _varlb.size()  < _var.size() ) _varlb.insert( _varlb.end(), _var.size()-_varlb.size(), -INF );
+      if( _varub.size()  < _var.size() ) _varub.insert( _varub.end(), _var.size()-_varub.size(),  INF );
+      if( _vartyp.size() < _var.size() ) _vartyp.insert( _vartyp.end(), _var.size()-_vartyp.size(), 0 );
+      for( unsigned i=0; i<var.size(); i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Add decision variables
+  void add_var
+    ( std::vector<FFVar> const& var, double const& lb=-INF, double const& ub=INF, unsigned const typ=0 )
+    { _var.insert( _var.end(), var.begin(), var.end() );
+      _varlb.insert( _varlb.end(), var.size(), lb );
+      _varub.insert( _varub.end(), var.size(), ub );
+      _vartyp.insert( _vartyp.end(), var.size(), typ );
+      for( unsigned i=0; i<var.size(); i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Set decision variables
+  void set_var
+    ( unsigned const nvar, FFVar const* var, double const* lb, double const* ub=nullptr, const unsigned* typ=nullptr )
+    { _var.assign( var, var+nvar );
+      if( lb )  _varlb.assign( lb, lb+nvar );
+      else      _varlb.assign( nvar,  -INF );
+      if( ub )  _varub.assign( ub, ub+nvar );
+      else      _varub.assign( nvar,   INF );
+      if( typ ) _vartyp.assign( typ, typ+nvar );
+      else      _vartyp.assign( nvar,       0 );
+      _varlm.clear();
+      _varum.clear();
+      for( unsigned i=0; i<nvar; i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Set decision variables
+  void set_var
+    ( unsigned const nvar, FFVar const* var, double const& lb=-INF, double const& ub=INF, unsigned const typ=0 )
+    { _var.assign( var, var+nvar );
+      _varlb.assign( nvar, lb );
+      _varub.assign( nvar, ub );
+      _vartyp.assign( nvar, typ );
+      _varlm.clear();
+      _varum.clear();
+      for( unsigned i=0; i<nvar; i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Add decision variables
+  void add_var
+    ( unsigned const nvar, FFVar const* var, double const* lb, double const* ub=nullptr, const unsigned* typ=nullptr )
+    { _var.insert( _var.end(), var, var+nvar );
+      if( lb ) _varlb.insert( _varlb.end(), lb, lb+nvar );
+      else     _varlb.insert( _varlb.end(), nvar, -INF  );
+      if( ub ) _varub.insert( _varub.end(), ub, ub+nvar );
+      else     _varub.insert( _varub.end(), nvar,  INF  );
+      if( typ ) _vartyp.insert( _vartyp.end(), typ, typ+nvar );
+      else      _vartyp.insert( _vartyp.end(), nvar,       0 );
+      for( unsigned i=0; i<nvar; i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Add decision variables
+  void add_var
+    ( unsigned const nvar, FFVar const* var, double const& lb=-INF, double const& ub=INF, unsigned const typ=0 )
+    { _var.insert( _var.end(), var, var+nvar );
+      _varlb.insert( _varlb.end(), nvar, lb );
+      _varub.insert( _varub.end(), nvar, ub );
+      _vartyp.insert( _vartyp.end(), nvar, typ );
+      for( unsigned i=0; i<nvar; i++ ){
+        _varlm.push_back( FFVar( _dag ) );
+        _varum.push_back( FFVar( _dag ) );
+      }
+    }
+
+  //! @brief Add decision variable
+  void add_var
+    ( FFVar const& var, double const& lb=-INF, double const& ub=INF, unsigned const typ=0 )
+    { _var.push_back( var );
+      _varlb.push_back( lb );
+      _varub.push_back( ub );
+      _vartyp.push_back( typ );
+      _varlm.push_back( FFVar( _dag ) );
+      _varum.push_back( FFVar( _dag ) );
+    }
+
+  //! @brief Reset decision variables
+  void reset_var
+    ()
+    { _var.clear();
+      _varlm.clear();
+      _varum.clear();
+      _varlb.clear();
+      _varub.clear();
+      _vartyp.clear();
+    }
+
+  //! @brief Update decision variable types
+  void update_vartyp
+    ( unsigned const typ=0 )
+    { _vartyp.assign( _vartyp.size(), typ ); }
+
   //! @brief Get constraints
-  const std::tuple< std::vector<t_CTR>, std::vector<FFVar>, std::vector<FFVar>, std::vector<bool> >& ctr() const
+  std::tuple< std::vector<t_CTR>, std::vector<FFVar>, std::vector<FFVar>, std::vector<bool> > const& ctr() const
     { return _ctr; }
 
   //! @brief Reset constraints
@@ -67,7 +347,7 @@ public:
 
   //! @brief Set objective
   void set_obj
-    ( const t_OBJ type, const FFVar&obj )
+    ( t_OBJ const type, FFVar const& obj )
     { std::get<0>(_obj).clear(); std::get<0>(_obj).push_back( type );
       std::get<1>(_obj).clear(); std::get<1>(_obj).push_back( obj );
       std::get<2>(_obj).clear(); 
@@ -80,7 +360,10 @@ public:
   //! @brief Copy equations
   void set
     ( BASE_NLP const& nlp )
-    { BASE_AE<ExtOps...>::set( nlp );
+    { _dag = nlp._dag; //std::cout << "DAG: " << nlp._dag << std::endl;
+      _var = nlp._var; _vartyp = nlp._vartyp;
+      _varlb = nlp._varlb; _varub = nlp._varub;
+      _varlm = nlp._varlm; _varum = nlp._varum;
       _ctr = nlp._ctr; _obj = nlp._obj; }
 
 protected:
@@ -116,7 +399,7 @@ protected:
 template <typename... ExtOps>
 inline bool
 BASE_NLP<ExtOps...>::set_nco
-( const unsigned*tvar, bool const BADIFF )
+( unsigned const* tvar, bool const BADIFF )
 {
   reset_nco();
   if( !std::get<0>(_obj).size() )
@@ -167,22 +450,6 @@ BASE_NLP<ExtOps...>::set_nco
       scal += _varlm[ip];
     }
   }
-  for( unsigned ip=0; ip<_dep.size(); ip++ ){
-    // Only accout for finite bounds on continuous dependents in Lagrangian function
-    if( tvar && tvar[_var.size()+ip] ) continue;
-    if( _depub[ip] < BASE_OPT::INF ){
-      lagr += _depum[ip] * _dep[ip];
-      scal += _depum[ip];
-    }
-    if( _deplb[ip] > -BASE_OPT::INF ){
-      lagr -= _deplm[ip] * _dep[ip];
-      scal += _deplm[ip];
-    }
-  }
-  for( unsigned ie=0; ie<_sys.size(); ++ie ){
-    lagr += _sys[ie] * _sysm[ie];
-    scal += sqr( _sysm[ie] );
-  }
   
   // Multipliers normalization (all multipliers between [0,1])
   std::get<0>(_nco).push_back( BASE_OPT::EQ );
@@ -198,11 +465,7 @@ BASE_NLP<ExtOps...>::set_nco
     if( tvar && tvar[ip] ) continue;
     vPCNT.push_back( _var[ip] );
   }
-  for( unsigned ip=0; ip<_dep.size(); ip++ ){
-    if( tvar && tvar[_var.size()+ip] ) continue;
-    vPCNT.push_back( _dep[ip] );
-  }
-  const FFVar* dlagr = nullptr;
+  FFVar const* dlagr = nullptr;
   switch( BADIFF ){
    case false: // Forward differentiation
     dlagr = _dag->FAD( 1, &lagr, vPCNT.size(), vPCNT.data() );
@@ -232,17 +495,6 @@ BASE_NLP<ExtOps...>::set_nco
     if( _varlb[ip] > -BASE_OPT::INF ){
       std::get<0>(_nco).push_back( BASE_OPT::EQ );
       std::get<1>(_nco).push_back( _varlm[ip] * ( _var[ip] - _varlb[ip] ) );
-    }
-  }
-  for( unsigned ip=0; ip<_dep.size(); ip++ ){
-    if( tvar && tvar[_var.size()+ip] ) continue;
-    if( _varub[ip] < BASE_OPT::INF ){
-      std::get<0>(_nco).push_back( BASE_OPT::EQ );
-      std::get<1>(_nco).push_back( _depum[ip] * ( _dep[ip] - _depub[ip] ) );
-    }
-    if( _varlb[ip] > -BASE_OPT::INF ){
-      std::get<0>(_nco).push_back( BASE_OPT::EQ );
-      std::get<1>(_nco).push_back( _deplm[ip] * ( _dep[ip] - _deplb[ip] ) );
     }
   }
   for( unsigned ic=0; ic<std::get<0>(_ctr).size(); ++ic ){

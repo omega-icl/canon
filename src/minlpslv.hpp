@@ -131,24 +131,19 @@ class MINLPSLV
 {
 public:
 
-  using BASE_AE<ExtOps...>::dag;
-  using BASE_AE<ExtOps...>::set_dag;
-  using BASE_AE<ExtOps...>::par;
-  using BASE_AE<ExtOps...>::set_par;
-  using BASE_AE<ExtOps...>::add_par;
-  using BASE_AE<ExtOps...>::reset_par;
-  using BASE_AE<ExtOps...>::var;
-  using BASE_AE<ExtOps...>::set_var;
-  using BASE_AE<ExtOps...>::add_var;
-  using BASE_AE<ExtOps...>::reset_var;
-  using BASE_AE<ExtOps...>::update_vartyp;
-  using BASE_AE<ExtOps...>::dep;
-  using BASE_AE<ExtOps...>::set_dep;
-  using BASE_AE<ExtOps...>::add_dep;
-  using BASE_AE<ExtOps...>::reset_dep;
-  using BASE_AE<ExtOps...>::sys;
-  using BASE_AE<ExtOps...>::add_sys;
-  using BASE_AE<ExtOps...>::reset_sys;
+  using BASE_NLP<ExtOps...>::dag;
+  using BASE_NLP<ExtOps...>::set_dag;
+  
+  using BASE_NLP<ExtOps...>::par;
+  using BASE_NLP<ExtOps...>::set_par;
+  using BASE_NLP<ExtOps...>::add_par;
+  using BASE_NLP<ExtOps...>::reset_par;
+  
+  using BASE_NLP<ExtOps...>::var;
+  using BASE_NLP<ExtOps...>::set_var;
+  using BASE_NLP<ExtOps...>::add_var;
+  using BASE_NLP<ExtOps...>::reset_var;
+  using BASE_NLP<ExtOps...>::update_vartyp;
 
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
@@ -158,22 +153,14 @@ public:
 
 protected:
 
-  using BASE_AE<ExtOps...>::_dag;
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_vartyp;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varum;
-  using BASE_AE<ExtOps...>::_dep;
-  using BASE_AE<ExtOps...>::_deplb;
-  using BASE_AE<ExtOps...>::_deplm;
-  using BASE_AE<ExtOps...>::_depub;
-  using BASE_AE<ExtOps...>::_depum;
-  using BASE_AE<ExtOps...>::_sys;
-  using BASE_AE<ExtOps...>::_sysm;
-  using BASE_AE<ExtOps...>::_par;
-
+  using BASE_NLP<ExtOps...>::_dag;
+  using BASE_NLP<ExtOps...>::_var;
+  using BASE_NLP<ExtOps...>::_vartyp;
+  using BASE_NLP<ExtOps...>::_varlb;
+  using BASE_NLP<ExtOps...>::_varlm;
+  using BASE_NLP<ExtOps...>::_varub;
+  using BASE_NLP<ExtOps...>::_varum;
+  using BASE_NLP<ExtOps...>::_par;
   using BASE_NLP<ExtOps...>::_obj;
   using BASE_NLP<ExtOps...>::_ctr;
 
@@ -412,6 +399,9 @@ protected:
   //! @brief Decision variables in MINLP model
   std::vector<FFVar>        _Xvar;
 
+  //! @brief Decision variable dependencies
+  std::vector<FFDep>        _Xdep;
+
   //! @brief Decision variable lower bounds
   std::vector<double>       _Xlow;
 
@@ -447,6 +437,9 @@ protected:
 
   //! @brief Functions in MINLP model
   std::vector<FFVar>        _Fvar;
+
+  //! @brief Functions dependencies
+  std::vector<FFDep>        _Fdep;
 
   //! @brief Function bounds
   std::vector<T>            _Fbnd;
@@ -575,14 +568,6 @@ protected:
   bool _add_outerapproximation_cuts
     ( std::vector<double> const& Xval, std::vector<double>& Fval,
       std::vector<double>& Fmul );
-
-//  //! @brief Add root-node cut to master MIP subproblem
-//  bool _add_rootnode_cut
-//    ();
-
-//  //! @brief Add incumbent cut to master MIP subproblem
-//  bool _add_incumbent_cut
-//    ();
     
   //! @brief Add integer cut to master MIP subproblem
  bool _add_integer_cut
@@ -856,7 +841,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
 #endif
   _MIPSLV.options = options.MIPSLV;
 
-  // independent decision variables
+  // decision variables
   _Xvar = _var;
   _Xlow = _varlb;
   _Xupp = _varub;
@@ -867,30 +852,36 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
     if( _Xtyp[i] ) _Xint.insert( i );
     else           _Xcnt.insert( i );
   _ismip = !_Xint.empty();
-
-  // dependent decision variables
-  _Xvar.insert( _Xvar.end(), _dep.begin(), _dep.end() );
-  _Xlow.insert( _Xlow.end(), _deplb.begin(), _deplb.end() );
-  _Xupp.insert( _Xupp.end(), _depub.begin(), _depub.end() );
-  _Xtyp.insert( _Xtyp.end(), _dep.size(), 0 );
   _Xrel.clear();
   _Xbnd.clear();
   _nX = _Xvar.size();
   
+  // set variable dependencies
+  _Xdep.resize( _nX );
+  for( unsigned i=0; i<_nX; ++i )
+    _Xdep[i].indep( _Xvar[i].id().second );
+
   // full set of functions
   _Fvar.clear();
+  _Fdep.clear();
   _Ftyp.clear();
   _Fbnd.clear();
+  FFDep depF = 0.;
+
   // Cost
   if( std::get<0>(_obj).size() ){
     _Ftyp.push_back( std::get<0>(_obj)[0] );
     _Fvar.push_back( std::get<1>(_obj)[0] );
+    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data() ); 
+    _Fdep.push_back( depF );
   }
   else{
     _Ftyp.push_back( BASE_OPT::MIN );
     _Fvar.push_back( 0 );
+    _Fdep.push_back( depF );
   }
   _Fbnd.push_back( _IINF );
+
   // Constraints
   for( unsigned i=0; i<std::get<0>(_ctr).size(); i++ ){
     _Ftyp.push_back( std::get<0>(_ctr)[i] );
@@ -900,10 +891,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
       case BASE_OPT::LE: _Fbnd.push_back( T(-BASE_OPT::INF,0) ); break;
       case BASE_OPT::GE: _Fbnd.push_back( T(0,BASE_OPT::INF) );  break;
     }
+    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data() ); 
+    _Fdep.push_back( depF );
   }
-  _Ftyp.insert( _Ftyp.end(), _sys.size(), BASE_OPT::EQ );
-  _Fvar.insert( _Fvar.end(), _sys.begin(), _sys.end() );
-  _Fbnd.insert( _Fbnd.end(), _sys.size(), T(0) );
   _nF = _Fvar.size();
   assert( _Ftyp.size() == _nF );
 
@@ -920,7 +910,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _X0.resize( _nX, 0. );
   for( unsigned j=0; j<_nF; j++ ){
     double CtrCst = 0.;
-    if( _Fvar[j].dep().worst() > FFDep::L )
+    if( _Fdep[j].worst() > FFDep::L )
       _Fnlin.insert( j );
     else{
       _Flin.insert( j );
@@ -1019,9 +1009,8 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
     switch( options.NLPSLV.GRADMETH ){
       case NLP::Options::FAD:
       case NLP::Options::BAD:
-        //for( auto const& [iX,dum] : _Fvar[iF].dep().dep() ){
         for( unsigned iX=0; iX<_nX; ++iX ){
-          if( !_Fvar[iF].dep().dep( _Xvar[iX].id().second ).first ) continue;
+          if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
           _jGvar.push_back( iX );
 #ifdef MC__NLPSLV_SNOPT_DEBUG

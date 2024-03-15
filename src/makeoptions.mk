@@ -1,8 +1,18 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp23 ; pwd)
+PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp30 ; pwd)
 #echo mcpp path is $(PATH_MC);
 include $(PATH_MC)/src/makeoptions.mk
+
+PATH_CRONOS = $(shell cd $(HOME)/Programs/bitbucket/cronos ; pwd)
+LIB_CRONOS   = 
+INC_CRONOS   = -I$(PATH_CRONOS)/include
+FLAG_CRONOS  = -DMC__USE_SOBOL
+
+PATH_SUNDIALS = /opt/sundials-6.7.0
+LIB_SUNDIALS = #-L$(PATH_SUNDIALS)/lib -lsundials_cvodes -lsundials_nvecserial -llapack -lblas
+INC_SUNDIALS = #-I$(PATH_SUNDIALS)/include
+FLAG_SUNDIALS =
 
 PATH_CLI =
 LIB_CLI  = -lboost_program_options
@@ -33,7 +43,7 @@ PATH_CONCERT = /opt/ibm/ILOG/CPLEX_Studio1210/concert
 #FLAG_MIP    = -DMC__USE_CPLEX -m64 -fPIC -fexceptions -DIL_STD -Wno-ignored-attributes
 
 PATH_GUROBI = $(GUROBI_HOME)
-LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_g++8.5 -lgurobi110 -pthread
+LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_c++ -lgurobi110 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 
@@ -42,9 +52,9 @@ LIB_GAMS  =
 INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"
 
-FLAG_DEP = -fPIC $(FLAG_MC) $(FLAG_CLI) $(FLAG_SOBOL) $(FLAG_NLP) $(FLAG_MIP) $(FLAG_GAMS)
-LIB_DEP  = $(LIB_MC) $(LIB_CLI) $(LIB_SOBOL) $(LIB_NLP) $(LIB_MIP) $(LIB_GAMS)
-INC_DEP  = $(INC_MC) $(INC_CLI) $(INC_SOBOL) $(INC_NLP) $(INC_MIP) $(INC_GAMS)
+FLAG_DEP = -fPIC $(FLAG_MC) $(FLAG_CRONOS) $(FLAG_SUNDIALS) $(FLAG_CLI) $(FLAG_SOBOL) $(FLAG_NLP) $(FLAG_MIP) $(FLAG_GAMS)
+LIB_DEP  = $(LIB_MC) $(LIB_CRONOS) $(LIB_SUNDIALS) $(LIB_CLI) $(LIB_SOBOL) $(LIB_NLP) $(LIB_MIP) $(LIB_GAMS)
+INC_DEP  = $(INC_MC) $(INC_CRONOS) $(INC_SUNDIALS) $(INC_CLI) $(INC_SOBOL) $(INC_NLP) $(INC_MIP) $(INC_GAMS)
 
 # COMPILATION <<-- CHANGE AS APPROPRIATE -->>
 

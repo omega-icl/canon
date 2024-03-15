@@ -149,24 +149,19 @@ class MINLPBND
 
 public:
 
-  using BASE_AE<ExtOps...>::dag;
-  using BASE_AE<ExtOps...>::set_dag;
-  using BASE_AE<ExtOps...>::par;
-  using BASE_AE<ExtOps...>::set_par;
-  using BASE_AE<ExtOps...>::add_par;
-  using BASE_AE<ExtOps...>::reset_par;
-  using BASE_AE<ExtOps...>::var;
-  using BASE_AE<ExtOps...>::set_var;
-  using BASE_AE<ExtOps...>::add_var;
-  using BASE_AE<ExtOps...>::reset_var;
-  using BASE_AE<ExtOps...>::update_vartyp;
-  using BASE_AE<ExtOps...>::dep;
-  using BASE_AE<ExtOps...>::set_dep;
-  using BASE_AE<ExtOps...>::add_dep;
-  using BASE_AE<ExtOps...>::reset_dep;
-  using BASE_AE<ExtOps...>::sys;
-  using BASE_AE<ExtOps...>::add_sys;
-  using BASE_AE<ExtOps...>::reset_sys;
+  //using BASE_NLP<ExtOps...>::dag;
+  using BASE_NLP<ExtOps...>::set_dag;
+  
+  using BASE_NLP<ExtOps...>::par;
+  using BASE_NLP<ExtOps...>::set_par;
+  using BASE_NLP<ExtOps...>::add_par;
+  using BASE_NLP<ExtOps...>::reset_par;
+  
+  using BASE_NLP<ExtOps...>::var;
+  using BASE_NLP<ExtOps...>::set_var;
+  using BASE_NLP<ExtOps...>::add_var;
+  using BASE_NLP<ExtOps...>::reset_var;
+  using BASE_NLP<ExtOps...>::update_vartyp;
 
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;

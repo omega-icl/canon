@@ -1,6 +1,6 @@
 # GAMS export
-GAMSEXPORT    = 
-#GAMSEXPORT    = canon.gms
+#GAMSEXPORT    = 
+GAMSEXPORT    = canon2.gms
 # Presolve level
 PRESOLVE      = 1
 # Presolve wall-time limit in seconds
@@ -52,9 +52,11 @@ PREMIPPRESOLVE   = -1
 # Use of warm start information for LP optimization during presolve - 0: none; 1: unpresolved; 2: presolved
 PREMIPWARMSTART  = 2
 # Convergence relative tolerance of MIP solver during presolve
-PREMIPRELGAP     = 1e-3
+PREMIPRELGAP     = 1e-5
 # Convergence absolute tolerance of MIP solver during presolve
 PREMIPABSGAP     = 1e-5
+# Control of OBBT level by MIP solver during presolve - -1: automatic; 0: no OBBT; 1-3: increased tightening
+PREMIPOBBT       = -1
 # Fraction of time spent in MIP heuristics during presolve
 PREMIPHEURISTICS = 5e-2
 # Control of numerical issues by MIP solver during presolve - 0: automatic; 1-3: increasing numeric focus
@@ -94,6 +96,8 @@ MIPPRESOLVE      = -1
 MIPRELGAP        = 1e-5
 # Convergence absolute tolerance of MIP solver during main iteration
 MIPABSGAP        = 1e-5
+# Control of OBBT level by MIP solver during main iteration - -1: automatic; 0: no OBBT; 1-3: increased tightening
+MIPOBBT          = -1
 # Static or dynamic piecewise-linear approximation of nonlinear univariate terms
 MIPFUNCNONLINEAR = 1
 # Maximum allowed range in piecewise-linear approximation of nonlinear univariate terms

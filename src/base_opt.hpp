@@ -117,7 +117,7 @@ operator<<
   for( unsigned int j=0; j<sol.f.size(); j++ ){
     std::cout << "F[" << j << "]:  LEVEL = " << std::setw(13) << sol.f[j];
     if( j < sol.uf.size() )
-      std::cout << "  MARGINAL = " << std::setw(13) << sol.uf[j] << std::endl;
+      std::cout << "  MARGINAL = " << std::setw(13) << sol.uf[j];
     std::cout << std::endl;
   }
   return out;

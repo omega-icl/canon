@@ -17,12 +17,6 @@ main : main.o gmomcc.o gevmcc.o optcc.o palmcc.o
 doxydoc : doxydoc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
-test_ANN : test_ANN.o
-	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
-
-test_GANN : test_GANN.o
-	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
-
 ReLUANN : ReLUANN.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
@@ -38,5 +32,5 @@ ReLUANN : ReLUANN.o
 #####
 
 clean:
-	rm -f doxydoc main test_ANN *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
+	rm -f doxydoc main reLUANN *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
 

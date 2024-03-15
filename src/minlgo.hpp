@@ -141,26 +141,17 @@ class MINLGO
 {
 protected:
 
-  // Do not use BASE_AE<ExtOps...>::_dag since redefined locally
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_vartyp;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varum;
-  using BASE_AE<ExtOps...>::_dep;
-  using BASE_AE<ExtOps...>::_deplb;
-  using BASE_AE<ExtOps...>::_deplm;
-  using BASE_AE<ExtOps...>::_depub;
-  using BASE_AE<ExtOps...>::_depum;
-  using BASE_AE<ExtOps...>::_sys;
-  using BASE_AE<ExtOps...>::_sysm;
-  using BASE_AE<ExtOps...>::_par;
-
+  using BASE_NLP<ExtOps...>::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
+  using BASE_NLP<ExtOps...>::_var;
+  using BASE_NLP<ExtOps...>::_vartyp;
+  using BASE_NLP<ExtOps...>::_varlb;
+  using BASE_NLP<ExtOps...>::_varlm;
+  using BASE_NLP<ExtOps...>::_varub;
+  using BASE_NLP<ExtOps...>::_varum;
+  using BASE_NLP<ExtOps...>::_par;
   using BASE_NLP<ExtOps...>::_obj;
   using BASE_NLP<ExtOps...>::_ctr;
   using BASE_NLP<ExtOps...>::_nco;
-  using BASE_NLP<ExtOps...>::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
 
 #if defined (MC__WITH_GAMS)
   using GAMSIO<ExtOps...>::_varini;
@@ -168,30 +159,24 @@ protected:
 
 public:
 
-  using BASE_AE<ExtOps...>::set;
-  using BASE_AE<ExtOps...>::dag;
-  using BASE_AE<ExtOps...>::set_dag;
-  using BASE_AE<ExtOps...>::par;
-  using BASE_AE<ExtOps...>::set_par;
-  using BASE_AE<ExtOps...>::add_par;
-  using BASE_AE<ExtOps...>::reset_par;
-  using BASE_AE<ExtOps...>::var;
-  using BASE_AE<ExtOps...>::vartyp;
-  using BASE_AE<ExtOps...>::varlb;
-  using BASE_AE<ExtOps...>::varub;
-  using BASE_AE<ExtOps...>::set_var;
-  using BASE_AE<ExtOps...>::add_var;
-  using BASE_AE<ExtOps...>::reset_var;
-  using BASE_AE<ExtOps...>::update_vartyp;
-  using BASE_AE<ExtOps...>::dep;
-  using BASE_AE<ExtOps...>::set_dep;
-  using BASE_AE<ExtOps...>::add_dep;
-  using BASE_AE<ExtOps...>::reset_dep;
-  using BASE_AE<ExtOps...>::sys;
-  using BASE_AE<ExtOps...>::add_sys;
-  using BASE_AE<ExtOps...>::reset_sys;
-
   using BASE_NLP<ExtOps...>::set;
+  using BASE_NLP<ExtOps...>::dag;
+  using BASE_NLP<ExtOps...>::set_dag;
+  
+  using BASE_NLP<ExtOps...>::par;
+  using BASE_NLP<ExtOps...>::set_par;
+  using BASE_NLP<ExtOps...>::add_par;
+  using BASE_NLP<ExtOps...>::reset_par;
+  
+  using BASE_NLP<ExtOps...>::var;
+  using BASE_NLP<ExtOps...>::vartyp;
+  using BASE_NLP<ExtOps...>::varlb;
+  using BASE_NLP<ExtOps...>::varub;
+  using BASE_NLP<ExtOps...>::set_var;
+  using BASE_NLP<ExtOps...>::add_var;
+  using BASE_NLP<ExtOps...>::reset_var;
+  using BASE_NLP<ExtOps...>::update_vartyp;
+
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
 
@@ -567,6 +552,12 @@ public:
     ()
     { _MINLPSLV.master_solver().terminate();
       _MINLPBND.relax_solver()->terminate(); }
+
+  //! @brief Interrupt solve process
+  FFVar* find_var
+    ( std::string const& name )
+    const
+    { return _dag->find_var( name ); }
 
 private:
   //! @brief Private methods to block default compiler methods
@@ -1514,7 +1505,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
   MINLPPRE.MIPSLV.FUNCNONLINEAR   = MINLPBND.MIPSLV.FUNCNONLINEAR   = 1;
   MINLPPRE.MIPSLV.FUNCMAXVAL      = MINLPBND.MIPSLV.FUNCMAXVAL      = 1e6;
   MINLPPRE.MIPSLV.PWLRELGAP       = MINLPBND.MIPSLV.PWLRELGAP       = 1e-5;
+  MINLPPRE.MIPSLV.OBBT            = MINLPBND.MIPSLV.OBBT            = -1;
   MINLPPRE.MIPSLV.HEURISTICS      = MINLPBND.MIPSLV.HEURISTICS      = 5e-2;
+  MINLPPRE.MIPSLV.MIPFOCUS        = MINLPBND.MIPSLV.MIPFOCUS        = 0;
   MINLPPRE.MIPSLV.NUMERICFOCUS    = MINLPBND.MIPSLV.NUMERICFOCUS    = 0;
   MINLPPRE.MIPSLV.SCALEFLAG       = MINLPBND.MIPSLV.SCALEFLAG       = -1;
   MINLPPRE.MIPSLV.DISPLEVEL                                         = 0;
@@ -1537,6 +1530,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
   MINLPSLV.MIPSLV.MIPRELGAP       = 1e-3;
   MINLPSLV.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPSLV.MIPSLV.HEURISTICS      = 5e-2;
+  MINLPSLV.MIPSLV.MIPFOCUS        = 0;
   MINLPSLV.MIPSLV.NUMERICFOCUS    = 0;
   MINLPSLV.MIPSLV.SCALEFLAG       = -1;
   MINLPSLV.MIPSLV.DISPLEVEL       = 0;
@@ -1571,7 +1565,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPBND.PREMIPWARMSTART",  opt::value<int>(&MINLPPRE.MIPSLV.LPWARMSTART),        "use of warm start information for LP optimization during presolve" )
     ( "MINLPBND.PREMIPRELGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPABSGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver during presolve" )
+    ( "MINLPBND.PREMIPOBBT",       opt::value<int>(&MINLPPRE.MIPSLV.OBBT),               "OBBT level in MIP solver during presolve" )
     ( "MINLPBND.PREMIPHEURISTICS", opt::value<double>(&MINLPPRE.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics during presolve" )
+    ( "MINLPBND.PREMIPFOCUS",      opt::value<int>(&MINLPPRE.MIPSLV.MIPFOCUS),           "control strategy between finding feasible solutions and proving optimality during presolve" )
     ( "MINLPBND.PREMIPNUMERIC",    opt::value<int>(&MINLPPRE.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver during presolve" )
     ( "MINLPBND.PREMIPSCALE",      opt::value<int>(&MINLPPRE.MIPSLV.SCALEFLAG),          "control of model scaling by MIP solver during presolve" )
     ( "MINLPBND.PREMIPDISPLEVEL",  opt::value<int>(&MINLPPRE.MIPSLV.DISPLEVEL),          "display level of MIP solver during presolve" )
@@ -1601,10 +1597,12 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPBND.MIPPRESOLVE",   opt::value<int>(&MINLPBND.MIPSLV.PRESOLVE),             "presolve level in MIP solver" )
     ( "MINLPBND.MIPRELGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPRELGAP),         "convergence relative tolerance of MIP solver" )
     ( "MINLPBND.MIPABSGAP",     opt::value<double>(&MINLPBND.MIPSLV.MIPABSGAP),         "convergence absolute tolerance of MIP solver" )
+    ( "MINLPBND.MIPOBBT",       opt::value<int>(&MINLPBND.MIPSLV.OBBT),                 "OBBT level in MIP solver" )
     ( "MINLPBND.MIPFUNCNONLINEAR", opt::value<int>(&MINLPBND.MIPSLV.FUNCNONLINEAR),     "static or dynamic piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPFUNCMAXVAL", opt::value<double>(&MINLPBND.MIPSLV.FUNCMAXVAL),        "maximum allowed range in piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPPWLRELGAP",  opt::value<double>(&MINLPBND.MIPSLV.PWLRELGAP),         "maximum relative error tolerance in piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPHEURISTICS", opt::value<double>(&MINLPBND.MIPSLV.HEURISTICS),        "fraction of time spent in MIP heuristics" )
+    ( "MINLPBND.MIPFOCUS",      opt::value<int>(&MINLPBND.MIPSLV.MIPFOCUS),             "control strategy between finding feasible solutions and proving optimality by MIP solver" )
     ( "MINLPBND.MIPNUMERIC",    opt::value<int>(&MINLPBND.MIPSLV.NUMERICFOCUS),         "control of numerical issues by MIP solver" )
     ( "MINLPBND.MIPSCALE",      opt::value<int>(&MINLPBND.MIPSLV.SCALEFLAG),            "control of model scaling by MIP solver" )
     ( "MINLPBND.MIPDISPLEVEL",  opt::value<int>(&MINLPBND.MIPSLV.DISPLEVEL),            "display level of MIP solver" )
@@ -1625,6 +1623,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPSLV.MIPRELGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPABSGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPHEURISTICS", opt::value<double>(&MINLPSLV.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics by local MINLP solver" )
+    ( "MINLPSLV.MIPFOCUS",      opt::value<int>(&MINLPSLV.MIPSLV.MIPFOCUS),           "control strategy between finding feasible solutions and proving optimality by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPNUMERIC",    opt::value<int>(&MINLPSLV.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPSCALE",      opt::value<int>(&MINLPSLV.MIPSLV.SCALEFLAG),          "control of model scaling by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPDISPLEVEL",  opt::value<int>(&MINLPSLV.MIPSLV.DISPLEVEL),          "display level of MIP solver called by local MINLP solver" )

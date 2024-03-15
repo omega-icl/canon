@@ -88,7 +88,7 @@ public:
       ALGO( -1 ), PRESOLVE( -1 ), LPWARMSTART( 1 ), 
       CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( -1 ), 
       FEASTOL( 1e-6 ), OPTIMTOL( 1e-6 ), MIPRELGAP( 1e-4 ), MIPABSGAP( 1e-10 ),
-      OBBT( -1 ), NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), HEURISTICS( 0.05 ),
+      OBBT( -1 ), NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), MIPFOCUS( 0 ), HEURISTICS( 0.05 ),
       PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), 
       FUNCNONLINEAR( 1 ), FUNCMAXVAL( 1e6 ), PWLRELGAP( 1e-5 ),
       TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
@@ -109,6 +109,7 @@ public:
         OBBT          = options.OBBT;
         NUMERICFOCUS  = options.NUMERICFOCUS;
         SCALEFLAG     = options.SCALEFLAG;
+        MIPFOCUS      = options.MIPFOCUS;
         HEURISTICS    = options.HEURISTICS;
         PRESOS1BIGM   = options.PRESOS1BIGM;
         PRESOS2BIGM   = options.PRESOS2BIGM;
@@ -148,6 +149,8 @@ public:
     int NUMERICFOCUS;
     //! @brief Controls model scaling. By default, the rows and columns of the model are scaled in order to improve the numerical properties of the constraint matrix. The scaling is removed before the final solution is returned. Scaling typically reduces solution times, but it may lead to larger constraint violations in the original, unscaled model. Turning off scaling (ScaleFlag=0) can sometimes produce smaller constraint violations. Choosing a different scaling setting 1-3 can sometimes improve performance for particularly numerically difficult models.  
     int SCALEFLAG;
+    //! @brief Modifies high-level solution strategy depending on your goals. By default, the Gurobi MIP solver strikes a balance between finding new feasible solutions and proving that the current solution is optimal. If you are more interested in finding feasible solutions quickly, you can select MIPFocus=1. If you believe the solver is having no trouble finding good quality solutions, and wish to focus more attention on proving optimality, select MIPFocus=2. If the best objective bound is moving very slowly (or not at all), you may want to try MIPFocus=3 to focus on the bound. 
+    int MIPFOCUS;
     //! @brief Determines the amount of time spent in MIP heuristics. You can think of the value as the desired fraction of total MIP runtime devoted to heuristics. The default value of 0.05 aims to spend 5% of runtime on heuristics. Larger values produce more and better feasible solutions, at a cost of slower progress in the best bound. 
     double HEURISTICS;
     //! @brief Controls the automatic reformulation of SOS1 constraints into binary form. SOS1 constraints are often handled more efficiently using a binary representation. The reformulation often requires big-M values to be introduced as coefficients. This parameter specifies the largest big-M that can be introduced by presolve when performing this reformulation. Larger values increase the chances that an SOS1 constraint will be reformulated, but very large values (e.g., 1e8) can lead to numerical issues. The default value of -1 chooses a threshold automatically. You should set the parameter to 0 to shut off SOS1 reformulation entirely, or a large value to force reformulation. 
@@ -843,6 +846,7 @@ MIPSLV_GUROBI<T>::_set_options
   _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGapAbs,      options.MIPABSGAP );
   _GRBmodel->getEnv().set( GRB_DoubleParam_Heuristics,     options.HEURISTICS );
   _GRBmodel->getEnv().set( GRB_IntParam_OBBT,              options.OBBT );
+  _GRBmodel->getEnv().set( GRB_IntParam_MIPFocus,          options.MIPFOCUS );
   _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
   _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
   _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
@@ -872,6 +876,7 @@ const
       << std::setw(15) << "  MIPABSGAP"     << MIPABSGAP                  << std::endl
       << std::setw(15) << "  OBBT"          << OBBT                       << std::endl
       << std::setw(15) << "  HEURISTICS"    << HEURISTICS                 << std::endl
+      << std::setw(15) << "  MIPFOCUS"      << MIPFOCUS                   << std::endl
       << std::setw(15) << "  NUMERICFOCUS"  << NUMERICFOCUS               << std::endl
       << std::setw(15) << "  SCALEFLAG"     << SCALEFLAG                  << std::endl
       << std::setw(15) << "  LPWARMSTART"   << LPWARMSTART                << std::endl

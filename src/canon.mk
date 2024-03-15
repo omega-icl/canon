@@ -5,7 +5,7 @@ include $(srcpath)/makeoptions.mk
 
 #####
 
-incobjs = base_ae.hpp base_opt.hpp base_nlp.hpp aebnd.hpp \
+incobjs = base_opt.hpp base_nlp.hpp \
           GamsNLinstr.h gamsio.hpp gamswriter.hpp \
           nlpslv_ipopt.hpp nlpslv_snopt.hpp mipslv_gurobi.hpp \
           minlpslv.hpp minlpref.hpp minlpbnd.hpp sbbslv.hpp minlgo.hpp

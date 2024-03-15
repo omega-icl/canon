@@ -152,24 +152,19 @@ public:
   typedef SElimEnv<ExtOps...> t_elim;
   typedef AEBND<T,ExtOps...> t_aebnd;
 
-  using BASE_AE<ExtOps...>::dag;
-  using BASE_AE<ExtOps...>::set_dag;
-  using BASE_AE<ExtOps...>::par;
-  using BASE_AE<ExtOps...>::set_par;
-  using BASE_AE<ExtOps...>::add_par;
-  using BASE_AE<ExtOps...>::reset_par;
-  using BASE_AE<ExtOps...>::var;
-  using BASE_AE<ExtOps...>::set_var;
-  using BASE_AE<ExtOps...>::add_var;
-  using BASE_AE<ExtOps...>::reset_var;
-  using BASE_AE<ExtOps...>::update_vartyp;
-  using BASE_AE<ExtOps...>::dep;
-  using BASE_AE<ExtOps...>::set_dep;
-  using BASE_AE<ExtOps...>::add_dep;
-  using BASE_AE<ExtOps...>::reset_dep;
-  using BASE_AE<ExtOps...>::sys;
-  using BASE_AE<ExtOps...>::add_sys;
-  using BASE_AE<ExtOps...>::reset_sys;
+  using BASE_NLP<ExtOps...>::dag;
+  using BASE_NLP<ExtOps...>::set_dag;
+  
+  using BASE_NLP<ExtOps...>::par;
+  using BASE_NLP<ExtOps...>::set_par;
+  using BASE_NLP<ExtOps...>::add_par;
+  using BASE_NLP<ExtOps...>::reset_par;
+  
+  using BASE_NLP<ExtOps...>::var;
+  using BASE_NLP<ExtOps...>::set_var;
+  using BASE_NLP<ExtOps...>::add_var;
+  using BASE_NLP<ExtOps...>::reset_var;
+  using BASE_NLP<ExtOps...>::update_vartyp;
 
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
@@ -181,22 +176,14 @@ public:
 
 protected:
 
-  // Do not use BASE_AE<ExtOps...>::_dag since redefined locally
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_vartyp;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varum;
-  using BASE_AE<ExtOps...>::_dep;
-  using BASE_AE<ExtOps...>::_deplb;
-  using BASE_AE<ExtOps...>::_deplm;
-  using BASE_AE<ExtOps...>::_depub;
-  using BASE_AE<ExtOps...>::_depum;
-  using BASE_AE<ExtOps...>::_sys;
-  using BASE_AE<ExtOps...>::_sysm;
-  using BASE_AE<ExtOps...>::_par;
-
+  // Do not use BASE_NLP<ExtOps...>::_dag since redefined locally
+  using BASE_NLP<ExtOps...>::_var;
+  using BASE_NLP<ExtOps...>::_vartyp;
+  using BASE_NLP<ExtOps...>::_varlb;
+  using BASE_NLP<ExtOps...>::_varlm;
+  using BASE_NLP<ExtOps...>::_varub;
+  using BASE_NLP<ExtOps...>::_varum;
+  using BASE_NLP<ExtOps...>::_par;
   using BASE_NLP<ExtOps...>::_obj;
   using BASE_NLP<ExtOps...>::_ctr;
   using BASE_NLP<ExtOps...>::_nco;
@@ -234,6 +221,8 @@ protected:
   unsigned                  _nX1;
   //! @brief vector of decision variables in DAG
   std::vector<FFVar>        _Xvar;
+  //! @brief vector of decision variables dependencies
+  std::vector<FFDep>        _Xdep;
   //! @brief vector of decision variable levels (size _nX0)
   std::vector<double>       _Xini;
   //! @brief vector of decision variable lower bounds
@@ -260,7 +249,9 @@ protected:
   //! @brief number of functions (objective and constraints) in model
   unsigned                  _nF;
   //! @brief vector of functions in DAG
-  std::vector<FFVar>        _Fvar;
+  std::vector<FFVar>        _Fvar;  
+  //! @brief vector of functions dependencies
+  std::vector<FFDep>        _Fdep;
   //! @brief vector of function lower bounds
   std::vector<double>       _Flow;
   //! @brief vector of function upper bounds
@@ -585,6 +576,10 @@ private:
   bool _set_optimality_cuts
     ( std::vector<FFVar>& Xvar, std::vector<FFVar>& Fvar, std::ostream& os = std::cout);
 
+  //! @brief Set dependencies in functions
+  void _set_dependencies
+    ();
+
   //! @brief Set linear/nonlinear participating variables in functions
   void _set_variable_class
     ();
@@ -664,7 +659,6 @@ MINLPREF<T,ExtOps...>::setup
 
   // full set of decision variables (independent & dependent)
   std::vector<FFVar> Xvar = _var;
-  Xvar.insert( Xvar.end(), _dep.begin(), _dep.end() );
   _nX0 = Xvar.size();
 
   // full set of variable bounds and types (independent & dependent)
@@ -676,24 +670,20 @@ MINLPREF<T,ExtOps...>::setup
   _Xlow = _varlb;
   _Xupp = _varub;
   _Xtyp = _vartyp;
-  _Xlow.insert( _Xlow.end(), _deplb.begin(), _deplb.end() );
-  _Xupp.insert( _Xupp.end(), _depub.begin(), _depub.end() );
-  _Xtyp.insert( _Xtyp.end(), _dep.size(), 0 );
-  //Xtyp? _Xtyp.assign( Xtyp, Xtyp+_nX0 ): _Xtyp.assign( _nX0, 0 );
 
   // full set of nonlinear functions (cost, constraints & equations)
   std::vector<FFVar> Fvar;
   _Flow.clear();
   _Fupp.clear();
 
-  // first, cost function
+  // cost function
   if( std::get<0>(_obj).size() > 1 ) throw Exceptions( Exceptions::MULTOBJ );
   _objsense = std::get<0>(_obj).size()? (std::get<0>(_obj)[0]==BASE_OPT::MIN? -1: 1): 0;
   std::get<0>(_obj).size()? Fvar.push_back( std::get<1>(_obj)[0] ): Fvar.push_back( 0 );
   _Flow.push_back( -BASE_OPT::INF );
   _Fupp.push_back(  BASE_OPT::INF );
 
-  // then, regular constraints
+  // constraints
   for( unsigned i=0; i<std::get<0>(_ctr).size(); i++ ){
     Fvar.push_back( std::get<1>(_ctr)[i] );
     switch( std::get<0>(_ctr)[i] ){
@@ -702,11 +692,6 @@ MINLPREF<T,ExtOps...>::setup
       case BASE_OPT::GE: _Flow.push_back( 0. );             _Fupp.push_back( BASE_OPT::INF ); break;
     }
   }
-
-  // then, dependent equations
-  Fvar.insert( _Fvar.end(), _sys.begin(), _sys.end() );
-  _Flow.insert( _Flow.end(), _sys.size(), 0. );
-  _Fupp.insert( _Fupp.end(), _sys.size(), 0. );
  
   // set Fritz-John cuts and corresponding multipliers
   if( options.NCOCUTS ) _set_optimality_cuts( Xvar, Fvar, os );
@@ -724,18 +709,19 @@ MINLPREF<T,ExtOps...>::setup
   _dag->output( _dag->subgraph( 1, _Fvar.data() ), " objective" );
 #endif
 
-  // Identify variable and function sets and create subgraphs
-  _Xobj.set( _dag );
-  _Xlift.clear();
-  _set_variable_class();
-  _set_function_class();
-  _sgupdt = true;
-
   // Set default variable and function bounds
   _Xbnd.resize( _nX );
   for( unsigned i=0; i<_nX; i++ ) _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
   _Fbnd.resize( _nF );
   for( unsigned i=0; i<_nF; i++ ) _Fbnd[i] = T( _Flow[i], _Fupp[i] );
+
+  // Identify variable and function sets and create subgraphs
+  _Xobj.set( _dag );
+  _Xlift.clear();
+  _set_dependencies();
+  _set_variable_class();
+  _set_function_class();
+  _sgupdt = true;
 
   //stats.reset();
   _issetup = true;
@@ -760,7 +746,7 @@ MINLPREF<T,ExtOps...>::_set_optimality_cuts
   _Xupp.push_back( 1. );
   _Xtyp.push_back( 0  );
 
-  // regular constraint multipliers
+  // constraint multipliers
   for( unsigned i=0; i<std::get<0>(_ctr).size(); ++i ){
     Xvar.push_back( std::get<2>(_ctr)[i] );
     _Xtyp.push_back( 0 ); // all constraint multipliers are continuous variables
@@ -770,12 +756,6 @@ MINLPREF<T,ExtOps...>::_set_optimality_cuts
       case BASE_OPT::EQ: _Xlow.push_back( -1. ); _Xupp.push_back( 1. ); break;
     }
   }
-
-  // dependent equation multipliers
-  Xvar.insert( Xvar.end(), _sysm.begin(), _sysm.end() );
-  _Xlow.insert( _Xlow.end(), _sysm.size(), -1. ); // all dependent equations are equality constraints
-  _Xupp.insert( _Xupp.end(), _sysm.size(),  1. );
-  _Xtyp.insert( _Xtyp.end(), _sysm.size(),  0  ); // all constraint multipliers are continuous variables
 
   // variable bound multipliers
   for( unsigned i=0; i<_nX0; i++ ){
@@ -811,7 +791,8 @@ MINLPREF<T,ExtOps...>::_update_model
   // update variable and function size and type
   _nX = _Xvar.size();
   _nF = _Fvar.size();
-  _set_variable_class();    
+  _set_dependencies();
+  _set_variable_class();
   _set_function_class();
 }
 
@@ -833,12 +814,26 @@ MINLPREF<T,ExtOps...>::_display_model
 
 template <typename T, typename... ExtOps>
 inline void
+MINLPREF<T,ExtOps...>::_set_dependencies
+()
+{
+  _Xdep.resize( _nX );
+  for( unsigned i=0; i<_nX; ++i )
+    _Xdep[i].indep( _Xvar[i].id().second );
+
+  _Fdep.resize( _nF );
+  for( unsigned i=0; i<_nF; i++ )
+    _dag->eval( 1, &_Fvar[i], &_Fdep[i], _nX, _Xvar.data(), _Xdep.data() );
+}
+
+template <typename T, typename... ExtOps>
+inline void
 MINLPREF<T,ExtOps...>::_set_variable_class
 ()
 {
   FFDep Fworst( 0. );
-  for( auto const& Fj : _Fvar )
-    Fworst += Fj.dep();
+  for( auto const& dep : _Fdep )
+    Fworst += dep;
 #ifdef MC__MINLPREF_DEBUG
   std::cout << "DEPS <- " << Fworst << std::endl;
 #endif
@@ -874,7 +869,7 @@ MINLPREF<T,ExtOps...>::_set_function_class
  
   _pbclass = FFDep::L;
   for( unsigned j=0; j<_nF; j++ ){
-    auto depworst = _Fvar[j].dep().worst();
+    auto depworst = _Fdep[j].worst();
     switch( depworst ){
      case FFDep::L: _Flin.insert( j );  break;
      case FFDep::Q: _Fquad.insert( j ); break;

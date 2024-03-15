@@ -43,12 +43,12 @@ class GAMSIO:
 {
 protected:
 
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_vartyp;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varum;
+  using BASE_NLP<ExtOps...>::_var;
+  using BASE_NLP<ExtOps...>::_vartyp;
+  using BASE_NLP<ExtOps...>::_varlb;
+  using BASE_NLP<ExtOps...>::_varub;
+  using BASE_NLP<ExtOps...>::_varlm;
+  using BASE_NLP<ExtOps...>::_varum;
 
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
@@ -346,7 +346,7 @@ GAMSIO<ExtOps...>::_populate
 
   // reset DAG environment
   if( _dag ) delete _dag;
-  BASE_AE<ExtOps...>::_dag = _dag = new FFGraph<ExtOps...>;
+  BASE_NLP<ExtOps...>::_dag = _dag = new FFGraph<ExtOps...>;
 
   // set DAG variables
   char buffer[255];
