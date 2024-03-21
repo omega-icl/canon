@@ -32,5 +32,5 @@ ReLUANN : ReLUANN.o
 #####
 
 clean:
-	rm -f doxydoc main reLUANN *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
+	rm -f doxydoc main ReLUANN *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
 

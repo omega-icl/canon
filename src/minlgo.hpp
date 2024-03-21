@@ -1508,6 +1508,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
   MINLPPRE.MIPSLV.OBBT            = MINLPBND.MIPSLV.OBBT            = -1;
   MINLPPRE.MIPSLV.HEURISTICS      = MINLPBND.MIPSLV.HEURISTICS      = 5e-2;
   MINLPPRE.MIPSLV.MIPFOCUS        = MINLPBND.MIPSLV.MIPFOCUS        = 0;
+  MINLPPRE.MIPSLV.QCPEQFACTOR     = MINLPBND.MIPSLV.QCPEQFACTOR     = 1;
   MINLPPRE.MIPSLV.NUMERICFOCUS    = MINLPBND.MIPSLV.NUMERICFOCUS    = 0;
   MINLPPRE.MIPSLV.SCALEFLAG       = MINLPBND.MIPSLV.SCALEFLAG       = -1;
   MINLPPRE.MIPSLV.DISPLEVEL                                         = 0;
@@ -1531,6 +1532,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
   MINLPSLV.MIPSLV.MIPABSGAP       = 1e-5;
   MINLPSLV.MIPSLV.HEURISTICS      = 5e-2;
   MINLPSLV.MIPSLV.MIPFOCUS        = 0;
+  MINLPSLV.MIPSLV.QCPEQFACTOR     = 1;
   MINLPSLV.MIPSLV.NUMERICFOCUS    = 0;
   MINLPSLV.MIPSLV.SCALEFLAG       = -1;
   MINLPSLV.MIPSLV.DISPLEVEL       = 0;
@@ -1567,6 +1569,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPBND.PREMIPABSGAP",     opt::value<double>(&MINLPPRE.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver during presolve" )
     ( "MINLPBND.PREMIPOBBT",       opt::value<int>(&MINLPPRE.MIPSLV.OBBT),               "OBBT level in MIP solver during presolve" )
     ( "MINLPBND.PREMIPHEURISTICS", opt::value<double>(&MINLPPRE.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics during presolve" )
+    ( "MINLPBND.PREMIPQCPEQFACTOR", opt::value<bool>(&MINLPPRE.MIPSLV.QCPEQFACTOR),      "control of redundant constraints to describe a factored out quadratic term added by MIP solver during presolve" )
     ( "MINLPBND.PREMIPFOCUS",      opt::value<int>(&MINLPPRE.MIPSLV.MIPFOCUS),           "control strategy between finding feasible solutions and proving optimality during presolve" )
     ( "MINLPBND.PREMIPNUMERIC",    opt::value<int>(&MINLPPRE.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver during presolve" )
     ( "MINLPBND.PREMIPSCALE",      opt::value<int>(&MINLPPRE.MIPSLV.SCALEFLAG),          "control of model scaling by MIP solver during presolve" )
@@ -1602,6 +1605,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPBND.MIPFUNCMAXVAL", opt::value<double>(&MINLPBND.MIPSLV.FUNCMAXVAL),        "maximum allowed range in piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPPWLRELGAP",  opt::value<double>(&MINLPBND.MIPSLV.PWLRELGAP),         "maximum relative error tolerance in piecewise-linear approximation of nonlinear univariate terms" )
     ( "MINLPBND.MIPHEURISTICS", opt::value<double>(&MINLPBND.MIPSLV.HEURISTICS),        "fraction of time spent in MIP heuristics" )
+    ( "MINLPBND.MIPQCPEQFACTOR", opt::value<bool>(&MINLPBND.MIPSLV.QCPEQFACTOR),        "control of redundant constraints to describe a factored out quadratic term added by MIP solver" )
     ( "MINLPBND.MIPFOCUS",      opt::value<int>(&MINLPBND.MIPSLV.MIPFOCUS),             "control strategy between finding feasible solutions and proving optimality by MIP solver" )
     ( "MINLPBND.MIPNUMERIC",    opt::value<int>(&MINLPBND.MIPSLV.NUMERICFOCUS),         "control of numerical issues by MIP solver" )
     ( "MINLPBND.MIPSCALE",      opt::value<int>(&MINLPBND.MIPSLV.SCALEFLAG),            "control of model scaling by MIP solver" )
@@ -1623,6 +1627,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ( "MINLPSLV.MIPRELGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPRELGAP),       "convergence relative tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPABSGAP",     opt::value<double>(&MINLPSLV.MIPSLV.MIPABSGAP),       "convergence absolute tolerance of MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPHEURISTICS", opt::value<double>(&MINLPSLV.MIPSLV.HEURISTICS),      "fraction of time spent in MIP heuristics by local MINLP solver" )
+    ( "MINLPSLV.PREMIPQCPEQFACTOR", opt::value<bool>(&MINLPSLV.MIPSLV.QCPEQFACTOR),   "control of redundant constraints to describe a factored out quadratic term added by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPFOCUS",      opt::value<int>(&MINLPSLV.MIPSLV.MIPFOCUS),           "control strategy between finding feasible solutions and proving optimality by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPNUMERIC",    opt::value<int>(&MINLPSLV.MIPSLV.NUMERICFOCUS),       "control of numerical issues by MIP solver called by local MINLP solver" )
     ( "MINLPSLV.MIPSCALE",      opt::value<int>(&MINLPSLV.MIPSLV.SCALEFLAG),          "control of model scaling by MIP solver called by local MINLP solver" )

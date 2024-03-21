@@ -108,6 +108,7 @@ int main()
   }
   //return flag;
   model.GAMSexport( false, os );
+  model.options.MINLPBND.MIPSLV.QCPEQFACTOR = 0;
   flag = model.optimize( os ); 
   if( model.options.DISPLEVEL >= 1 )
     model.stats.display();

@@ -89,7 +89,7 @@ public:
       CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( -1 ), 
       FEASTOL( 1e-6 ), OPTIMTOL( 1e-6 ), MIPRELGAP( 1e-4 ), MIPABSGAP( 1e-10 ),
       OBBT( -1 ), NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), MIPFOCUS( 0 ), HEURISTICS( 0.05 ),
-      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), 
+      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), QCPEQFACTOR( 1 ),
       FUNCNONLINEAR( 1 ), FUNCMAXVAL( 1e6 ), PWLRELGAP( 1e-5 ),
       TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
       LOGFILE(), OUTPUTFILE()
@@ -113,6 +113,7 @@ public:
         HEURISTICS    = options.HEURISTICS;
         PRESOS1BIGM   = options.PRESOS1BIGM;
         PRESOS2BIGM   = options.PRESOS2BIGM;
+        QCPEQFACTOR   = options.QCPEQFACTOR;
         FUNCNONLINEAR = options.FUNCNONLINEAR;
         FUNCMAXVAL    = options.FUNCMAXVAL;
         PWLRELGAP     = options.PWLRELGAP;
@@ -157,6 +158,8 @@ public:
     double PRESOS1BIGM;
     //! @brief Controls the automatic reformulation of SOS2 constraints into binary form. SOS2 constraints are often handled more efficiently using a binary representation. The reformulation often requires big-M values to be introduced as coefficients. This parameter specifies the largest big-M that can be introduced by presolve when performing this reformulation. Larger values increase the chances that an SOS2 constraint will be reformulated, but very large values (e.g., 1e8) can lead to numerical issues. The default value of 0 disables the reformulation. You can set the parameter to -1 to choose an automatic approach, or a large value to force reformulation. 
     double PRESOS2BIGM;
+    //! @brief Setting the hidden parameter GURO_PAR_QCPEQFACTOR=0 avoids the addition of redundant constraints which describe a factored out quadratic term.
+    bool QCPEQFACTOR;
     //! @brief Controls whether general function constraints are treated as nonlinear functions (1) or are approximated via the piecewise-linear approximation approach (0). The default value is 1. In the piecewise-linear approach, it is of paramount important to fine-tune the values of the options PWLRELGAP and FUNCMAXVAL.
     int FUNCNONLINEAR;
     //! @brief Sets the maximum allowed value for x and y variables in function constraints. Very large values in piecewise-linear approximations can cause numerical errors. The default value is 1e+6. This parameter limits the bounds on the variables that participate in function constraints - any bound larger than this limit will be truncated.
@@ -858,6 +861,10 @@ MIPSLV_GUROBI<T>::_set_options
   _GRBmodel->getEnv().set( GRB_IntParam_DualReductions,    options.DUALRED );
   _GRBmodel->getEnv().set( GRB_IntParam_NonConvex,         options.NONCONVEX );
   _GRBmodel->getEnv().set( GRB_IntParam_Threads,           options.THREADS );
+
+  // Gurobi hidden options
+  if( !options.QCPEQFACTOR )
+    _GRBmodel->getEnv().set( "GURO_PAR_QCPEQFACTOR",       "0" );
 }
 
 template <typename T>

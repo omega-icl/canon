@@ -97,7 +97,7 @@ MIPRELGAP        = 1e-5
 # Convergence absolute tolerance of MIP solver during main iteration
 MIPABSGAP        = 1e-5
 # Control of OBBT level by MIP solver during main iteration - -1: automatic; 0: no OBBT; 1-3: increased tightening
-MIPOBBT          = 3
+MIPOBBT          = -1
 # Static or dynamic piecewise-linear approximation of nonlinear univariate terms
 MIPFUNCNONLINEAR = 1
 # Maximum allowed range in piecewise-linear approximation of nonlinear univariate terms
@@ -107,7 +107,9 @@ MIPPWLRELGAP     = 1e-5
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
 # Control balance between finding feasible solutions and proving optimality during main iteration - 0: balance; 1: attention on feasibility; 2-3: increasing attention on optimality
-MIPFOCUS         = 1
+MIPFOCUS         = 0
+# Control of redundant constraints to describe a factored out quadratic term added by MIP solver during main iteration - 0: disabled; 1: enabled
+MIPQCPEQFACTOR   = 0
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
 MIPNUMERIC       = 0
 # Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling
