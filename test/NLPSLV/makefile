@@ -28,6 +28,6 @@ test% : test%.o gmomcc.o gevmcc.o optcc.o palmcc.o
 #####
 
 clean:
-	rm -f doxydoc test? test?b
+	rm -f doxydoc test?
 	rm -f *.o *.out *.dat *.eps *.dot *.svg *~
 
