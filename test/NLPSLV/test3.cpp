@@ -62,20 +62,23 @@ int main()
 
 #ifdef MC__USE_SNOPT
   mc::NLPSLV_SNOPT<>* NLP = new mc::NLPSLV_SNOPT;
-  NLP->options.DISPLEVEL = 1;
+  NLP->options.DISPLEVEL = 0;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
   NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FSYM;
-  NLP->options.MAXTHREAD = 1;
-#else
+  NLP->options.GRADCHECK = false;
+  NLP->options.MAXTHREAD = 0;
+#elif MC__USE_IPOPT
   mc::NLPSLV_IPOPT<>* NLP = new mc::NLPSLV_IPOPT;
-  NLP->options.DISPLEVEL = 1;
+  NLP->options.DISPLEVEL = 0;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::FAD;
-  NLP->options.MAXTHREAD = 4;
+  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::FSYM;
+  NLP->options.HESSMETH  = mc::NLPSLV_IPOPT<>::Options::LBFGS;
+  NLP->options.GRADCHECK = false;
+  NLP->options.MAXTHREAD = 0;
 #endif
 
   mc::FFGraph DAG;
@@ -123,7 +126,6 @@ int main()
     NLP->add_ctr( mc::BASE_OPT::LE, Pout  - Pd[i] );
   }
   NLP->setup();
-  NLP->options.DISPLEVEL = 0;
   NLP->solve( 200 );
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP->solution();
   std::cout << "FEASIBLE:   " << NLP->is_feasible( 1e-7 )   << std::endl;

@@ -104,6 +104,9 @@ Regarding options, the output level, maximum number of iterations, tolerance, ma
 namespace mc
 {
 
+template <typename... ExtOps>
+class NLPSLV_IPOPT;
+
 //! @brief C++ class for calling IPOPT on local threads
 ////////////////////////////////////////////////////////////////////////
 //! mc::WORKER_IPOPT is a C++ class for calling IPOPT on local threads
@@ -113,7 +116,7 @@ struct WORKER_IPOPT:
   public Ipopt::TNLP
 {
   //! @brief local copy of DAG
-  FFGraph<ExtOps...> dag;
+  FFGraph<ExtOps...>  dag;
   //! @brief vector of parameters in DAG
   std::vector<FFVar>  Pvar;
   //! @brief vector of decision variables in DAG
@@ -140,17 +143,23 @@ struct WORKER_IPOPT:
   std::vector<int>    jLvar;
 
   //! @brief list of operations for objective evaluation
-  FFSubgraph op_f;
+  FFSubgraph          op_f;
   //! @brief list of operations for objective gradient evaluation
-  FFSubgraph op_df;
+  FFSubgraph          op_df;
   //! @brief list of operations for constraint evaluation
-  FFSubgraph op_g;
+  FFSubgraph          op_g;
   //! @brief list of operations for constraint gradient evaluation
-  FFSubgraph op_dg;
-  //! @brief list of operations for Lagragian Hessian evaluation
-  FFSubgraph op_d2L;
+  FFSubgraph          op_dg;
+  //! @brief list of operations for Lagrangian Hessian evaluation
+  FFSubgraph          op_L;
   //! @brief Storage vector for DAG evaluation in double arithmetic
-  std::vector<Ipopt::Number> dwk;
+  std::vector<double> dwk;
+  //! @brief Storage vector for DAG evaluation in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> Fwk;
+  //! @brief Storage vector for DAG evaluation in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> Bwk;
+  //! @brief Storage vector for DAG evaluation in fadbad::B<fadbad::F<double>> arithmetic
+  std::vector<fadbad::B<fadbad::F<double>>> BFwk;
 
   //! @brief vector of decision variable values
   std::vector<double> Xval;
@@ -158,6 +167,12 @@ struct WORKER_IPOPT:
   std::vector<double> Xlow;
   //! @brief vector of decision variable upper bounds
   std::vector<double> Xupp;
+  //!@brief vector of variable values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FXval;
+  //!@brief vector of variable values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BXval;
+  //!@brief vector of variable values in fadbad::B<fadbad::F<double>> arithmetic
+  std::vector<fadbad::B<fadbad::F<double>>> BFXval;
 
   //! @brief vector of function values
   std::vector<double> Fval;
@@ -165,11 +180,32 @@ struct WORKER_IPOPT:
   std::vector<double> Flow;
   //! @brief vector of function upper bounds
   std::vector<double> Fupp;
+  //!@brief vector of function values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FFval;
+  //!@brief vector of function values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BFval;
+  //!@brief vector of multiplier values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FFmul;
+  //!@brief vector of multiplier values in fadbad::B<fadbad::F<double>> arithmetic
+  std::vector<fadbad::B<fadbad::F<double>>> BFFmul;
 
   //! @brief vector of cost gradient values
   std::vector<double> Cval;
+  //! @brief cost multiplier in fadbad::F<double> arithmetic
+  fadbad::F<double>   FCmul;
+  //! @brief cost multiplier in fadbad::B<fadbad::F<double>> arithmetic
+  fadbad::B<fadbad::F<double>> BFCmul;
+  //! @brief cost gradient in fadbad::F<double> arithmetic
+  fadbad::F<double>   FCval;
+  //! @brief cost gradient in fadbad::B<double> arithmetic
+  fadbad::B<double>   BCval;
   //! @brief vector of constraint gradient values
   std::vector<double> Gval;
+  //! @brief Lagrangian value in fadbad::B<fadbad::F<double>> arithmetic
+  fadbad::B<fadbad::F<double>> BFLval;
+
+  //! @brief Gradient option
+  int                 Gmeth;
 
   //! @brief Time limit
   double              tMAX;
@@ -316,8 +352,8 @@ WORKER_IPOPT<ExtOps...>::get_nlp_info
   // set size
   n = Xvar.size();
   m = Fvar.size()-1;
-  nnz_jac_g = Gvar.size();
-  nnz_h_lag = Lvar.size();
+  nnz_jac_g = iGfun.size(); //Gvar.size();
+  nnz_h_lag = iLvar.size(); //Lvar.size();
 
   // use the C style indexing (0-based)
   index_style = Ipopt::TNLP::C_STYLE;
@@ -433,12 +469,52 @@ WORKER_IPOPT<ExtOps...>::eval_grad_f
 
   // evaluate objective gradient
   try{
-    dag.eval( op_df, dwk, n, Cvar.data(), df, n, Xvar.data(), x );
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
+      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
+        dag.eval( op_df, dwk, n, Cvar.data(), df, n, Xvar.data(), x );
+        break;
+
+      // Compute forward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
+        FXval.resize( n );
+        // Initialize participating variables in fadbad::F<double>
+        for( Ipopt::Index i=0; i<n; i++ ){
+          FXval[i] = x[i];
+          FXval[i].diff( i, n );
+        }
+        dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, n, Xvar.data(), FXval.data() );
+        // Gather derivatives
+        for( Ipopt::Index i=0; i<n; i++ )
+          df[i] = FCval.d(i);
+        break;
+
+      // Compute backward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
+        BXval.resize( n );
+        // Initialize participating variables in fadbad::B<double>
+        for( Ipopt::Index i=0; i<n; i++ )
+          BXval[i] = x[i];
+        dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, n, Xvar.data(), BXval.data() );
+        Bwk.clear();
+        BCval.diff( 0, 1 );
+        // Gather derivatives
+        for( Ipopt::Index i=0; i<n; i++ )
+          df[i] = BXval[i].d(0);
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
+    }
+
 #ifdef MC__NLPSLV_IPOPT_DEBUG
-    for( Ipopt::Index i=0; i<n; i++ )
-      std::cout << "  df[" << i << "] = " << df[i] << std::endl;
+        for( Ipopt::Index i=0; i<n; i++ )
+          std::cout << "  df[" << i << "] = " << df[i] << std::endl;
 #endif
   }
+
   catch(...){
     return false;
   }
@@ -498,12 +574,55 @@ WORKER_IPOPT<ExtOps...>::eval_jac_g
 
   // evaluate constraint gradient
   try{
-    dag.eval( op_dg, dwk, nele_jac, Gvar.data(), dg, n, Xvar.data(), x );
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
+      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
+        dag.eval( op_dg, dwk, nele_jac, Gvar.data(), dg, n, Xvar.data(), x );
+        break;
+
+      // Compute forward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
+        FXval.resize( n );
+        // Initialize participating variables in fadbad::F<double>
+        for( Ipopt::Index i=0; i<n; i++ ){
+          FXval[i] = x[i];
+          FXval[i].diff( i, n );
+        }
+        FFval.resize( m );
+        dag.eval( op_g, Fwk, m, Fvar.data()+1, FFval.data(), n, Xvar.data(), FXval.data() );
+        // Gather derivatives
+        for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
+          dg[ie] = FFval[ iGfun[ie] ].d( jGvar[ie] );
+        break;
+
+      // Compute backward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
+        BXval.resize( n );
+        // Initialize participating variables in fadbad::B<double>
+        for( Ipopt::Index i=0; i<n; i++ )
+          BXval[i] = x[i];
+        BFval.resize( m );
+        dag.eval( op_g, Bwk, m, Fvar.data()+1, BFval.data(), n, Xvar.data(), BXval.data() );
+        Bwk.clear();
+        for( Ipopt::Index j=0; j<m; j++ )
+          BFval[j].diff( j, m );
+        // Gather derivatives
+        for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
+          dg[ie] = BXval[ jGvar[ie] ].d( iGfun[ie] );
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
+    }
+
 #ifdef MC__NLPSLV_IPOPT_DEBUG
     for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
        std::cout << "  dg[" << iGfun[ie] << ", " << jGvar[ie] << "] = " << dg[ie] << std::endl;
 #endif
   }
+  
   catch(...){
     return false;
   }
@@ -537,13 +656,56 @@ WORKER_IPOPT<ExtOps...>::eval_h
 
   // evaluate Lagrangian Hessian
   try{
-    dag.eval( op_d2L, dwk, nele_hess, Lvar.data(), d2L, n, Xvar.data(), x,
-              1, Fmul.data(), &obj_factor, m, Fmul.data()+1, lambda );
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
+      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
+        dag.eval( op_L, dwk, nele_hess, Lvar.data(), d2L, n, Xvar.data(), x,
+                  1, Fmul.data(), &obj_factor, m, Fmul.data()+1, lambda );
+        break;
+
+      // Compute backward/forward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
+      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
+        if( Lvar.empty() ) break;
+        // Initialize participating variables in fadbad::F<double>
+        FXval.resize( n );
+        FFmul.resize( m );
+        for( Ipopt::Index i=0; i<n; i++ ){
+          FXval[i] = x[i];
+          FXval[i].diff( i, n );
+        }
+        FCmul = obj_factor;
+        for( Ipopt::Index j=0; j<m; j++ )
+          FFmul[j] = lambda[j];
+        // Initialize participating variables in fadbad::B<fadbad::F<double>>
+        BFXval.resize( n );
+        BFFmul.resize( m );
+        for( Ipopt::Index i=0; i<n; i++ )
+          BFXval[i] = FXval[i];
+        BFCmul = FCmul;
+        for( Ipopt::Index j=0; j<m; j++ )
+          BFFmul[j] = FFmul[j];
+        dag.eval( op_L, BFwk, 1, Lvar.data(), &BFLval, n, Xvar.data(), BFXval.data(),
+                  1, Fmul.data(), &BFCmul, m, Fmul.data()+1, BFFmul.data() );
+        BFwk.clear();
+        BFLval.diff( 0, 1 );
+        // Gather derivatives
+        for( Ipopt::Index ie=0; ie<nele_hess; ++ie )
+          d2L[ie] = BFXval[ jLvar[ie] ].d( 0 ).d( iLvar[ie] );
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
+    }
+
 #ifdef MC__NLPSLV_IPOPT_DEBUG
     for( Ipopt::Index ie=0; ie<nele_hess; ++ie )
        std::cout << "  d2L[" << iLvar[ie] << ", " << jLvar[ie] << "] = " << d2L[ie] << std::endl;
 #endif
   }
+
   catch(...){
     return false;
   }
@@ -671,24 +833,19 @@ class NLPSLV_IPOPT
 {
 public:
 
-  using BASE_AE<ExtOps...>::dag;
-  using BASE_AE<ExtOps...>::set_dag;
-  using BASE_AE<ExtOps...>::par;
-  using BASE_AE<ExtOps...>::set_par;
-  using BASE_AE<ExtOps...>::add_par;
-  using BASE_AE<ExtOps...>::reset_par;
-  using BASE_AE<ExtOps...>::var;
-  using BASE_AE<ExtOps...>::set_var;
-  using BASE_AE<ExtOps...>::add_var;
-  using BASE_AE<ExtOps...>::reset_var;
-  using BASE_AE<ExtOps...>::update_vartyp;
-  using BASE_AE<ExtOps...>::dep;
-  using BASE_AE<ExtOps...>::set_dep;
-  using BASE_AE<ExtOps...>::add_dep;
-  using BASE_AE<ExtOps...>::reset_dep;
-  using BASE_AE<ExtOps...>::sys;
-  using BASE_AE<ExtOps...>::add_sys;
-  using BASE_AE<ExtOps...>::reset_sys;
+  using BASE_NLP<ExtOps...>::dag;
+  using BASE_NLP<ExtOps...>::set_dag;
+
+  using BASE_NLP<ExtOps...>::par;
+  using BASE_NLP<ExtOps...>::set_par;
+  using BASE_NLP<ExtOps...>::add_par;
+  using BASE_NLP<ExtOps...>::reset_par;
+
+  using BASE_NLP<ExtOps...>::var;
+  using BASE_NLP<ExtOps...>::set_var;
+  using BASE_NLP<ExtOps...>::add_var;
+  using BASE_NLP<ExtOps...>::reset_var;
+  using BASE_NLP<ExtOps...>::update_vartyp;
 
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
@@ -700,22 +857,14 @@ public:
 
 protected:
 
-  using BASE_AE<ExtOps...>::_dag;
-  using BASE_AE<ExtOps...>::_var;
-  using BASE_AE<ExtOps...>::_vartyp;
-  using BASE_AE<ExtOps...>::_varlb;
-  using BASE_AE<ExtOps...>::_varlm;
-  using BASE_AE<ExtOps...>::_varub;
-  using BASE_AE<ExtOps...>::_varum;
-  using BASE_AE<ExtOps...>::_dep;
-  using BASE_AE<ExtOps...>::_deplb;
-  using BASE_AE<ExtOps...>::_deplm;
-  using BASE_AE<ExtOps...>::_depub;
-  using BASE_AE<ExtOps...>::_depum;
-  using BASE_AE<ExtOps...>::_sys;
-  using BASE_AE<ExtOps...>::_sysm;
-  using BASE_AE<ExtOps...>::_par;
-
+  using BASE_NLP<ExtOps...>::_dag;
+  using BASE_NLP<ExtOps...>::_var;
+  using BASE_NLP<ExtOps...>::_vartyp;
+  using BASE_NLP<ExtOps...>::_varlb;
+  using BASE_NLP<ExtOps...>::_varlm;
+  using BASE_NLP<ExtOps...>::_varub;
+  using BASE_NLP<ExtOps...>::_varum;
+  using BASE_NLP<ExtOps...>::_par;
   using BASE_NLP<ExtOps...>::_obj;
   using BASE_NLP<ExtOps...>::_ctr;
 
@@ -749,21 +898,29 @@ private:
   int                 _nX;
   //! @brief vector of decision variables in DAG
   std::vector<FFVar>  _Xvar;
+  //! @brief vector of decision variable dependencies
+  std::vector<FFDep>  _Xdep;
   //! @brief vector of decision variable lower bounds
   std::vector<double> _Xlow;
   //! @brief vector of decision variable upper bounds
   std::vector<double> _Xupp;
+  //! @brief vector of decision variable levels (size _nX0)
+  std::vector<double> _Xini;
 
   //! @brief number of functions (objective and constraints) in problem
   int                 _nF;
   //! @brief vector of functions in DAG
   std::vector<FFVar>  _Fvar;
+  //! @brief vector of functions dependencies
+  std::vector<FFDep>  _Fdep;
   //! @brief vector of function lower bounds
   std::vector<double> _Flow;
   //! @brief vector of function upper bounds
   std::vector<double> _Fupp;
   //! @brief vector of function multipliers in DAG
   std::vector<FFVar>  _Fmul;
+  //! @brief vector of multiplier dependencies
+  std::vector<FFDep>  _Mdep;
 
   //!@brief number of nonzero elements in constraint gradients
   int                 _nG;
@@ -782,11 +939,13 @@ private:
   std::vector<int>    _jLvar;
   //! @brief vector of Lagrangian Hessian
   std::vector<FFVar>  _Lvar;
-  //! @brief Internal DAG variable for Lagrangian structure
-  FFVar _lagr;
+  //! @brief Lagrangian dependencies
+  FFDep               _Ldep;
 
+  //! @brief Lagrangian functions
+  FFVar               _lagr;
   //! @brief objective gradient
-  FFVar* _obj_grad;
+  FFVar*              _obj_grad;
   //! @brief constraint gradient (sparse format)
   std::tuple< unsigned, const unsigned*, const unsigned*, const FFVar* > _ctr_grad;
   //! @brief Lagrangian Hessian (sparse format)
@@ -860,7 +1019,7 @@ public:
     //! @brief Constructor
     Options():
       FEASTOL(1e-8), OPTIMTOL(1e-6), MAXITER(100), GRADMETH(FAD), HESSMETH(LBFGS),
-      LINMETH(MA57), GRADCHECK(false), DISPLEVEL(0), TIMELIMIT(72e2), MAXTHREAD(1)
+      LINMETH(MA57), GRADCHECK(false), DISPLEVEL(0), TIMELIMIT(72e2), MAXTHREAD(0)
       {} 
     //! @brief Assignment operator
     Options& operator= ( Options&options ){
@@ -884,8 +1043,11 @@ public:
     };
     //! @brief Enumeration type for gradient strategy
     enum GRADIENT_STRATEGY{
-      FAD=0,	//!< Forward AD
-      BAD		//!< Backward AD
+      FSYM=0,	//!< Forward symbolic AD
+      BSYM,	//!< Backward symbolic AD
+      FAD,	//!< Forward numeric AD
+      BAD,	//!< Backward numeric AD
+      FD        //!< Finite differences
     };
     //! @brief Enumeration type for gradient strategy
     enum LINEAR_SOLVER{
@@ -904,9 +1066,9 @@ public:
     double OPTIMTOL;
    //! @brief Corresponds to "max_iter" in Ipopt, which is the maximum number of iterations.
     int MAXITER;
-    //! @brief Specifies the method for computing derivatives, via either forward (FAD) or backward (BAD) automatic differentiation.
+    //! @brief Specifies the method for computing derivatives, either analytically (FSYM, BSYM), computed using automatic differentiation (FAD, BAD), or estimated using finite differences (FD).
     GRADIENT_STRATEGY GRADMETH;
-    //! @brief Corresponds to "hessian_approximation" in  Ipopt, which specifies the method for computing the Hessian, either exactly via automatic differentiation (EXACT) or using a limited-memory BFGS update (LBFGS).
+    //! @brief Corresponds to "hessian_approximation" in  Ipopt, which specifies the method for computing the Hessian, either exactly via symbolic or automatic differentiation (EXACT) or using a limited-memory BFGS update (LBFGS).
     HESSIAN_STRATEGY HESSMETH;
     //! @brief Corresponds to "linear_solver" in Ipopt, which specifies the linear solver.
     LINEAR_SOLVER LINMETH;
@@ -919,6 +1081,30 @@ public:
     //! @brief Maximum number of threads for multistart solve.
     unsigned MAXTHREAD;
   } options;
+
+  //! @brief NLP solver exceptions
+  class Exceptions
+  {
+  public:
+    //! @brief Enumeration type for NLPSLV exception handling
+    enum TYPE{
+      INTERN=-33	//!< Internal error
+    };
+    //! @brief Constructor for error <a>ierr</a>
+    Exceptions( TYPE ierr ) : _ierr( ierr ){}
+    //! @brief Inline function returning the error flag
+    int ierr(){ return _ierr; }
+    //! @brief Inline function returning the error description
+    std::string what(){
+      switch( _ierr ){
+        case INTERN:
+        default:
+          return "NLPSLV_IPOPT::Exceptions  Internal error";
+      }
+    }
+  private:
+    TYPE _ierr;
+  };
 
   //! @brief Setup NLP model before solution
   bool setup();
@@ -1019,21 +1205,33 @@ protected:
     ( bool const objGrad=true, bool const ctrGrad=true )
     {
       if( objGrad ){
-        delete[] _obj_grad;               _obj_grad = 0;
+        delete[] _obj_grad;               _obj_grad = nullptr;
       }
       if( ctrGrad ){
-        delete[] std::get<1>(_ctr_grad);  std::get<1>(_ctr_grad) = 0;
-        delete[] std::get<2>(_ctr_grad);  std::get<2>(_ctr_grad) = 0;
-        delete[] std::get<3>(_ctr_grad);  std::get<3>(_ctr_grad) = 0;
+        delete[] std::get<1>(_ctr_grad);  std::get<1>(_ctr_grad) = nullptr;
+        delete[] std::get<2>(_ctr_grad);  std::get<2>(_ctr_grad) = nullptr;
+        delete[] std::get<3>(_ctr_grad);  std::get<3>(_ctr_grad) = nullptr;
       }
-      delete[] std::get<1>(_lagr_hess); std::get<1>(_lagr_hess) = 0;
-      delete[] std::get<2>(_lagr_hess); std::get<2>(_lagr_hess) = 0;
-      delete[] std::get<3>(_lagr_hess); std::get<3>(_lagr_hess) = 0;
+      delete[] std::get<1>(_lagr_hess); std::get<1>(_lagr_hess) = nullptr;
+      delete[] std::get<2>(_lagr_hess); std::get<2>(_lagr_hess) = nullptr;
+      delete[] std::get<3>(_lagr_hess); std::get<3>(_lagr_hess) = nullptr;
     }
 
   //! @brief Make a local copy of the original NLP model
   bool _record_model
     ();
+
+  //! @brief Set function gradient storage
+  void _set_gradient
+    ();
+
+  //! @brief Set Lagrangian Hessian storage
+  void _set_hessian
+    ();
+
+  //! @brief Add function gradient to storage
+  bool _add_gradient
+    ( unsigned const ndx );
 
   //! @brief Set IPOPT options
   void _set_options
@@ -1123,23 +1321,32 @@ NLPSLV_IPOPT<ExtOps...>::setup
   _Pvar = _par;
   _nP = _Pvar.size();
 
-  // full set of decision variables (independent & dependent)
+  // full set of decision variables
   _Xvar = _var;
-  _Xvar.insert( _Xvar.end(), _dep.begin(), _dep.end() );
   _nX = _Xvar.size();
 
-  // full set of variable bounds (independent & dependent)
+  // set dependencies of decision variables
+  _Xdep.resize( _nX );
+  for( int i=0; i<_nX; ++i )
+    _Xdep[i].indep( _Xvar[i].id().second );
+  
+  // full set of variable initial values from GAMS
+#if defined (MC__WITH_GAMS)
+  _Xini = _varini;
+#else
+  _Xini.clear();
+#endif
+  
+  // full set of variable bounds
   _Xlow = _varlb;
   _Xupp = _varub;
-  _Xlow.insert( _Xlow.end(), _deplb.begin(), _deplb.end() );
-  _Xupp.insert( _Xupp.end(), _depub.begin(), _depub.end() );
 
   // full set of nonlinear functions (cost, constraints & equations)
   _Fvar.clear();
   _Fmul.clear();
   _Flow.clear();
   _Fupp.clear();
-
+  
   // first, cost function
   if( std::get<0>(_obj).size() ){
     _Fvar.push_back( std::get<1>(_obj)[0] );
@@ -1165,25 +1372,33 @@ NLPSLV_IPOPT<ExtOps...>::setup
       case BASE_OPT::GE: _Flow.push_back( 0. );             _Fupp.push_back(  BASE_OPT::INF ); break;
     }
   }
-
-  // last, dependent equations
-  _Fvar.insert( _Fvar.end(), _sys.begin(), _sys.end() );
-  _Fmul.insert( _Fmul.end(), _sysm.begin(), _sysm.end() );
-  _Flow.insert( _Flow.end(), _sys.size(), 0. );
-  _Fupp.insert( _Fupp.end(), _sys.size(), 0. );
   _nF = _Fvar.size();
-  
+
+  _set_gradient();
+  _set_hessian();
+  _rec_model = false;
+
+  return true;
+}
+
+template <typename... ExtOps>
+inline
+void
+NLPSLV_IPOPT<ExtOps...>::_set_gradient
+()
+{
   // setup objective and constraint gradient evaluation
   _cleanup_grad();
   switch( options.GRADMETH ){
-    default:
-    case Options::FAD:  // Forward AD
+    case Options::FSYM: // Forward symbolic
       _obj_grad = _dag->FAD( 1,      _Fvar.data(),   _nX, _Xvar.data() ); 
       _ctr_grad = _dag->SFAD( _nF-1, _Fvar.data()+1, _nX, _Xvar.data() ); 
       break;
-    case Options::BAD: // Backward AD
+    case Options::BSYM: // Backward symbolic
       _obj_grad = _dag->BAD( 1,      _Fvar.data(),   _nX, _Xvar.data() ); 
       _ctr_grad = _dag->SBAD( _nF-1, _Fvar.data()+1, _nX, _Xvar.data() ); 
+      break;
+    default:
       break;
   }
 
@@ -1193,34 +1408,163 @@ NLPSLV_IPOPT<ExtOps...>::setup
     _jGvar.push_back( std::get<2>(_ctr_grad)[k] );
     _Gvar.push_back( std::get<3>(_ctr_grad)[k] );
 #ifdef MC__NLPSLV_IPOPT_DEBUG
-     std::cout << "  _Gvar[" << std::get<1>(_ctr_grad)[k] << "," << std::get<2>(_ctr_grad)[k]
-               << "] = " << std::get<3>(_ctr_grad)[k] << std::endl;
+     std::cout << "  _Gvar[" << _iGfun.back() << "," << _jGvar.back() << "] = "
+               << std::get<3>(_ctr_grad)[k] << std::endl;
 #endif
+  }
+
+  // Gather derivative entries
+  switch( options.GRADMETH ){
+    case Options::FAD:
+    case Options::BAD:
+    case Options::FD:
+      _Fdep.resize( _nF-1 );
+      _dag->eval( _nF-1, _Fvar.data()+1, _Fdep.data(), _nX, _Xvar.data(), _Xdep.data() ); 
+      for( int iF=0; iF<_nF-1; ++iF ){
+        for( int iX=0; iX<_nX; ++iX ){
+          if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
+          _iGfun.push_back( iF );
+          _jGvar.push_back( iX );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+          std::cout << "  _Gvar[" << iF << "," << iX << "]" << std::endl;
+#endif
+        }
+      }
+      break;
+    default:
+      break;
   }
   _nG = _Gvar.size();
+}
 
-  // setup Lagrangian Hessian evaluation
-  FFVar lagr = 0;
-  for( int i=0; i<_nF; i++ )
-    lagr += _Fvar[i] * _Fmul[i];
-  // differentiate twice
-  const FFVar* lagr_grad = _dag->BAD( 1, &lagr, _nX, _Xvar.data() );
-  _lagr_hess = _dag->SFAD( _nX, lagr_grad, _nX, _Xvar.data(), true );
-  delete[] lagr_grad;
-
-  _iLvar.clear(); _jLvar.clear(); _Lvar.clear(); 
-  for( unsigned k=0; k<std::get<0>(_lagr_hess); ++k ){
-    _iLvar.push_back( std::get<1>(_lagr_hess)[k] );
-    _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
-    _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
+template <typename... ExtOps>
+inline
+void
+NLPSLV_IPOPT<ExtOps...>::_set_hessian
+()
+{
+  switch( options.HESSMETH ){
+    // No beed to setup Lagrangian Hessian
+    default:
+    case Options::LBFGS:
+      break;
+    
+    // setup Lagrangian Hessian evaluation
+    case Options::EXACT:
+      _cleanup_grad( false ); // Clean _ctr_grad, but not _obj_grad
+      for( int i=0; i<_nF; i++ ){
+        if( !i ) _lagr  = _Fvar[0] * _Fmul[0];
+        else     _lagr += _Fvar[i] * _Fmul[i];
+      }
 #ifdef MC__NLPSLV_IPOPT_DEBUG
-     std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
-               << "] = " << std::get<3>(_lagr_hess)[k] << std::endl;
+      _dag->output( _dag->subgraph( 1, &_lagr ) );
+#endif
+
+      switch( options.GRADMETH ){
+        case Options::FSYM: // Forward symbolic
+        case Options::BSYM: // Backward symbolic
+          _ctr_grad  = _dag->SBAD( 1, &_lagr, _nX, _Xvar.data() ); 
+          _lagr_hess = _dag->SFAD( std::get<0>(_ctr_grad), std::get<3>(_ctr_grad), _nX, _Xvar.data(), 1 ); // only keeps lower-triangular elements
+          break;
+        default:
+          break;
+      }
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+      for( unsigned ie=0; ie<std::get<0>(_ctr_grad); ++ie )
+        std::cout << "  _ctr_grad[" << std::get<1>(_ctr_grad)[ie] << "," << std::get<2>(_ctr_grad)[ie] << "] = "
+                  << std::get<3>(_ctr_grad)[ie] << std::endl;
+      _dag->output( _dag->subgraph( std::get<0>(_ctr_grad), std::get<3>(_ctr_grad) ) );
+#endif
+
+      _iLvar.clear(); _jLvar.clear(); _Lvar.clear(); 
+      for( unsigned k=0; k<std::get<0>(_lagr_hess); ++k ){
+        _iLvar.push_back( std::get<2>(_ctr_grad)[std::get<1>(_lagr_hess)[k]] );
+        _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
+        _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+         std::cout << "  _Lvar[" << _iLvar.back() << "," << _jLvar.back() << "] =\n";
+         _dag->output( _dag->subgraph( 1, &_Lvar.back() ) );
+#endif
+      }
+
+      // Gather derivative entries
+      switch( options.GRADMETH ){
+        case Options::FAD:
+        case Options::BAD:
+        case Options::FD:
+          _Lvar.push_back( _lagr );
+          _Mdep.assign( _nF, 0 );
+          _dag->eval( 1, _Lvar.data(), &_Ldep, _nX, _Xvar.data(), _Xdep.data(), _nF, _Fmul.data(), _Mdep.data() ); 
+          for( int iX=0; iX<_nX; ++iX ){
+            if( _Ldep.dep( _Xvar[iX].id().second ).second == FFDep::TYPE::L ) continue;
+            for( int jX=0; jX<=iX; ++jX ){ // gather lower-triangular elements
+              if( _Ldep.dep( _Xvar[jX].id().second ).second == FFDep::TYPE::L ) continue;
+              _iLvar.push_back( iX );
+              _jLvar.push_back( jX );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+              std::cout << "  _Lvar[" << iX << "," << jX << "]" << std::endl;
+#endif
+            }
+          }
+          break;
+        default:
+          break;
+      }
+      _nL = _Lvar.size();
+  }  
+}
+
+template <typename... ExtOps>
+inline
+bool
+NLPSLV_IPOPT<ExtOps...>::_add_gradient
+( unsigned const ndxF )
+{
+  // setup objective and constraint gradient evaluation
+  _cleanup_grad( false, true ); // reset constraint gradient only
+  switch( options.GRADMETH ){
+    case Options::FSYM: // Forward symbolic
+      _ctr_grad = _dag->SFAD( 1, &_Fvar[ndxF], _nX, _Xvar.data() ); 
+      break;
+    case Options::BSYM: // Backward symbolic
+      _ctr_grad = _dag->SBAD( 1, &_Fvar[ndxF], _nX, _Xvar.data() ); 
+      break;
+    default:
+      break;
+  }
+
+  // Do *not* reinitialize _iGfun / _jGvar / _Gvar 
+  for( unsigned k=0; k<std::get<0>(_ctr_grad); ++k ){
+    _iGfun.push_back( ndxF-1 ); // subtracting cost function
+    _jGvar.push_back( std::get<2>(_ctr_grad)[k] );
+    _Gvar.push_back( std::get<3>(_ctr_grad)[k] );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+     std::cout << "  _Gvar[" << _iGfun.back() << "," << _jGvar.back() << "] = "
+               << std::get<3>(_ctr_grad)[k] << std::endl;
 #endif
   }
-  _nL = _Lvar.size();
 
-  _rec_model = false;
+  // Gather derivative entries
+  switch( options.GRADMETH ){
+    case Options::FAD:
+    case Options::BAD:
+    case Options::FD:
+      if( _Fdep.empty() ) _Fdep.resize( 1 );
+      _dag->eval( 1, &_Fvar[ndxF], _Fdep.data(), _nX, _Xvar.data(), _Xdep.data() ); 
+      for( int iX=0; iX<_nX; ++iX ){
+        if( !_Fdep[0].dep( _Xvar[iX].id().second ).first ) continue;
+        _iGfun.push_back( ndxF-1 ); // subtracting cost function
+        _jGvar.push_back( iX );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+        std::cout << "  _Gvar[" << _iGfun.back() << "," << _jGvar.back() << "]" << std::endl;
+#endif
+      }
+      break;
+    default:
+      break;
+  }
+  _nG = _Gvar.size();
+  
   return true;
 }
 
@@ -1238,7 +1582,10 @@ NLPSLV_IPOPT<ExtOps...>::_record_model
   _rec_Flow    = _Flow;
   _rec_Fupp    = _Fupp;
   _rec_nF      = _nF;
-  _rec_obj_grad.assign( _obj_grad, _obj_grad+_nX );
+  if( _obj_grad )
+    _rec_obj_grad.assign( _obj_grad, _obj_grad+_nX );
+  else
+    _rec_obj_grad.clear();
   _rec_iGfun   = _iGfun;
   _rec_jGvar   = _jGvar;
   _rec_Gvar    = _Gvar;
@@ -1266,7 +1613,7 @@ NLPSLV_IPOPT<ExtOps...>::restore_model
   _Flow.swap( _rec_Flow );
   _Fupp.swap( _rec_Fupp );
   _nF = _rec_nF;
-  for( int i=0; i<_nX; i++ )
+  for( unsigned i=0; i<_rec_obj_grad.size(); i++ )
     _obj_grad[i] = _rec_obj_grad[i];
   _iGfun.swap( _rec_iGfun );
   _jGvar.swap( _rec_jGvar );
@@ -1297,37 +1644,20 @@ NLPSLV_IPOPT<ExtOps...>::set_obj_lazy
   _Fvar[0] = obj;
   
   // Update objective derivatives
-  _cleanup_grad( true, false );
+  _cleanup_grad( true, false ); // reset objective gradient only
   switch( options.GRADMETH ){
-    default:
-    case Options::FAD:  // Forward AD
+    case Options::FSYM: // Forward symbolic
       _obj_grad = _dag->FAD( 1,      _Fvar.data(),   _nX, _Xvar.data() ); 
       break;
-    case Options::BAD: // Backward AD
+    case Options::BSYM: // Backward symbolic
       _obj_grad = _dag->BAD( 1,      _Fvar.data(),   _nX, _Xvar.data() ); 
+      break;
+    default:
       break;
   }
 
   // Update Lagrangian Hessian
-  FFVar lagr = 0;
-  for( int i=0; i<_nF; i++ )
-    lagr += _Fvar[i] * _Fmul[i];
-  // differentiate twice
-  const FFVar* lagr_grad = _dag->BAD( 1, &lagr, _nX, _Xvar.data() );
-  _lagr_hess = _dag->SFAD( _nX, lagr_grad, _nX, _Xvar.data(), true );
-  delete[] lagr_grad;
-
-  _iLvar.clear(); _jLvar.clear(); _Lvar.clear(); 
-  for( unsigned k=0; k<std::get<0>(_lagr_hess); ++k ){
-    _iLvar.push_back( std::get<1>(_lagr_hess)[k] );
-    _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
-    _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-     std::cout << "  _Lvar[" << std::get<1>(_lagr_hess)[k] << "," << std::get<2>(_lagr_hess)[k]
-               << "] = " << std::get<3>(_lagr_hess)[k] << std::endl;
-#endif
-  }
-  _nL = _Lvar.size();
+  _set_hessian();
 
   return true;
 }
@@ -1342,7 +1672,7 @@ NLPSLV_IPOPT<ExtOps...>::add_ctr_lazy
   _record_model();
 
   // Append new constraint
-  unsigned CtrPos = _Fvar.size()-1;
+  unsigned pos = _Fvar.size();
   _Fvar.push_back( ctr );
   _Fmul.push_back( FFVar(_dag) );
   switch( type ){
@@ -1357,55 +1687,10 @@ NLPSLV_IPOPT<ExtOps...>::add_ctr_lazy
 #endif
   
   // Append new constraint derivatives
-  _cleanup_grad( false, true );
-  switch( options.GRADMETH ){
-    default:
-    case Options::FAD:  // Forward AD
-      _ctr_grad = _dag->SFAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); 
-      break;
-    case Options::BAD: // Backward AD
-      _ctr_grad = _dag->SBAD( 1, &_Fvar.back(), _nX, _Xvar.data() ); 
-      break;
-  }
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  _dag->output( _dag->subgraph( _nX, std::get<3>(_ctr_grad) ) );
-#endif
-  for( unsigned k=0; k<std::get<0>(_ctr_grad); ++k ){
-    _iGfun.push_back( CtrPos );
-    _jGvar.push_back( std::get<2>(_ctr_grad)[k] );
-    _Gvar.push_back( std::get<3>(_ctr_grad)[k] );
-  }
-  _nG = _Gvar.size();
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  std::cout << *_dag;
-  for( int k=0; k<_nX; k++ )
-     std::cout << "  _Cvar[" << k << "] = " << _obj_grad[k] << std::endl;
-  for( int k=0; k<_nG; k++ )
-     std::cout << "  _Gvar[" << _iGfun[k] << "," << _jGvar[k] << "] = " 
-               << _Gvar[k] << std::endl;
-#endif
+  if( !_add_gradient( pos ) ) return false;
 
   // Update Lagrangian Hessian
-  FFVar lagr = 0;
-  for( int i=0; i<_nF; i++ )
-    lagr += _Fvar[i] * _Fmul[i];
-  // differentiate twice
-  const FFVar* lagr_grad = _dag->BAD( 1, &lagr, _nX, _Xvar.data() );
-  _lagr_hess = _dag->SFAD( _nX, lagr_grad, _nX, _Xvar.data(), true );
-  delete[] lagr_grad;
-
-  _iLvar.clear(); _jLvar.clear(); _Lvar.clear(); 
-  for( unsigned k=0; k<std::get<0>(_lagr_hess); ++k ){
-    _iLvar.push_back( std::get<1>(_lagr_hess)[k] );
-    _jLvar.push_back( std::get<2>(_lagr_hess)[k] );
-    _Lvar.push_back( std::get<3>(_lagr_hess)[k] );
-  }
-  _nL = _Lvar.size();
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  for( int k=0; k<_nL; k++ )
-    std::cout << "  _Lvar[" << _iLvar[k] << "," << _jLvar[k] << "] = " 
-              << _Lvar[k] << std::endl;
-#endif
+  _set_hessian();
 
   return true;
 }
@@ -1414,7 +1699,7 @@ template <typename... ExtOps>
 inline
 void
 NLPSLV_IPOPT<ExtOps...>::_set_worker
-( Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>> & th )
+( Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>>& th )
 {
   th->Pvar.resize( _nP );
   th->Xvar.resize( _nX );
@@ -1427,14 +1712,15 @@ NLPSLV_IPOPT<ExtOps...>::_set_worker
   th->dag.insert( _dag, _nX, _Xvar.data(), th->Xvar.data() );
   th->dag.insert( _dag, _nF, _Fvar.data(), th->Fvar.data() );
   th->dag.insert( _dag, _nF, _Fmul.data(), th->Fmul.data() );
-  th->dag.insert( _dag, _nX, _obj_grad,    th->Cvar.data() );
-  th->dag.insert( _dag, _nG, _Gvar.data(), th->Gvar.data() );
-  th->dag.insert( _dag, _nL, _Lvar.data(), th->Lvar.data() );
+  th->dag.insert( _dag, _obj_grad?_nX:0, _obj_grad, th->Cvar.data() );
+  th->dag.insert( _dag, _Gvar.size(), _Gvar.data(), th->Gvar.data() );
+  th->dag.insert( _dag, _Lvar.size(), _Lvar.data(), th->Lvar.data() );
   th->op_f.clear();
   th->op_df.clear();
   th->op_g.clear();
   th->op_dg.clear();
-  th->op_d2L.clear();
+  th->op_L.clear();
+  th->Gmeth = options.GRADMETH;
   th->iGfun = _iGfun;
   th->jGvar = _jGvar;
   th->iLvar = _iLvar;
@@ -1487,7 +1773,7 @@ NLPSLV_IPOPT<ExtOps...>::solve
   // Run NLP solver
   Ipopt::SmartPtr<Ipopt::IpoptApplication> IpoptApp = new Ipopt::IpoptApplication();
   _set_options( IpoptApp );
-  _worker[th]->initialize( _nX, Xini );
+  _worker[th]->initialize( _nX, !Xini && !_Xini.empty()? _Xini.data(): Xini );
 
   int stat = IpoptApp->Initialize();
   if( stat != Ipopt::Solve_Succeeded ){
@@ -1526,7 +1812,7 @@ NLPSLV_IPOPT<ExtOps...>::solve
   bool const* logscal, bool const DISP )
 {
   // Set all workers
-  const unsigned NOTHREADS = ( options.MAXTHREAD>0? options.MAXTHREAD: 1 );
+  const unsigned NOTHREADS = ( options.MAXTHREAD>0? options.MAXTHREAD: std::thread::hardware_concurrency() );
   _resize_workers( NOTHREADS );
   for( unsigned th=0; th<NOTHREADS; th++ ){
     _set_worker( _worker[th] );

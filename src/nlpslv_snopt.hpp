@@ -951,7 +951,7 @@ public:
     double OPTIMTOL;
    //! @brief Corresponds to "Major iterations limit" in snOptA, which is the maximum number of major iterations allowed. It is intended to guard againstan excessive number of linearizations of the constraints. If non-positive value given, both feasibility and optimality are checked.
     int MAXITER;
-    //! @brief Corresponds to "Derivative option" in snOptA, which specifies whether nonlinear function gradients are known analytically (FAD, BAD) or estimated using finite differences (FD).
+    //! @brief Corresponds to "Derivative option" in snOptA, which specifies whether nonlinear function gradients are known analytically (FSYM, BSYM), computed using automatic differentiation (FAD, BAD), or estimated using finite differences (FD).
     GRADIENT_STRATEGY GRADMETH;
     //! @brief Corresponds to "Verify level" in snOptA, which enables finite-difference checks on the derivatives computed by the user-provided routines at the first point that satisfies all bounds and linear constraints.
     bool GRADCHECK;
@@ -977,7 +977,7 @@ public:
   class Exceptions
   {
   public:
-    //! @brief Enumeration type for MINLPSLV exception handling
+    //! @brief Enumeration type for NLPSLV exception handling
     enum TYPE{
       INTERN=-33	//!< Internal error
     };
@@ -1196,6 +1196,7 @@ NLPSLV_SNOPT<ExtOps...>::_set_gradient
     switch( options.GRADMETH ){
       case Options::FAD:
       case Options::BAD:
+      case Options::FD:
         for( int iX=0; iX<_nX; ++iX ){
           if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
@@ -1296,7 +1297,7 @@ NLPSLV_SNOPT<ExtOps...>::setup
   _Pvar = _par;
   _nP = _Pvar.size();
   
-  // full set of decision variables (independent & dependent)
+  // full set of decision variables
   _Xvar = _var;
   _nX = _Xvar.size();
   _X0.resize( _nX, 0. );
@@ -1313,7 +1314,7 @@ NLPSLV_SNOPT<ExtOps...>::setup
   _Xini.clear();
 #endif
 
-  // full set of variable bounds (independent & dependent)
+  // full set of variable bounds
   _Xlow = _varlb;
   _Xupp = _varub;
 
@@ -1627,11 +1628,8 @@ NLPSLV_SNOPT<ExtOps...>::_set_worker
   th->dag.insert( _dag, _nX, _Xvar.data(), th->Xvar.data() );
   th->dag.insert( _dag, _nF, _Fvar.data(), th->Fvar.data() );
   th->dag.insert( _dag, _Gvar.size(), _Gvar.data(), th->Gvar.data() );
-  th->op_F  = th->dag.subgraph( _Gndx, th->Fvar.data() );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
-  _dag->output( th->op_F );
-#endif
-  th->op_G  = th->dag.subgraph( _Gvar.size(), th->Gvar.data() );
+  th->op_F.clear(); //  = th->dag.subgraph( _Gndx, th->Fvar.data() );
+  th->op_G.clear(); //  = th->dag.subgraph( _Gvar.size(), th->Gvar.data() );
   th->iAfun = _iAfun;
   th->jAvar = _jAvar;
   th->Aval  = _Aval;
