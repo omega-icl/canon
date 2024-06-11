@@ -357,6 +357,10 @@ public:
         std::get<2>(_obj).push_back( FFVar( 0. ) );
     }
     
+  //! @brief Reset objective
+  void reset_obj()
+    { std::get<0>(_obj).clear(); std::get<1>(_obj).clear(); std::get<2>(_obj).clear(); }
+
   //! @brief Copy equations
   void set
     ( BASE_NLP const& nlp )
@@ -365,6 +369,13 @@ public:
       _varlb = nlp._varlb; _varub = nlp._varub;
       _varlm = nlp._varlm; _varum = nlp._varum;
       _ctr = nlp._ctr; _obj = nlp._obj; }
+   
+  //! @brief Reset mode
+  void reset
+    ()
+    { reset_obj();
+      reset_ctr();
+      reset_var(); }
 
 protected:
   //! @brief constraints (types, constraint variables, constraint multipliers)

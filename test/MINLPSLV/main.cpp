@@ -77,15 +77,15 @@ int main()
   MINLP.options.NLPSLV.MAXITER          = 500;
   //MINLP.options.NLPSLV.FEASTOL          = 1e-7;
   //MINLP.options.NLPSLV.OPTIMTOL         = 1e-7;
-  //MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
+  //MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FSYM;
   //MINLP.options.NLPSLV.GRADCHECK        = false;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 #elif  MC__USE_IPOPT
   MINLP.options.NLPSLV.DISPLEVEL        = 0;
-  MINLP.options.NLPSLV.MAXITER          = 100;
-  //MINLP.options.NLPSLV.FEASTOL          = 1e-8;
-  //MINLP.options.NLPSLV.OPTIMTOL         = 1e-8;
-  //MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
+  MINLP.options.NLPSLV.MAXITER          = 500;
+  //MINLP.options.NLPSLV.FEASTOL          = 1e-7;
+  //MINLP.options.NLPSLV.OPTIMTOL         = 1e-7;
+  //MINLP.options.NLPSLV.GRADMETH         = NLP::Options::FSYM;
   //MINLP.options.NLPSLV.GRADCHECK        = false;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
 #endif

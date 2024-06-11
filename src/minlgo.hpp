@@ -110,7 +110,11 @@ namespace opt = boost::program_options;
 #include "interval.hpp"
 #include "gamsio.hpp"
 #include "minlpslv.hpp"
-#include "nlpslv_snopt.hpp"
+#ifdef MC__USE_SNOPT
+  #include "nlpslv_snopt.hpp"
+#elif  MC__USE_IPOPT
+  #include "nlpslv_ipopt.hpp"
+#endif
 #include "mipslv_gurobi.hpp"
 #include "minlpbnd.hpp"
 #include "sbbslv.hpp"
@@ -126,7 +130,11 @@ namespace mc
 //! details can be found at: \ref page_MINLGO
 ////////////////////////////////////////////////////////////////////////
 template < typename T=Interval,
-           typename NLP=NLPSLV_SNOPT<>,
+#ifdef MC__USE_SNOPT
+          typename NLP=NLPSLV_SNOPT<>,
+#elif  MC__USE_IPOPT
+          typename NLP=NLPSLV_IPOPT<>,
+#endif
            typename MIP=MIPSLV_GUROBI<T>,
            typename... ExtOps >
 class MINLGO
@@ -689,9 +697,19 @@ MINLGO<T,NLP,MIP,ExtOps...>::presolve
     _MINLPBND.options.SQUAD.MIPDISPLEVEL = _MINLPBND.options.SRED.MIPDISPLEVEL = 1;
 
   if( options.REFORM ){
+    if( options.REFORM == 1 || options.REFORM == 2 ){
+      _MINLPBND.options.SLIFT.LIFTDIV  = 0;
+      _MINLPBND.options.SLIFT.LIFTIPOW = 0;
+      _MINLPBND.options.SLIFT.KEEPFACT = 1;
+    }
+    else if( options.REFORM == 3 || options.REFORM == 4 ){
+      _MINLPBND.options.SLIFT.LIFTDIV  = 1;
+      _MINLPBND.options.SLIFT.LIFTIPOW = 0;
+      _MINLPBND.options.SLIFT.KEEPFACT = 0;
+    }
     _MINLPBND.lift_polynomial_subexpressions( true );
     _MINLPBND.flatten_linear_functions( true );
-    if( options.REFORM > 1 )
+    if( options.REFORM == 2 || options.REFORM == 4 )
       _MINLPBND.quadratize_polynomial_functions( true );
     else{
       _MINLPBND.flatten_quadratic_functions( true );

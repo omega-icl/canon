@@ -342,7 +342,32 @@ b_l3(n_l3)
 b_l4(n_l4)
 ;
 
-$GDXIN Relu_50_50_50.gdx
+* PARAMETERS
+* scaler_mean(nf)
+* /
+* qa  2.58602971
+* qb  2.60220338
+* ra  2.79284563
+* rb  2.90664494
+* za  0.33371024
+* zb  0.33376051
+* /
+
+* scaler_var(nf)
+* /
+* qa  0.76838993
+* qb  0.78661128
+* ra  0.94966161
+* rb  1.21327817
+* za  0.17994648
+* zb  0.18011281
+* /
+
+
+
+* ;
+
+$GDXIN Relu_20_20_20.gdx
 $load nf n_l1 n_l2 n_l3 n_l4 w_l1 w_l2 w_l3 w_l4 b_l1 b_l2 b_l3 b_l4 scaler_mean scaler_var
 $GDXIN
 
@@ -369,7 +394,6 @@ inps.l('zb') = 1/scaler_var('zb')*(x.l('s2') - scaler_mean('zb'));
 
 
 $macro relu(x) (x/2 + abs(x)/2)
-*$macro relu(x) max(x,0)
 EQUATIONS
 eq_sur1,eq_sur2,eq_sur3,eq_sur4,eq_sur5
 eq_sur6,eq_sur7,eq_sur8,eq_sur9,eq_sur10
@@ -427,6 +451,22 @@ nn_act_l4(n_l4) =e= 1/(1+exp(-nn_sum_l4(n_l4)));
 eq_sur15(n_l4)..
 nn_act_l4(n_l4) =g= 0.5;
 
+$ontext
+* relu formulation with max
+eq_sur8(layer)..
+nn_act(layer) =e= relu(nn_sum(layer));
+* nn_act(layer) =e= max(0,nn_sum(layer));
+
+eq_sur9..
+res_sum =e= sum(layer,nn_weights2(layer)*nn_act(layer)) + nn_bias2;
+
+* activation function sigmoid in the output layer
+eq_sur10..
+res_act =e= 1/(1+exp(-res_sum));
+
+eq_sur11..
+res_act =g= 0.5;
+$offtext
 
 model surrogate_model /all/;
 *option nlp=conopt3;
@@ -436,10 +476,11 @@ model surrogate_model /all/;
 *option threads=4;
 
 option decimals=5;
-OPTION OPTCA = 1e-5;
-*option iterlim = 1000000;
-option optcr  = 1e-4;
-OPTION reslim = 10800;
+OPTION OPTCA = 1e-10;
+*option iterlim = 1000;
+option optcr  = 0.0001;
+*OPTION reslim = 10800;
+surrogate_model.OPTFILE = 1;
 
 solve surrogate_model maximizing z using MINLP;
 

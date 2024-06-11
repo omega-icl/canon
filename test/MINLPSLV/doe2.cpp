@@ -692,10 +692,11 @@ int main()
 #elif  MC__USE_IPOPT
   doe.options.NLPSLV.DISPLEVEL        = 0;
   doe.options.NLPSLV.MAXITER          = 100;
-  doe.options.NLPSLV.FEASTOL          = 1e-8;
-  doe.options.NLPSLV.OPTIMTOL         = 1e-8;
+  doe.options.NLPSLV.FEASTOL          = 1e-7;
+  doe.options.NLPSLV.OPTIMTOL         = 1e-7;
   doe.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
-  //doe.options.NLPSLV.GRADCHECK        = 0;
+  doe.options.NLPSLV.HESSMETH         = NLP::Options::LBFGS;
+  doe.options.NLPSLV.GRADCHECK        = 0;
   doe.options.NLPSLV.MAXTHREAD        = 0;
 #endif
 #ifdef MC__USE_GUROBI

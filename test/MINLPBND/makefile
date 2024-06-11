@@ -10,7 +10,10 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-all : test_ANN test_MINLPREF test_MINLPBND CS_Xmin CS_DB
+all : doxydoc test_ANN test_MINLPREF test_MINLPBND CS_Xmin CS_DB
+
+doxydoc : doxydoc.o gmomcc.o gevmcc.o optcc.o palmcc.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
 test_MINLPREF : test_MINLPREF.o gmomcc.o gevmcc.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
@@ -27,6 +30,9 @@ CS_DB : CS_DB.o gmomcc.o gevmcc.o optcc.o palmcc.o
 CS_Xmin : CS_Xmin.o gmomcc.o gevmcc.o optcc.o palmcc.o
 	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
 
+UNIFAC_relu : UNIFAC_relu.o gmomcc.o gevmcc.o optcc.o palmcc.o
+	$(CPP) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
 
@@ -39,6 +45,6 @@ CS_Xmin : CS_Xmin.o gmomcc.o gevmcc.o optcc.o palmcc.o
 #####
 
 clean:
-	rm -f test_MINLPREF test_MINLPBND test_ANN CS_DB CS_Xmin
+	rm -f doxydoc test_MINLPREF test_MINLPBND test_ANN CS_DB CS_Xmin UNIFAC_relu
 	rm -f *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *.ilp *~
 

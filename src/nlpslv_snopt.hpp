@@ -578,24 +578,14 @@ WORKER_SNOPT<ExtOps...>::stationary
   Gval.resize( nG );
   try{
     switch( Gmeth ){
-      // Compute backward numeric derivative
-      case NLPSLV_SNOPT<ExtOps...>::Options::BAD:
-        BXval.resize( nX );
-        // Initialize participating variables in fadbad::B<double>
-        for( int iX=0; iX<nX; ++iX )
-          BXval[iX] = solution.x[iX];
-        BFval.resize( nF );
-        dag.eval( op_F, Bwk, Gndx, Fvar.data(), BFval.data(), nX, Xvar.data(), BXval.data() );
-        Bwk.clear();
-        for( auto const& iF : Gndx )
-          BFval[iF].diff( iF, nF );
-        // Gather derivatives
-        for( int ie=0; ie<nG; ie++ ){
+      // Compute symbolic derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
+      case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
+        dag.eval( op_G, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << BXval[ jGvar[ie] ].d( iGfun[ie] ) << std::endl;
+        for( int ie=0; ie<nG; ie++ )
+          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << Gval[ie] << std::endl;
 #endif
-          Gval[ie] = BXval[ jGvar[ie] ].d( iGfun[ie] );
-        }
         break;
           
       // Compute forward numeric derivative
@@ -617,14 +607,24 @@ WORKER_SNOPT<ExtOps...>::stationary
         }
         break;
 
-      // Compute symbolic derivative
-      case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
-      case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
-        dag.eval( op_G, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+      // Compute backward numeric derivative
+      case NLPSLV_SNOPT<ExtOps...>::Options::BAD:
+        BXval.resize( nX );
+        // Initialize participating variables in fadbad::B<double>
+        for( int iX=0; iX<nX; ++iX )
+          BXval[iX] = solution.x[iX];
+        BFval.resize( nF );
+        dag.eval( op_F, Bwk, Gndx, Fvar.data(), BFval.data(), nX, Xvar.data(), BXval.data() );
+        Bwk.clear();
+        for( auto const& iF : Gndx )
+          BFval[iF].diff( iF, nF );
+        // Gather derivatives
+        for( int ie=0; ie<nG; ie++ ){
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-        for( int ie=0; ie<nG; ie++ )
-          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << Gval[ie] << std::endl;
+          std::cout << "  G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << BXval[ jGvar[ie] ].d( iGfun[ie] ) << std::endl;
 #endif
+          Gval[ie] = BXval[ jGvar[ie] ].d( iGfun[ie] );
+        }
         break;
 
       // Other derivative method - error
@@ -672,7 +672,7 @@ WORKER_SNOPT<ExtOps...>::correction
       solution.f[iAfun[iA]] += Aval[iA] * solution.x[jAvar[iA]];
   }
   catch(...){
-    return false;
+    return costcorr;
   }
   for( int i=0; i<nF; i++ ){
     if( i == ObjRow ) continue;      
@@ -704,7 +704,8 @@ public:
 
   using BASE_NLP<ExtOps...>::dag;
   using BASE_NLP<ExtOps...>::set_dag;
-  
+  using BASE_NLP<ExtOps...>::reset;
+
   using BASE_NLP<ExtOps...>::par;
   using BASE_NLP<ExtOps...>::set_par;
   using BASE_NLP<ExtOps...>::add_par;
@@ -719,6 +720,7 @@ public:
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
+  using BASE_NLP<ExtOps...>::reset_ctr;
 
 #if defined (MC__WITH_GAMS)
   using GAMSIO<ExtOps...>::read;
@@ -910,7 +912,7 @@ public:
   {
     //! @brief Constructor
     Options():
-      FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FAD), GRADCHECK(false),
+      FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FSYM), GRADCHECK(false),
       QPFEASTOL(1e-7), QPMAXITER(500), QPMETH(CHOL), DISPLEVEL(0), LOGFILE(),
       FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
       {}
@@ -1681,13 +1683,27 @@ NLPSLV_SNOPT<ExtOps...>::solve
 ( double const* Xini, double const* Xlow, double const* Xupp, double const* Pval,
   bool const warm )
 {
+/*
+  std::vector<double> Fval(_nF);
+  _dag->output( _dag->subgraph( _nF, _Fvar.data() ) );
+  _dag->eval( _nF, _Fvar.data(), Fval.data(), _nX, _Xvar.data(), Xini ); 
+  std::cout << "DAG evaluation at Xini:" << std::endl;
+  for( auto const& val : Fval ) std::cout << val << std::endl;
+  { int dum; std::cout << "Paused"; std::cin >> dum; }
+*/ 
   // Set worker
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _set_worker( _worker[th] );
   _set_options( _worker[th] );
   _worker[th]->update( _nX, Xlow, Xupp, _nP, Pval );
-  
+/*
+  _worker[th]->dag.output( _worker[th]->dag.subgraph( _nF, _worker[th]->Fvar.data() ) );
+  _worker[th]->dag.eval( _nF, _worker[th]->Fvar.data(), Fval.data(), _nX, _worker[th]->Xvar.data(), Xini ); 
+  std::cout << "DAG evaluation at Xini:" << std::endl;
+  for( auto const& val : Fval ) std::cout << val << std::endl;
+  { int dum; std::cout << "Paused"; std::cin >> dum; }
+*/      
   // Run NLP solver
   _iStart = ( warm? WARM: COLD );
   int stat;
@@ -1907,6 +1923,8 @@ bool
 NLPSLV_SNOPT<ExtOps...>::is_stationary
 ( const double*x, const double*ux, const double*uf, const double GRADTOL )
 {
+  if( _solution.x.empty() ) return false;
+  
   // Initialize main thread
   const int th = 0, noth = 1;
   _resize_workers( noth );
@@ -1923,6 +1941,8 @@ bool
 NLPSLV_SNOPT<ExtOps...>::is_stationary
 ( const double GRADTOL )
 {
+  if( _solution.x.empty() ) return false;
+  
   // Initialize main thread
   const int th = 0, noth = 1;
   _resize_workers( noth );

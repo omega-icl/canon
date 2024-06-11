@@ -288,7 +288,11 @@ struct WORKER_IPOPT:
 
   //! @brief Function testing NLP solution stationarity
   bool stationary
-    ( double const GRADTOL, int const nX, int const nG );
+    ( double const GRADTOL, int const nX, int const nF, int const nG );
+
+  //! @brief Function computing NLP cost correction to compensate for infeasibility
+  double correction
+    ( int const nF, int const nX );
 };
 
 template <typename... ExtOps>
@@ -769,19 +773,22 @@ WORKER_IPOPT<ExtOps...>::feasible
   }
 
   try{
-    Fval.resize( nF );
-    dag.eval( op_g, dwk, nF-1, Fvar.data()+1, Fval.data()+1, nX, Xvar.data(), solution.x.data() );
+    solution.f.assign( nF, 0. );
+    dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+    dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
+    //Fval.resize( nF );
+    //dag.eval( op_g, dwk, nF-1, Fvar.data()+1, Fval.data()+1, nX, Xvar.data(), solution.x.data() );
   }
   catch(...){
     return false;
   }
   for( int i=1; i<nF; i++ ){
 #ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << Fval[i] << " <= " << Fupp[i] << std::endl;
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
 #endif
-    maxinfeas = Flow[i] - Fval[i];
+    maxinfeas = Flow[i] - solution.f[i];
     if( maxinfeas > CTRTOL ) return false;
-    maxinfeas = Fval[i] - Fupp[i];
+    maxinfeas = solution.f[i] - Fupp[i];
     if( maxinfeas > CTRTOL ) return false;
   }
   return true;
@@ -791,17 +798,80 @@ template <typename... ExtOps>
 inline
 bool
 WORKER_IPOPT<ExtOps...>::stationary
-( double const GRADTOL, int const nX, int const nG )
+( double const GRADTOL, int const nX, int const nF, int const nG )
 {
+  Cval.resize( nX );
+  Gval.resize( nG );
   try{
-    Cval.resize( nX );
-    dag.eval( op_df, dwk, nX, Cvar.data(), Cval.data(), nX, Xvar.data(), solution.x.data() );
-    Gval.resize( nG );
-    dag.eval( op_dg, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
+      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
+        dag.eval( op_df, dwk, nX, Cvar.data(), Cval.data(), nX, Xvar.data(), solution.x.data() );
+        dag.eval( op_dg, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+        break;
+
+      // Compute forward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
+        FXval.resize( nX );
+        // Initialize participating variables in fadbad::F<double>
+        for( int i=0; i<nX; i++ ){
+          FXval[i] = solution.x.data()[i];
+          FXval[i].diff( i, nX );
+        }
+
+        dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, nX, Xvar.data(), FXval.data() );
+        // Gather derivatives
+        for( int i=0; i<nX; i++ )
+          Cval[i] = FCval.d(i);
+
+        FFval.resize( nF-1 );
+        dag.eval( op_g, Fwk, nF-1, Fvar.data()+1, FFval.data(), nX, Xvar.data(), FXval.data() );
+        // Gather derivatives
+        for( int i=0; i<nG; ++i )
+          Gval[i] = FFval[ iGfun[i] ].d( jGvar[i] );
+        break;
+
+      // Compute backward numeric derivative
+      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
+        BXval.resize( nX );
+        // Initialize participating variables in fadbad::B<double>
+        for( int i=0; i<nX; i++ )
+          BXval[i] = solution.x.data()[i];
+        dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, nX, Xvar.data(), BXval.data() );
+        Bwk.clear();
+        BCval.diff( 0, 1 );
+        // Gather derivatives
+        for( int i=0; i<nX; i++ )
+          Cval[i] = BXval[i].d(0);
+
+        for( int i=0; i<nX; i++ )
+          BXval[i] = solution.x.data()[i];
+        BFval.resize( nF-1 );
+        dag.eval( op_g, Bwk, nF-1, Fvar.data()+1, BFval.data(), nX, Xvar.data(), BXval.data() );
+        Bwk.clear();
+        for( int j=0; j<nF-1; j++ )
+          BFval[j].diff( j, nF-1 );
+        // Gather derivatives
+        for( int i=0; i<nG; ++i )
+          Gval[i] = BXval[ jGvar[i] ].d( iGfun[i] );
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
+    }
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    for( int i=0; i<nX; ++i )
+      std::cout << "  Cval[" << i << "] = " << Cval[i] << std::endl;
+    for( int ie=0; ie<nG; ++ie )
+      std::cout << "  Gval[" << iGfun[ie] << ", " << jGvar[ie] << "] = " << Gval[ie] << std::endl;
+#endif
   }
   catch(...){
     return false;
   }
+
   std::vector<double> gradL = solution.ux;
   for( int i=0; i<nX; i++ )
     gradL[i] += Cval[i] * solution.uf[0];
@@ -814,6 +884,42 @@ WORKER_IPOPT<ExtOps...>::stationary
     if( std::fabs( gradL[i] ) > GRADTOL ) return false;
   }
   return true;
+}
+
+template <typename... ExtOps>
+inline
+double
+WORKER_IPOPT<ExtOps...>::correction
+( int const nF, int const nX )
+{
+  double costcorr = 0.;
+  for( int i=0; i<nX; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "X[" << i << "]: " << Xlow[i] << " <= " << solution.x[i] << " <= " << Xupp[i] << std::endl;
+#endif
+    costcorr += std::max( Xlow[i] - solution.x[i], 0. ) * solution.ux[i];
+    costcorr -= std::max( solution.x[i] - Xupp[i], 0. ) * solution.ux[i];
+  }
+
+  try{
+    solution.f.assign( nF, 0. );
+    dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+    dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
+    //Fval.resize( nF );
+    //dag.eval( op_g, dwk, nF-1, Fvar.data()+1, Fval.data()+1, nX, Xvar.data(), solution.x.data() );
+  }
+  catch(...){
+    return costcorr;
+  }
+  for( int i=1; i<nF; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
+#endif
+    costcorr += std::max( Flow[i] - solution.f[i], 0. ) * solution.uf[i];
+    costcorr -= std::max( solution.f[i] - Fupp[i], 0. ) * solution.uf[i];
+  }
+
+  return costcorr;
 }
 
 
@@ -876,8 +982,8 @@ public:
 
   //! @brief NLP solution status
   enum STATUS{
-     SUCCESSFUL=0,		//!< Optimal solution found (possibly not within required accuracy)
-     INFEASIBLE,	    //!< The problem appears to be infeasible
+     SUCCESSFUL=0,      //!< Optimal solution found (possibly not within required accuracy)
+     INFEASIBLE,        //!< The problem appears to be infeasible
      UNBOUNDED,	        //!< The problem appears to be unbounded
      INTERRUPTED,       //!< Resource limit reached
      FAILURE,           //!< Terminated after numerical difficulties
@@ -1018,11 +1124,11 @@ public:
   {
     //! @brief Constructor
     Options():
-      FEASTOL(1e-8), OPTIMTOL(1e-6), MAXITER(100), GRADMETH(FAD), HESSMETH(LBFGS),
+      FEASTOL(1e-8), OPTIMTOL(1e-6), MAXITER(100), GRADMETH(FSYM), HESSMETH(LBFGS),
       LINMETH(MA57), GRADCHECK(false), DISPLEVEL(0), TIMELIMIT(72e2), MAXTHREAD(0)
       {} 
     //! @brief Assignment operator
-    Options& operator= ( Options&options ){
+    Options& operator= ( Options const& options ){
         FEASTOL     = options.FEASTOL;
         OPTIMTOL    = options.OPTIMTOL;
         MAXITER     = options.MAXITER;
@@ -1160,6 +1266,14 @@ public:
   bool is_stationary
     ( double const GRADTOL );//, const double NUMTOL=1e-8 );
 
+  //! @brief Compute cost correction to compensate for infeasibility of current solution
+  double cost_correction
+    ();
+
+  //! @brief Compute cost correction to compensate for infeasibility
+  double cost_correction
+    ( double const* x, double const* ux, double const* uf );
+
   //! @brief Get solution info
   SOLUTION_OPT const& solution() const
     {
@@ -1195,6 +1309,7 @@ public:
        || _solution.stat == Ipopt::Insufficient_Memory
        || _solution.stat == Ipopt::Internal_Error )
         return ABORTED;
+      return ABORTED;
     }
   /** @} */
 
@@ -1955,11 +2070,16 @@ bool
 NLPSLV_IPOPT<ExtOps...>::is_feasible
 ( const double*x, const double CTRTOL )
 {
+  if( !x ) return false;
+
   // Initialize main thread
   const int th = 0, noth = 1;
   _resize_workers( noth );
+  _set_worker( _worker[th] );
   _worker[th]->solution.x.assign( x, x+_nX );
-  return _worker[th]->feasible( CTRTOL, _nF, _nX );
+  bool feas = _worker[th]->feasible( CTRTOL, _nF, _nX );
+  _solution = _worker[th]->solution;
+  return feas;
 }
 
 template <typename... ExtOps>
@@ -1968,11 +2088,15 @@ bool
 NLPSLV_IPOPT<ExtOps...>::is_feasible
 ( const double CTRTOL )
 {
+  if( _solution.x.empty() ) return false;
+  
   // Initialize main thread
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _worker[th]->solution = _solution;
-  return _worker[th]->feasible( CTRTOL, _nF, _nX );
+  bool feas = _worker[th]->feasible( CTRTOL, _nF, _nX );
+  _solution = _worker[th]->solution;
+  return feas;
 }
 
 template <typename... ExtOps>
@@ -1987,7 +2111,7 @@ NLPSLV_IPOPT<ExtOps...>::is_stationary
   _worker[th]->solution.x.assign( x, x+_nX );
   _worker[th]->solution.ux.assign( ux, ux+_nX );
   _worker[th]->solution.uf.assign( uf, uf+_nX );
-  return _worker[th]->stationary( GRADTOL, _nX, _nG );
+  return _worker[th]->stationary( GRADTOL, _nX, _nF, _iGfun.size() );
 }
 
 template <typename... ExtOps>
@@ -2000,7 +2124,36 @@ NLPSLV_IPOPT<ExtOps...>::is_stationary
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _worker[th]->solution = _solution;
-  return _worker[th]->stationary( GRADTOL, _nX, _nG );
+  return _worker[th]->stationary( GRADTOL, _nX, _nF, _iGfun.size() );
+}
+
+template <typename... ExtOps>
+inline
+double
+NLPSLV_IPOPT<ExtOps...>::cost_correction
+( const double*x, const double*ux, const double*uf )
+{
+  // Initialize main thread
+  const int th = 0, noth = 1;
+  _resize_workers( noth );
+  _set_worker( _worker[th] );
+  _worker[th]->solution.x.assign( x, x+_nX );
+  _worker[th]->solution.ux.assign( ux, ux+_nX );
+  _worker[th]->solution.uf.assign( uf, uf+_nF );
+  return _worker[th]->correction( _nF, _nX );
+}
+
+template <typename... ExtOps>
+inline
+double
+NLPSLV_IPOPT<ExtOps...>::cost_correction
+()
+{
+  // Initialize main thread
+  const int th = 0, noth = 1;
+  _resize_workers( noth );
+  _worker[th]->solution = _solution;
+  return _worker[th]->correction( _nF, _nX );
 }
 
 } // end namescape mc

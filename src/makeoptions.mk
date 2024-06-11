@@ -47,7 +47,7 @@ LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_c++ -lgurobi110 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 
-PATH_GAMS = /opt/gams/gams44.4_linux_x64_64_sfx
+PATH_GAMS = /opt/gams/gams46.3_linux_x64_64_sfx
 LIB_GAMS  =
 INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"
@@ -58,14 +58,14 @@ INC_DEP  = $(INC_MC) $(INC_CRONOS) $(INC_SUNDIALS) $(INC_CLI) $(INC_SOBOL) $(INC
 
 # COMPILATION <<-- CHANGE AS APPROPRIATE -->>
 
-DEBUG = -g
-PROF = #-pg
+DEBUG = #-g
+PROF = -pg
 OPTIM = -O2 #-Ofast
 WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-unused-result
-CPP17 = -std=c++20
+CPP17 = -std=c++17
 
-CC  = gcc-12
-CPP = g++-12
+CC  = gcc-13
+CPP = g++-13
 # CPP = icpc
 FLAG_CPP = $(DEBUG) $(PROF) $(OPTIM) $(CPP17) $(WARN) $(FLAG_DEP) 
 

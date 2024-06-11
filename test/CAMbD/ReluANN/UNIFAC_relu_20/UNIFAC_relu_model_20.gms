@@ -477,7 +477,7 @@ model surrogate_model /all/;
 
 option decimals=5;
 OPTION OPTCA = 1e-10;
-option iterlim = 1000000;
+option iterlim = 100000000;
 option optcr  = 0.0001;
 OPTION reslim = 10800;
 

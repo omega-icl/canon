@@ -252,13 +252,30 @@ std::string
 GAMSIO<ExtOps...>::_format_name
 ( std::string const& name )
 {
+  // remove brackets and commas
   auto left = name.find_last_of( '(' );
-  if( left == std::string::npos ) return name;
+  if( left == std::string::npos )
+    return name;
   
-  auto right = name.find_first_of( ')', left );
-  if( right == std::string::npos ) return name;
+  std::string namecompat = name.substr(0, left);
 
-  return name.substr(0, left) + '_' + name.substr(left+1, right-left-1);
+  for( auto right = name.find_first_of( ',', left );
+       right != std::string::npos;
+       left = right, right = name.find_first_of( ',', left+1 ) ){
+    namecompat += '_' + name.substr(left+1, right-left-1);
+  }
+
+  auto right = name.find_first_of( ')', left );
+  assert( name.find_first_of( ')', left ) != std::string::npos );
+  namecompat += '_' + name.substr(left+1, right-left-1);
+
+  // remove dash
+  for( auto pos = namecompat.find_first_of( '-' );
+       pos != std::string::npos;
+       pos = namecompat.find_first_of( '-' ) )
+    namecompat.replace( pos, 1, "" );
+
+  return namecompat;
 }
 
 template <typename... ExtOps>

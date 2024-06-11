@@ -243,8 +243,10 @@ protected:
   std::set<unsigned>        _Xgal;
   //! @brief objective variable
   FFVar                     _Xobj;
-  //! @brief Map of dependent expressions in terms of original variables
+  //! @brief Map of lifted expressions in terms of original variables
   std::map< unsigned, FFVar > _Xlift;
+  //! @brief Map of eliminated variables from original variables
+  std::set< unsigned > _Xelim;
 
   //! @brief number of functions (objective and constraints) in model
   unsigned                  _nF;
@@ -270,6 +272,8 @@ protected:
   std::set<unsigned>        _Fpol;
   //! @brief subset of general functions
   std::set<unsigned>        _Fgal;
+  //! @brief subset of nonlinear functions
+  std::set<unsigned>        _Fnlin;
   //! @brief subset of equality-constrained functions
   std::set<unsigned>        _Fctreq;
   
@@ -326,12 +330,13 @@ public:
     //! @brief Constructor
     Options():
       CPMAX(20), CPTHRES(1e-10),
-      INVBNDGS(false), INVKEEPLIN(false), REDELIM(false),
+      DISCRELIM(false), INVBNDGS(false), INVKEEPLIN(false), REDELIM(false),
       QUADOPTIM(false), PSDQUADCUTS(0), DCQUADCUTS(false), 
       NCOCUTS(false), NCOADIFF(FSA), TIMELIMIT(6e2), DISPLEVEL(1),
       SELIM(), SLIFT(), SQUAD(), SRED(), AEBND()
-      { SLIFT.LIFTDIV          = 1;
+      { SLIFT.LIFTDIV          = 0;
         SLIFT.LIFTIPOW         = 0;
+        SLIFT.KEEPFACT         = 1;
         SELIM.MIPDISPLEVEL     = 0;
         SELIM.MIPTIMELIMIT     = TIMELIMIT;
         SQUAD.BASIS            = t_quad::Options::MONOM;
@@ -350,6 +355,7 @@ public:
     Options& operator= ( Options const& opt ){
         CPMAX         = opt.CPMAX;
         CPTHRES       = opt.CPTHRES;
+        DISCRELIM     = opt.DISCRELIM;
         INVBNDGS      = opt.INVBNDGS;
         INVKEEPLIN    = opt.INVKEEPLIN;
         REDELIM       = opt.REDELIM;
@@ -376,6 +382,8 @@ public:
     unsigned CPMAX;
     //! @brief Threshold for repeating constraint propagation (minimum relative reduction in any variable)
     double CPTHRES;
+    //! @brief Whether to exclude discrete (binary/integer) variables from the elimination search
+    bool DISCRELIM;
     //! @brief Whether to bound eliminated variables and check invertibility using interval Gauss-Siedel method
     bool INVBNDGS;
     //! @brief Whether to keep auxiliary linear variables for enforcing eliminated variable bounds
@@ -489,6 +497,12 @@ public:
     ()
     const
     { return _Xbnd; }
+
+  //! @brief Get vector of function bounds
+  std::vector<T> const& function_bounds
+    ()
+    const
+    { return _Fbnd; }
 
   //! @brief Update variable and function bounds
   bool update_bounds
@@ -718,6 +732,7 @@ MINLPREF<T,ExtOps...>::setup
   // Identify variable and function sets and create subgraphs
   _Xobj.set( _dag );
   _Xlift.clear();
+  _Xelim.clear();
   _set_dependencies();
   _set_variable_class();
   _set_function_class();
@@ -865,17 +880,18 @@ MINLPREF<T,ExtOps...>::_set_function_class
   _Fquad.clear();
   _Fpol.clear();
   _Fgal.clear();
+  _Fnlin.clear();
   _Fctreq.clear();
  
   _pbclass = FFDep::L;
   for( unsigned j=0; j<_nF; j++ ){
     auto depworst = _Fdep[j].worst();
     switch( depworst ){
-     case FFDep::L: _Flin.insert( j );  break;
-     case FFDep::Q: _Fquad.insert( j ); break;
-     case FFDep::P: _Fpol.insert( j );  break;
+     case FFDep::L: _Flin.insert( j );                      break;
+     case FFDep::Q: _Fquad.insert( j ); _Fnlin.insert( j ); break;
+     case FFDep::P: _Fpol.insert( j );  _Fnlin.insert( j ); break;
      case FFDep::R:
-     case FFDep::N: _Fgal.insert( j );  break;
+     case FFDep::N: _Fgal.insert( j );  _Fnlin.insert( j ); break;
     }
     if( _pbclass < depworst ) _pbclass = depworst;
     if( j && _Flow[j] == 0. && _Fupp[j] == 0. ) _Fctreq.insert( j );
@@ -911,14 +927,29 @@ MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
 ( bool const add2dag, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
-  if( _Fgal.empty() ) return false;
+  //if( _Fgal.empty() ) return false;
+  if( _Fnlin.empty() ) return false;
   _update_options(); // virtual function
 
   _SLenv.set( _dag );
   _SLenv.options = options.SLIFT;
   if( options.DISPLEVEL )
     os << "# LIFTING POLYNOMIAL SUBEXPRESSIONS" << std::endl;
-  _SLenv.process( _Fgal, _Fvar.data(), true );
+#ifdef MC__MINLPREF_DEBUG_LIFT
+    std::cout << std::endl << _Fnlin.size() << " NONLINEAR CONSTRAINT" << (_Fnlin.size()>1?"S:":":") << std::endl;
+    auto sgExpr = _dag->subgraph( _Fnlin, _Fvar.data() );
+    std::vector<double> Xval( _Xvar.size(), 0.5 ), Fval( _Fvar.size() );
+    _dag->eval( sgExpr, _Fnlin, _Fvar.data(), Fval.data(), _Xvar.size(), _Xvar.data(), Xval.data() );
+    auto vExpr  = FFExpr::subgraph( _dag, sgExpr );
+    auto jt = _Fnlin.cbegin();
+    for( auto const& expr : vExpr ){
+      assert( jt != _Fnlin.cend() );
+      std::cout << Fval[*jt] << " = " << expr << std::endl;
+      ++jt;
+    }
+#endif
+  _SLenv.process( _Fnlin, _Fvar.data(), true );
+  //_SLenv.process( _Fgal, _Fvar.data(), true );
 #ifdef MC__MINLPREF_DEBUG_LIFT
   { std::cout << _SLenv << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
@@ -926,20 +957,33 @@ MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
 
   // update lifted constraints
   std::map<FFVar const*, unsigned, lt_FFVar> Frem;
-  assert( _Fgal.size() == _SLenv.Dep().size() );
-  auto itgal = _Fgal.begin();
+  assert( _Fnlin.size() == _SLenv.Dep().size() );
+  auto it = _Fnlin.begin();
+  //assert( _Fgal.size() == _SLenv.Dep().size() );
+  //auto itgal = _Fgal.begin();
   for( auto const& expr : _SLenv.Dep() ){
     // Earmark constraint if expression matches a variable
-    if( *itgal && expr.opdef().first->type == FFOp::VAR )
-      Frem[&expr] = *itgal;
+    if( *it && expr.opdef().first->type == FFOp::VAR )
+      Frem[&expr] = *it;
     else
-      _Fvar[*itgal] = expr;
+      _Fvar[*it] = expr;
       // Do not modify lower and upper constraint range
-    ++itgal;
+    ++it;
   }
   
   // append auxiliary variables
+#ifdef MC__MINLPREF_DEBUG_LIFT
+    std::cout << std::endl << _SLenv.Aux().size() << " AUXILIARY VARIABLE" << (_SLenv.Aux().size()>1?"S:":":") << std::endl;
+#endif
   for( auto const& [pAux,pVar] : _SLenv.Aux() ){
+#ifdef MC__MINLPREF_DEBUG_LIFT
+    double Xliftval;
+    _dag->eval( 1, pAux, &Xliftval, _Xvar.size(), _Xvar.data(), Xval.data() );
+    Xval.push_back( Xliftval );
+    auto sgAux = _dag->subgraph( 1, pAux );
+    auto vAux  = FFExpr::subgraph( _dag, sgAux );
+    std::cout << Xval.back() << " = " << *pVar << " = " << vAux[0] << std::endl;
+#endif
     _Xlift[_Xvar.size()] = *pAux; // <- stores original DAG expression
     _Xvar.push_back( *pVar );
     auto itVar = Frem.find( pVar );
@@ -949,6 +993,12 @@ MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
     //_Xbnd.push_back( T( _Xlow.back(), _Xupp.back() ) );
     _Xtyp.push_back( 0 );
   }
+#ifdef MC__MINLPREF_DEBUG_LIFT
+    std::cout << std::endl << _SLenv.Dep().size() << " NONLINEAR LIFTED CONSTRAINT" << (_SLenv.Dep().size()>1?"S:":":") << std::endl;
+    _dag->eval( _SLenv.Dep().size(), _SLenv.Dep().data(), Fval.data(), _Xvar.size(), _Xvar.data(), Xval.data() );
+    for( unsigned i=0; i<_SLenv.Dep().size(); ++i )
+      std::cout << _SLenv.Dep()[i] << " = " << Fval[i] << std::endl;
+#endif
 
   // eliminate lifted constraints that correspond to new lifted variables
   //std::cout << "#lifted constraints corresponding to new lifted variables: " << Frem.size() << std::endl;
@@ -1361,7 +1411,7 @@ MINLPREF<T,ExtOps...>::update_bounds
   else
     for( unsigned i=nX0; i<_nX; i++ ) _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
   for( unsigned i=0; i<_nX0; i++ )
-    if( X && !Op<T>::inter( _Xbnd[i], X[i], _Xbnd[i] ) ) return false;
+    if( X && !_Xelim.count(i) && !Op<T>::inter( _Xbnd[i], X[i], _Xbnd[i] ) ) return false;
   
   // Update subgraphs 
   _set_subgraph( os );
@@ -1466,11 +1516,17 @@ MINLPREF<T,ExtOps...>::_search_invertible_constraints
 ( std::ostream& os )
 {
   if( _Fctreq.empty() ) return;
+  
+  // Set negative weight to discrete variable to prevent their elimination
+  std::map<FFVar const*,double,lt_FFVar> wVar;
+  if( !options.DISCRELIM )
+    for( unsigned i=0; i<_nX; ++i )
+      if( _Xtyp[i] > 0 ) wVar[&_Xvar[i]] = -1.;
 
   _SEenv.set( _dag );
   _SEenv.options = options.SELIM;
   _SEenv.options.MIPTIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime( _tstart ) );
-  _SEenv.process( _Fctreq, _Fvar.data() );//, true );
+  _SEenv.process( _Fctreq, _Fvar.data(), wVar );//, true );
 #ifdef MC__MINLPREF_DEBUG_ELIM
   { std::cout << _SEenv << "PAUSED, ENTER <1> TO CONTINUE "; int dum; std::cin >> dum; }
 #endif
@@ -1564,7 +1620,7 @@ MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
 
   if( options.DISPLEVEL )
     os << "# ELIMINATING INVERTIBLE CONSTRAINTS" << std::endl;
-  std::set<unsigned> Xelim, Fremain;
+  std::set<unsigned> Fremain;
   for( unsigned j=0; j<_nF; ++j ) Fremain.insert( j );
 
   // Bound dependent variables of invertible equality constraints using Gauss-Siedel interval methods
@@ -1606,7 +1662,7 @@ MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
         _Flow[j] = _Xlow[i];
         _Fupp[j] = _Xupp[i];
         _Fbnd[j] = T( _Xlow[i], _Xupp[i] );
-        Xelim.insert( i ); // Mark var i for elimination
+        _Xelim.insert( i ); // Earmark var i as eliminated
       }
       Fremain.insert( j ); // Reinsert j
 #ifdef MC__MINLPREF_DEBUG_ELIM
@@ -1638,12 +1694,13 @@ MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
 #endif
     ++itFvar; ++itFlow; ++itFupp; ++itFbnd;
   }
-
+/*
   // erase unused variables and corresponding bounds
   auto itXvar = _Xvar.begin();
   auto itXlow = _Xlow.begin();
   auto itXupp = _Xupp.begin();
   auto itXbnd = _Xbnd.begin();
+  auto itXtyp = _Xtyp.begin();
   for( unsigned i=0; i<_nX; ++i ){
     if( Xelim.count( i ) ){
 #ifdef MC__MINLPREF_DEBUG_ELIM
@@ -1653,26 +1710,28 @@ MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
       itXlow = _Xlow.erase( itXlow ); 
       itXupp = _Xupp.erase( itXupp );
       itXbnd = _Xbnd.erase( itXbnd );
+      itXtyp = _Xtyp.erase( itXtyp );
       continue;
     }
 #ifdef MC__MINLPREF_DEBUG_ELIM
     std::cout << "KEEPING VARIABLE " << *itXvar << " IN [" << *itXlow << "," << *itXupp << "]" << std::endl;
 #endif
-    ++itXvar; ++itXlow; ++itXupp; ++itXbnd;
+    ++itXvar; ++itXlow; ++itXupp; ++itXbnd; ++itXtyp;
   }
-
+*/
   // update variable and function size and type
   _sgupdt = true;
   _update_model();
   if( options.DISPLEVEL ) _display_model( os );
 
 #ifdef MC__MINLPREF_DEBUG_ELIM
-  for( unsigned i=0; i<_nX; ++i )
+  for( unsigned i=0; i<_nX; ++i ){
+    if( _Xelim.count( i ) ) continue;
     std::cout << "VARIABLE " << _Xvar[i] << " IN [" << _Xlow[i] << "," << _Xupp[i] << "]" << std::endl;
+  }
   for( unsigned j=0; j<_nF; ++j )
     std::cout << "CONSTRAINT " << _Fvar[j] << " IN [" << _Flow[j] << "," << _Fupp[j] << "]" << std::endl;
 #endif
-
 
   return true;
 }
@@ -1858,6 +1917,10 @@ MINLPREF<T,ExtOps...>::export_model
   //    GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
   //}
   for( unsigned i=0; i<_nX0; i++ ){
+    if( _Xelim.count( i ) ) continue;
+#ifdef MC__MINLPREF_DEBUG_EXPORT
+    std::cout << "MINLPREF::export_model ** Adding original variable " << _Xvar[i] << std::endl;
+#endif
     GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], Xstart? &Xstart[i]: nullptr );
     //std::cout << _Xvar[i] << " in " << _Xbnd[i] << std::endl;
 #ifdef MC__MINLPREF_DEBUG_INITIALS
@@ -1866,6 +1929,9 @@ MINLPREF<T,ExtOps...>::export_model
   }
   unsigned j=0; 
   for( auto const& [i,Fi] : _Xlift ){
+#ifdef MC__MINLPREF_DEBUG_EXPORT
+    std::cout << "MINLPREF::export_model ** Adding lifted variable " << _Xvar[i] << std::endl;
+#endif
     if( !Xstart )
       GMS.add_variable( _Xvar[i], _Xtyp[i], &_Xbnd[i], nullptr );
     else{

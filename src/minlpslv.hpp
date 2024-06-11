@@ -101,7 +101,11 @@ The return value of mc::MINLPSLV::optimize is per the enumeration mc::MINLPSLV::
 #include "interval.hpp"
 #include "spoly.hpp"
 #include "gamsio.hpp"
-#include "nlpslv_snopt.hpp"
+#ifdef MC__USE_SNOPT
+  #include "nlpslv_snopt.hpp"
+#elif  MC__USE_IPOPT
+  #include "nlpslv_ipopt.hpp"
+#endif
 #include "mipslv_gurobi.hpp"
 #include "sbbslv.hpp"
 
@@ -116,7 +120,11 @@ namespace mc
 //! at: \ref page_MINLPSLV
 ////////////////////////////////////////////////////////////////////////
 template <typename T=Interval,
+#ifdef MC__USE_SNOPT
           typename NLP=NLPSLV_SNOPT<>,
+#elif  MC__USE_IPOPT
+          typename NLP=NLPSLV_IPOPT<>,
+#endif
           typename MIP=MIPSLV_GUROBI<T>,
           typename... ExtOps>
 class MINLPSLV
@@ -133,6 +141,7 @@ public:
 
   using BASE_NLP<ExtOps...>::dag;
   using BASE_NLP<ExtOps...>::set_dag;
+  using BASE_NLP<ExtOps...>::reset;
   
   using BASE_NLP<ExtOps...>::par;
   using BASE_NLP<ExtOps...>::set_par;
@@ -148,6 +157,7 @@ public:
   using BASE_NLP<ExtOps...>::set;
   using BASE_NLP<ExtOps...>::set_obj;
   using BASE_NLP<ExtOps...>::add_ctr;
+  using BASE_NLP<ExtOps...>::reset_ctr;
 
   typedef void (*ROUND)( unsigned const, unsigned const*, double* );
 
@@ -999,7 +1009,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
       _iGfun.push_back( iF );
       _jGvar.push_back( std::get<2>(_Fgrad)[k] );
       _Gvar.push_back( std::get<3>(_Fgrad)[k] );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
+#ifdef MC__MINLPSLV_DEBUG
       std::cout << "  _Gvar[" << iF << "," << std::get<2>(_Fgrad)[k] << "] = " 
                 << std::get<3>(_Fgrad)[k] << std::endl;
 #endif
@@ -1013,7 +1023,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
           if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
           _jGvar.push_back( iX );
-#ifdef MC__NLPSLV_SNOPT_DEBUG
+#ifdef MC__MINLPSLV_DEBUG
           std::cout << "  _Gvar[" << iF << "," << iX << "]" << std::endl;
 #endif
         }
@@ -1401,7 +1411,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
   try{
     switch( options.NLPSLV.GRADMETH ){
       // Compute backward numeric derivative
-      case NLPSLV_SNOPT<ExtOps...>::Options::BAD:
+      case NLP::Options::BAD:
         _BXval.resize( _nX );
         // Initialize participating variables in fadbad::B<double>
         for( unsigned iX=0; iX<_nX; ++iX )
@@ -1422,7 +1432,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
         break;
           
       // Compute forward numeric derivative
-      case NLPSLV_SNOPT<ExtOps...>::Options::FAD:
+      case NLP::Options::FAD:
         _FXval.resize( _nX );
         // Initialize participating variables in fadbad::F<double>
         for( unsigned iX=0; iX<_nX; ++iX ){
@@ -1451,8 +1461,8 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
         break;
 
       // Compute symbolic derivative
-      case NLPSLV_SNOPT<ExtOps...>::Options::BSYM:
-      case NLPSLV_SNOPT<ExtOps...>::Options::FSYM:
+      case NLP::Options::BSYM:
+      case NLP::Options::FSYM:
         _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data() );
 #ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
         for( unsigned ie=0; ie<_nG; ie++ )

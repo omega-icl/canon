@@ -349,6 +349,7 @@ GAMSWRITER<T,ExtOps...>::add_variable
 ( FFVar const& Var, unsigned type, T const* Bnd, double const* l )
 {
   auto itv = _GAMSdagvar.find( const_cast<FFVar*>(&Var) );
+  //std::cout << "ADDING VARIABLE " << Var << std::endl;
   if( itv != _GAMSdagvar.end() )
     throw std::runtime_error("GAMSWRITER - Error: Cannot redefine DAG variable");
   _GAMSdagvar[&Var] = std::make_tuple( type, Bnd, l );

@@ -5,8 +5,8 @@ GAMSEXPORT    =
 PRESOLVE      = 1
 # Presolve wall-time limit in seconds
 PRETIMELIMIT  = 72e2
-# Reformulation level - 0: none; 1: lifting of polynomial subexpressions; 2: same as 1 plus quadratization
-REFORM        = 2
+# Reformulation level - 0: none; 1: lifting of polynomial subexpressions preserving factorization; 2: same as 1 plus quadratization; 3: same as 1 without preserving factorization; 4: same as 3 plus quadratization
+REFORM        = 4
 # Convergence absolute tolerance
 CVATOL        = 1e-5
 # Convergence relative tolerance
@@ -106,6 +106,10 @@ MIPFUNCMAXVAL    = 1e6
 MIPPWLRELGAP     = 1e-5
 # Fraction of time spent in MIP heuristics during main iteration
 MIPHEURISTICS    = 5e-2
+# Control balance between finding feasible solutions and proving optimality during main iteration - 0: balance; 1: attention on feasibility; 2-3: increasing attention on optimality
+MIPFOCUS         = 0
+# Control of redundant constraints to describe a factored out quadratic term added by MIP solver during main iteration - 0: disabled; 1: enabled
+MIPQCPEQFACTOR   = 1
 # Control of numerical issues by MIP solver during main iteration - 0: automatic; 1-3: increasing numeric focus
 MIPNUMERIC       = 0
 # Control of model scaling by MIP solver during main iteration - -1: automatic; 0: no scaling; 1-3: increasing scaling

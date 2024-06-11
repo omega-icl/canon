@@ -464,8 +464,10 @@ public:
     const
     {
       assert( nRes == 1 );
-      //std::cout << "FFSum::eval: fadbad::F<T>\n";
+      //std::cout << "FFSum::eval: fadbad::F<double>\n";
       static std::vector<double> vVarVal( nVar );
+      if( vVarVal.size() < nVar ) vVarVal.resize( nVar );
+      //std::cout << "nVar: " << nVar << "  " << vVarVal.size() << std::endl;
       for( unsigned i=0; i<nVar; ++i )
         vVarVal[i] = vVar[i].val();
       static double vResVal;
@@ -703,10 +705,11 @@ int main()
 #elif  MC__USE_IPOPT
   doe.options.NLPSLV.DISPLEVEL        = 0;
   doe.options.NLPSLV.MAXITER          = 100;
-  doe.options.NLPSLV.FEASTOL          = 1e-8;
-  doe.options.NLPSLV.OPTIMTOL         = 1e-8;
+  doe.options.NLPSLV.FEASTOL          = 1e-7;
+  doe.options.NLPSLV.OPTIMTOL         = 1e-7;
   doe.options.NLPSLV.GRADMETH         = NLP::Options::FAD;
-  //doe.options.NLPSLV.GRADCHECK        = 0;
+  doe.options.NLPSLV.HESSMETH         = NLP::Options::LBFGS;
+  doe.options.NLPSLV.GRADCHECK        = 0;
   doe.options.NLPSLV.MAXTHREAD        = 0;
 #endif
 #ifdef MC__USE_GUROBI
