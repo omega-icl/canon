@@ -8,6 +8,11 @@
 #undef  MC__DEBUG__BASE_MBDOE
 
 #include <assert.h>
+
+#include <boost/random/sobol.hpp>
+#include <boost/random/uniform_01.hpp>
+#include <boost/random/variate_generator.hpp>
+
 #include "ffunc.hpp"
 #include "odeslvs_cvodes.hpp"
 
@@ -30,13 +35,13 @@ protected:
   mc::ODESLVS_CVODES<ExtOps...>* _ivpode;
 
   //! @brief Size of model output
-  unsigned _ny;
+  size_t _ny;
 
   //! @brief Size of model parameter
-  unsigned _np;
+  size_t _np;
 
   //! @brief Size of experimental control
-  unsigned _nc;
+  size_t _nc;
 
   //! @brief vector of model outputs
   std::vector<FFVar> _vOUT;
@@ -76,116 +81,150 @@ public:
     {}
 
   //! @brief Get pointer to DAG
-  FFGraph<ExtOps...>* dag()
+  FFGraph<ExtOps...> const& dag()
     const
-    { return _dag; }
+    { return *_dag; }
 
   //! @brief Set pointer to DAG
   void set_dag
-    ( FFGraph<ExtOps...>* dag )
-    { assert( dag );
-      _dag = dag; }
+    ( FFGraph<ExtOps...>& dag )
+    { _dag = &dag; }
 
   //! @brief Get number of model outputs
-  unsigned ny
+  size_t ny
     ()
     const
     { return _ny; }
 
   //! @brief Get number of experimental controls
-  unsigned nc
+  size_t nc
     ()
     const
     { return _nc; }
 
   //! @brief Get number of model parameters
-  unsigned np
+  size_t np
     ()
     const
     { return _np; }
 
   //! @brief Set model outputs
   void set_model
-    ( unsigned const ny, FFVar const* Y, double const* varY=nullptr )
+    ( std::vector<FFVar> const& Y, std::vector<double> const& varY=std::vector<double>() )
     {
-      assert( ny && Y );
-      _ny = ny;
-      _vOUT.assign( Y, Y+ny );
-      if( varY ) _vOUTVAR.assign( varY, varY+ny );
+      assert( !Y.empty() );
+      _ny = Y.size();
+      _vOUT = Y;
+      _vOUTVAR = varY;
       _ivpode = nullptr;
     }
 
   //! @brief Set model outputs
   void set_model
-    ( mc::ODESLVS_CVODES<ExtOps...>* ivpode, double const* varY=nullptr )
+    ( mc::ODESLVS_CVODES<ExtOps...>& ivpode, std::vector<double> const& varY=std::vector<double>() )
     {
-      assert( ivpode );
-      _ivpode = ivpode;
-      _dag = ivpode->dag();
-      if( varY ) _vOUTVAR.assign( varY, varY+ivpode->nf() );
+      _ivpode = &ivpode;
+      _dag = ivpode.dag();
+      _vOUTVAR = varY;
       _ny = 0;
       _vOUT.clear();
     }
 
   //! @brief Set nominal model parameters
   void set_parameters
-    ( unsigned const np, FFVar const* P, double const* valP, double const* scaP=nullptr )
+    ( std::vector<FFVar> const& P, std::vector<double> const& valP,
+      std::vector<double> const& scaP=std::vector<double>() )
     {
-      assert( np && P && valP );
-      _np = np;
-      _vPAR.assign( P, P+np );
+      assert( !P.empty() && valP.size() == P.size() );
+      _np   = P.size();
+      _vPAR = P;
       _vPARVAL.clear();
-      _vPARVAL.push_back( std::vector<double>( valP, valP+np ) );
+      _vPARVAL.push_back( valP );
       _vPARWEI.assign( 1, 1. );
-      if( scaP ) _vPARSCA.assign( scaP, scaP+np );
-      else       _vPARSCA.clear();
+
+      assert( scaP.empty() || scaP.size() == _np );
+      _vPARSCA = scaP;
     }
 
   //! @brief Set list of model parameters
   void set_parameters
-    ( unsigned const np, FFVar const* P, std::list<double const*> const& l_valP, double const* scaP=nullptr )
+    ( std::vector<FFVar> const& P, std::list<std::vector<double>> const& l_valP,
+      std::vector<double> const& scaP=std::vector<double>() )
     {
-      assert( np && P && !l_valP.empty() );
-      _np = np;
-      _vPAR.assign( P, P+np );
+      assert( !P.empty() && !l_valP.empty() );
+      _np   = P.size();
+      _vPAR = P;
       _vPARVAL.clear();
-      for( auto const& valP : l_valP )
-        _vPARVAL.push_back( std::vector<double>( valP, valP+np ) );
+      for( auto const& valP : l_valP ){
+        assert( valP.size() == _np );
+        _vPARVAL.push_back( valP );
+      }
       _vPARWEI.assign( _vPARVAL.size(), 1/(double)l_valP.size() ); // equal frequencies
-      if( scaP ) _vPARSCA.assign( scaP, scaP+np );
-      else       _vPARSCA.clear();
+
+      assert( scaP.empty() || scaP.size() == _np );
+      _vPARSCA = scaP;
     }
 
   //! @brief Set list of model parameters
   void set_parameters
-    ( unsigned const np, FFVar const* P, std::list<std::pair<double const*,double>> const& l_valP, double const* scaP=nullptr )
+    ( std::vector<FFVar> const& P, std::list<std::pair<std::vector<double>,double>> const& l_valP,
+      std::vector<double> const& scaP=std::vector<double>() )
     {
-      assert( np && P && !l_valP.empty() );
-      _np = np;
-      _vPAR.assign( P, P+np );
-      _vPARVAL.clear();
+      assert( !P.empty() && !l_valP.empty() );
+      _np   = P.size();
+      _vPAR = P;
+
       _vPARWEI.clear();
       double prTot = 0.;
-      for( auto const& [valP,prP] : l_valP )
-        prTot += prP;
       for( auto const& [valP,prP] : l_valP ){
-        _vPARVAL.push_back( std::vector<double>( valP, valP+np ) );
+        assert( prP > 0 );
+        prTot += prP;
+      }
+
+      _vPARVAL.clear();
+      for( auto const& [valP,prP] : l_valP ){
+        assert( valP.size() == _np );
+        _vPARVAL.push_back( valP );
         _vPARWEI.push_back( prP/prTot );
       }
-      if( scaP ) _vPARSCA.assign( scaP, scaP+np );
-      else       _vPARSCA.clear();
+
+      assert( scaP.empty() || scaP.size() == _np );
+      _vPARSCA = scaP;
     }
 
   //! @brief Set experimental controls
   void set_controls
-    ( const unsigned nc, const FFVar*C, const double*CLB, const double*CUB )
+    ( std::vector<FFVar> const& C, std::vector<double> const& CLB, std::vector<double> const& CUB )
     {
-      assert( nc && C && CLB && CUB );
-      _nc = nc;
-      _vCON.assign( C, C+nc );
-      _vCONLB.assign( CLB, CLB+nc );
-      _vCONUB.assign( CUB, CUB+nc );
+      assert( !C.empty() && CLB.size() == C.size() && CUB.size() == C.size() );
+      _nc     = C.size();
+      _vCON   = C;
+      _vCONLB = CLB;
+      _vCONUB = CUB;
     }
+
+  //! @brief Set uniform sample within bounds
+  static std::list<std::vector<double>> uniform_sample
+    ( size_t NSAM, std::vector<double> const& LB, std::vector<double> const& UB )
+    {
+      assert( NSAM && LB.size() && LB.size() == UB.size() );
+      size_t NDIM = LB.size();
+
+      typedef boost::random::sobol_engine< boost::uint_least64_t, 64u > sobol64;
+      typedef boost::variate_generator< sobol64, boost::uniform_01< double > > qrgen;
+      sobol64 eng( NDIM );
+      qrgen gen( eng, boost::uniform_01<double>() );
+      gen.engine().seed( 0 );
+
+      std::list<std::vector<double>> LSAM;
+      for( size_t s=0; s<NSAM; ++s ){
+        LSAM.push_back( std::vector<double>( NDIM ) );
+        for( size_t k=0; k<NDIM; k++ )
+          LSAM.back()[k] = LB[k] + ( UB[k] - LB[k] ) * gen();
+      }
+      
+      return LSAM;
+   }
 
 protected:
   //! @brief Private methods to block default compiler methods

@@ -46,10 +46,6 @@
 
 #include "minlpslv.hpp"
 
-#include <boost/random/sobol.hpp>
-#include <boost/random/uniform_01.hpp>
-#include <boost/random/variate_generator.hpp>
-
 #include "base_mbdoe.hpp"
 
 
@@ -1847,7 +1843,7 @@ private:
   std::vector< std::vector< arma::mat > > _vFIMSAM;
 
   //! @brief local copy of IVP-ODE time variable
-  FFVar* _pT;
+  std::vector<FFVar> _vT;
 
   //! @brief local copy of IVP-ODE state variable
   std::vector<FFVar> _vX;
@@ -1856,16 +1852,16 @@ private:
   std::vector<FFVar> _vQ;
 
   //! @brief local copy of IVP-ODE differential equations
-  std::vector<FFVar const*> _vDE;
+  std::vector<std::vector<FFVar>> _vDE;
 
   //! @brief local copy of IVP-ODE initial conditions
-  std::vector<FFVar const*> _vIC;
+  std::vector<std::vector<FFVar>> _vIC;
 
   //! @brief local copy of IVP-ODE quadrature equations
-  std::vector<FFVar const*> _vQUAD;
+  std::vector<std::vector<FFVar>> _vQUAD;
 
   //! @brief local copy of IVP-ODE state functions
-  std::vector<FFVar const*> _vFCT;
+  std::vector<std::vector<FFVar>> _vFCT;
 
 public:
   /** @defgroup MBDOESLV Model-based Design of Experiments using MC++
@@ -1875,20 +1871,12 @@ public:
   //! @brief Constructor
   MBDOESLV()
     : _dag(nullptr), _ivpode(nullptr), _dagdoe(nullptr),
-      _pT(nullptr), _VOpt(0./0.)
+      _VOpt(0./0.)
     {}
 
   //! @brief Destructor
   virtual ~MBDOESLV()
     {
-      //_cleanup_grad();
-      //_worker.clear();
-      delete   _pT;
-      for( auto& de : _vDE   )  delete[] de;
-      for( auto& ic : _vIC   )  delete[] ic;
-      for( auto& q  : _vQUAD )  delete[] q;
-      for( auto& f  : _vFCT  )  delete[] f;
-
       delete   _dag;
       delete   _dagdoe;
       delete   _ivpode;
@@ -2029,7 +2017,8 @@ public:
 
   //! @brief Evaluate performance of experimental campaign
   std::pair<double,bool> evaluate_design
-    ( std::multimap<double,std::vector<double>> const& Campaign, std::ostream& os=std::cout );
+    ( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type="",
+      std::ostream& os=std::cout );
 
   //! @brief Generate FIM samples for <a>NSAM</a> initial supports
   bool sample_supports
@@ -2127,11 +2116,11 @@ protected:
 
   //! @brief Evaluate Bayesian risk of experimental campaign
   std::pair<double,bool> _evaluate_design_br
-    ( std::multimap<double,std::vector<double>> const& Campaign, std::ostream& os );
+    ( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type, std::ostream& os );
 
   //! @brief Evaluate FIM-based criterion of experimental campaign
   std::pair<double,bool> _evaluate_design_fim
-    ( std::multimap<double,std::vector<double>> const& Campaign, std::ostream& os );
+    ( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type, std::ostream& os );
 
   //! @brief Solve effort-based exact experiment design with <a>NEXP</a> supports to minimize Bayesian risk
   void _effort_minimize_br
@@ -2317,73 +2306,69 @@ MBDOESLV<ExtOps...>::_setup_ivp_out
 
   _vCON.resize( _nc );
   _dag->insert( BASE_MBDOE<ExtOps...>::_dag, _nc, BASE_MBDOE<ExtOps...>::_vCON.data(), _vCON.data() );
-  _ivpode->set_parameter( _nc, _vCON.data() );
+  _ivpode->set_parameter( _vCON );
 
-  unsigned ns = IVP.nsmax();
-  delete _pT; _pT = nullptr;
-  if( IVP.time() ){
-    _pT = new FFVar;
-    _dag->insert( IVP.dag(), 1, IVP.time(), _pT );
+//  unsigned ns = IVP.nsmax();
+  _vT.clear();
+  if( IVP.var_time() ){
+    _vT.resize( 1 );
+    _dag->insert( IVP.dag(), 1, IVP.var_time(), _vT.data() );
   }
-  _ivpode->set_time( ns, IVP.stage(), _pT );
+  _ivpode->set_time( IVP.val_stage(), _vT.data() );
 
   unsigned nx = IVP.nx();
   _vX.resize( nx ); // states and state sensitivities wrt parameters
-  _dag->insert( IVP.dag(), nx, IVP.state(), _vX.data() );
-  _ivpode->set_state( nx, _vX.data() );
+  _dag->insert( IVP.dag(), nx, IVP.var_state().data(), _vX.data() );
+  _ivpode->set_state( _vX );
 
-  for( auto& de : _vDE )  delete[] de;
   _vDE.clear();
-  _vDE.reserve( IVP.get_differential().size() );
-  for( auto const& de0 : IVP.get_differential() ){
-    FFVar* de = new FFVar[nx];
-    _dag->insert( IVP.dag(), nx, de0, de );
+  _vDE.reserve( IVP.eqn_differential().size() );
+  for( auto const& de0 : IVP.eqn_differential() ){
+    std::vector<FFVar> de( nx );
+    _dag->insert( IVP.dag(), nx, de0.data(), de.data() );
     _vDE.push_back( de );
 #ifdef MC__MBDOE_SETUP_DEBUG
-    FFSubgraph sgDE = _dag->subgraph( nx, _vDE.back() );
+    FFSubgraph sgDE = _dag->subgraph( nx, _vDE.back().data() );
     std::vector<FFExpr> exprDE = FFExpr::subgraph( _dag, sgDE ); 
     for( unsigned j=0; j<nx; ++j )
         std::cout << "DE[" << _vDE.size()-1 << "][" << j << "] = " << exprDE[j] << std::endl;
 #endif
   }
-  _ivpode->set_differential( nx, _vDE );
+  _ivpode->set_differential( _vDE );
 
   assert( IVP.nx0() == nx );
-  for( auto& ic : _vIC )  delete[] ic;
   _vIC.clear();
-  _vIC.reserve( IVP.get_initial().size() );
-  for( auto const& ic0 : IVP.get_initial() ){
-    FFVar* ic = new FFVar[nx];
-    _dag->insert( IVP.dag(), nx, ic0, ic );
+  _vIC.reserve( IVP.eqn_initial().size() );
+  for( auto const& ic0 : IVP.eqn_initial() ){
+    std::vector<FFVar> ic( nx );
+    _dag->insert( IVP.dag(), nx, ic0.data(), ic.data() );
     _vIC.push_back( ic );
   }
-  _ivpode->set_initial( nx, _vIC );
+  _ivpode->set_initial( _vIC );
 
   unsigned nq = IVP.nq();
-  for( auto& quad : _vQUAD )  delete[] quad;
   _vQUAD.clear();
   _vQ.resize( nq );
   if( nq ){
-    _dag->insert( IVP.dag(), nq, IVP.quadrature(), _vQ.data() );
-    _vQUAD.reserve( IVP.get_quadrature().size() );
-    for( auto const& quad0 : IVP.get_quadrature() ){
-      FFVar* quad = new FFVar[nq];
-      _dag->insert( IVP.dag(), nq, quad0, quad );
+    _dag->insert( IVP.dag(), nq, IVP.var_quadrature().data(), _vQ.data() );
+    _vQUAD.reserve( IVP.eqn_quadrature().size() );
+    for( auto const& quad0 : IVP.eqn_quadrature() ){
+      std::vector<FFVar> quad( nq );
+      _dag->insert( IVP.dag(), nq, quad0.data(), quad.data() );
       _vQUAD.push_back( quad );
     }
-    _ivpode->set_quadrature( nq, _vQUAD, _vQ.data() );
+    _ivpode->set_quadrature( _vQUAD, _vQ );
   }
 
   unsigned nf = IVP.nf();
-  for( auto& f : _vFCT )  delete[] f;
   _vFCT.clear();
-  _vFCT.reserve( IVP.get_function().size() );
-  for( auto const& fct0 : IVP.get_function() ){
-    FFVar* fct = new FFVar[nf];
-    _dag->insert( IVP.dag(), nf, fct0, fct );
+  _vFCT.reserve( IVP.eqn_function().size() );
+  for( auto const& fct0 : IVP.eqn_function() ){
+    std::vector<FFVar> fct( nf );
+    _dag->insert( IVP.dag(), nf, fct0.data(), fct.data() );
     _vFCT.push_back( fct );
   }
-  _ivpode->set_function( nf, _vFCT );
+  _ivpode->set_function( _vFCT );
   _dOUT.resize( nf );
 }
 
@@ -2408,111 +2393,106 @@ MBDOESLV<ExtOps...>::_setup_ivp_fim
 
   _vCON.resize( _nc );
   _dag->insert( BASE_MBDOE<ExtOps...>::_dag, _nc, BASE_MBDOE<ExtOps...>::_vCON.data(), _vCON.data() );
-  _ivpode->set_parameter( _nc, _vCON.data() );
+  _ivpode->set_parameter( _vCON );
 
   // Stages and stage times
-  unsigned ns = IVP.nsmax();
-  delete _pT; _pT = nullptr;
-  if( IVP.time() ){
-    _pT = new FFVar;
-    _dag->insert( IVP.dag(), 1, IVP.time(), _pT );
+//  unsigned ns = IVP.nsmax();
+  _vT.clear();
+  if( IVP.var_time() ){
+    _vT.resize( 1 );
+    _dag->insert( IVP.dag(), 1, IVP.var_time(), _vT.data() );
   }
-  _ivpode->set_time( ns, IVP.stage(), _pT );
+  _ivpode->set_time( IVP.val_stage(), _vT.data() );
 
   // States and differential equations
   unsigned nx = IVP.nx();
   _vX.resize( nx*(1+_np) ); // states and state sensitivities wrt parameters
-  _dag->insert( IVP.dag(), nx, IVP.state(), _vX.data() );
+  _dag->insert( IVP.dag(), nx, IVP.var_state().data(), _vX.data() );
   for( unsigned i=nx; i<nx*(1+_np); ++i ) _vX[i].set( _dag );
-  _ivpode->set_state( nx*(1+_np), _vX.data() );
+  _ivpode->set_state( _vX );
 
-  for( auto& de : _vDE )  delete[] de;
   _vDE.clear();
-  _vDE.reserve( IVP.get_differential().size() );
-  for( auto const& de0 : IVP.get_differential() ){
-    //IVP.dag()->output( IVP.dag()->subgraph( nx, de0 ) );
-    FFVar* de = new FFVar[nx*(1+_np)];
-    _dag->insert( IVP.dag(), nx, de0, de );
+  _vDE.reserve( IVP.eqn_differential().size() );
+  for( auto const& de0 : IVP.eqn_differential() ){
+    std::vector<FFVar> de( nx*(1+_np) );
+    _dag->insert( IVP.dag(), nx, de0.data(), de.data() );
     for( unsigned i=0; i<_np; ++i ){
-      mc::FFVar* de_i = _dag->DFAD( nx, de, nx, _vX.data(), _vX.data()+nx*(1+i), 1, _vPAR.data()+i, &One );
+      mc::FFVar* de_i = _dag->DFAD( nx, de.data(), nx, _vX.data(), _vX.data()+nx*(1+i), 1, _vPAR.data()+i, &One );
       for( unsigned j=0; j<nx; ++j ) de[nx*(1+i)+j] = de_i[j];
       delete[] de_i;
     }
     _vDE.push_back( de );   
 #ifdef MC__MBDOE_SETUP_DEBUG
-    FFSubgraph sgDE = _dag->subgraph( nx*(1+_np), _vDE.back() );
+    FFSubgraph sgDE = _dag->subgraph( nx*(1+_np), _vDE.back().data() );
     std::vector<FFExpr> exprDE = FFExpr::subgraph( _dag, sgDE ); 
     for( unsigned i=0, ij=0; i<_np+1; ++i )
       for( unsigned j=0; j<nx; ++j, ++ij )
         std::cout << "DE[" << _vDE.size()-1 << "][" << i << "][" << j << "] = " << exprDE[ij] << std::endl;
 #endif
   }
-  _ivpode->set_differential( nx*(1+_np), _vDE );
+  _ivpode->set_differential( _vDE );
 
   // Initial conditions
   assert( IVP.nx0() == nx );
-  for( auto& ic : _vIC )  delete[] ic;
   _vIC.clear();
-  _vIC.reserve( IVP.get_initial().size() );
-  for( auto const& ic0 : IVP.get_initial() ){
-    FFVar* ic = new FFVar[nx*(1+_np)];
-    _dag->insert( IVP.dag(), nx, ic0, ic );
+  _vIC.reserve( IVP.eqn_initial().size() );
+  for( auto const& ic0 : IVP.eqn_initial() ){
+    std::vector<FFVar> ic( nx*(1+_np) );
+    _dag->insert( IVP.dag(), nx, ic0.data(), ic.data() );
     for( unsigned i=0; i<_np; ++i ){
-      mc::FFVar* ic_i = _dag->DFAD( nx, ic, 1, _vPAR.data()+i, &One );
+      mc::FFVar* ic_i = _dag->DFAD( nx, ic.data(), 1, _vPAR.data()+i, &One );
       for( unsigned j=0; j<nx; ++j ) ic[nx*(1+i)+j] = ic_i[j];
       delete[] ic_i;
     }
     _vIC.push_back( ic );
 #ifdef MC__MBDOE_SETUP_DEBUG
-    FFSubgraph sgIC = _dag->subgraph( nx*(1+_np), _vIC.back() );
+    FFSubgraph sgIC = _dag->subgraph( nx*(1+_np), _vIC.back().data() );
     std::vector<FFExpr> exprIC = FFExpr::subgraph( _dag, sgIC ); 
     for( unsigned i=0, ij=0; i<_np+1; ++i )
       for( unsigned j=0; j<nx; ++j, ++ij )
         std::cout << "IC[" << _vIC.size()-1 << "][" << i << "][" << j << "] = " << exprIC[ij] << std::endl;
 #endif
   }
-  _ivpode->set_initial( nx*(1+_np), _vIC );
+  _ivpode->set_initial( _vIC );
 
   // Quadrature variables and expressions
   unsigned nq = IVP.nq();
   _vQ.resize( nq*(1+_np) );
-  for( auto& quad : _vQUAD )  delete[] quad;
   _vQUAD.clear();
   if( nq ){
-    _dag->insert( IVP.dag(), nq, IVP.quadrature(), _vQ.data() );
-    _vQUAD.reserve( IVP.get_quadrature().size() );
-    for( auto const& quad0 : IVP.get_quadrature() ){
-      FFVar* quad = new FFVar[nq*(1+_np)];
-      _dag->insert( IVP.dag(), nq, quad0, quad );
+    _dag->insert( IVP.dag(), nq, IVP.var_quadrature().data(), _vQ.data() );
+    _vQUAD.reserve( IVP.eqn_quadrature().size() );
+    for( auto const& quad0 : IVP.eqn_quadrature() ){
+      std::vector<FFVar> quad( nq*(1+_np) );
+      _dag->insert( IVP.dag(), nq, quad0.data(), quad.data() );
       for( unsigned i=0; i<_np; ++i ){
-        mc::FFVar* quad_i = _dag->DFAD( nq, quad, nx, _vX.data(), _vX.data()+nx*(1+i), 1, _vPAR.data()+i, &One );
+        mc::FFVar* quad_i = _dag->DFAD( nq, quad.data(), nx, _vX.data(), _vX.data()+nx*(1+i), 1, _vPAR.data()+i, &One );
         for( unsigned j=0; j<nq; ++j ) quad[nq*(1+i)+j] = quad_i[j];
         delete[] quad_i;
       }
       _vQUAD.push_back( quad );
 #ifdef MC__MBDOE_SETUP_DEBUG
-      FFSubgraph sgQUAD = _dag->subgraph( nq*(1+_np), _vQUAD.back() );
+      FFSubgraph sgQUAD = _dag->subgraph( nq*(1+_np), _vQUAD.back().data() );
       std::vector<FFExpr> exprQUAD = FFExpr::subgraph( _dag, sgQUAD ); 
       for( unsigned i=0, ij=0; i<_np+1; ++i )
         for( unsigned j=0; j<nq; ++j, ++ij )
           std::cout << "QUAD[" << _vQUAD.size()-1 << "][" << i << "][" << j << "] = " << exprQUAD[ij] << std::endl;
 #endif
     }
-    _ivpode->set_quadrature( nq*(1+_np), _vQUAD, _vQ.data() );
+    _ivpode->set_quadrature( _vQUAD, _vQ );
   }
 
   // State functions
   unsigned nf = IVP.nf();
-  for( auto& f : _vFCT )  delete[] f;
   _vFCT.clear();
-  _vFCT.reserve( IVP.get_function().size() );
-  for( auto const& fct0 : IVP.get_function() ){
-    FFVar* fct = new FFVar[nf];
-    _dag->insert( IVP.dag(), nf, fct0, fct );
+  _vFCT.reserve( IVP.eqn_function().size() );
+  for( auto const& fct0 : IVP.eqn_function() ){
+    std::vector<FFVar> fct( nf );
+    _dag->insert( IVP.dag(), nf, fct0.data(), fct.data() );
     std::vector< FFVar* > fct_p( _np );
     for( unsigned i=0; i<_np; ++i )
-      fct_p[i] = _dag->DFAD( nf, fct, nx, _vX.data(), _vX.data()+nx*(1+i), 1, _vPAR.data()+i, &One );
-    FFVar* fim = new FFVar[_np*(_np+1)/2];
+      fct_p[i] = _dag->DFAD( nf, fct.data(), nx, _vX.data(), _vX.data()+nx*(1+i), 1, _vPAR.data()+i, &One );
+    std::vector<FFVar> fim( _np*(_np+1)/2 );
     for( unsigned k=0; k<nf; k++ )
       for( unsigned i=0, ij=0; i<_np; ++i )
         for( unsigned j=i; j<_np; ++j, ++ij ){
@@ -2529,18 +2509,17 @@ MBDOESLV<ExtOps...>::_setup_ivp_fim
               fim[ij] += fct_p[i][k] * fct_p[j][k];
           }
         }
-    delete[] fct;
     for( auto& fct_i : fct_p ) delete[] fct_i;
     _vFCT.push_back( fim );
 #ifdef MC__MBDOE_SETUP_DEBUG
-    FFSubgraph sgFCT = _dag->subgraph( _np*(1+_np)/2, _vFCT.back() );
+    FFSubgraph sgFCT = _dag->subgraph( _np*(1+_np)/2, _vFCT.back().data() );
     std::vector<FFExpr> exprFCT = FFExpr::subgraph( _dag, sgFCT ); 
     for( unsigned i=0, ij=0; i<_np; ++i )
       for( unsigned j=i; j<_np; ++j, ++ij )
         std::cout << "FCT[" << _vFCT.size()-1 << "][" << i << "][" << j << "] = " << exprFCT[ij] << std::endl;
 #endif
   }
-  _ivpode->set_function( _np*(_np+1)/2, _vFCT );
+  _ivpode->set_function( _vFCT );
   _dFIM.resize( _np*(_np+1)/2 );
 }
 
@@ -2633,7 +2612,9 @@ MBDOESLV<ExtOps...>::_append_out
     catch(...){ return false; }
 
   else if( _ivpode )
-    try{ _ivpode->states( Control, nullptr, _dOUT.data() ); }
+    try{ _ivpode->solve_state( Control ); 
+         _dOUT = _ivpode->val_function(); }
+//    try{ _ivpode->states( Control, nullptr, _dOUT.data() ); }
     catch(...){ return false; }
 
   else
@@ -2691,7 +2672,9 @@ MBDOESLV<ExtOps...>::_append_fim
     catch(...){ return false; }
 
   else if( _ivpode )
-    try{ _ivpode->states( Control, nullptr, _dFIM.data() ); }
+    try{ _ivpode->solve_state( Control ); 
+         _dFIM = _ivpode->val_function(); }
+    //try{ _ivpode->states( Control, nullptr, _dFIM.data() ); }
     catch(...){ return false; }
 
   else
@@ -2829,7 +2812,7 @@ MBDOESLV<ExtOps...>::file_export
 {
   auto itPARVAL = _vPARVAL.cbegin();
   for( unsigned s=0; s<_vPARVAL.size(); ++s, ++itPARVAL ){
-    std::ofstream ofile( name + "_" + std::to_string(s) + ".txt" );
+    std::ofstream ofile( name + "_" + std::to_string(s) + ".log" );
     if( !ofile ) return false;
     
     ofile << std::scientific << std::setprecision(6);
@@ -3278,18 +3261,18 @@ template <typename... ExtOps>
 inline
 std::pair<double,bool>
 MBDOESLV<ExtOps...>::evaluate_design
-( std::multimap<double,std::vector<double>> const& Campaign, std::ostream& os )
+( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type, std::ostream& os )
 {
   // Observation samples
   switch( options.CRITERION ){
     case DOEBase::BROPT:
-      return _evaluate_design_br( Campaign, os );
+      return _evaluate_design_br( Campaign, type, os );
 
     case DOEBase::AOPT:
     case DOEBase::DOPT:
     case DOEBase::EOPT:
     default:
-      return _evaluate_design_fim( Campaign, os );
+      return _evaluate_design_fim( Campaign, type, os );
   }
 }
 
@@ -3297,7 +3280,7 @@ template <typename... ExtOps>
 inline
 std::pair<double,bool>
 MBDOESLV<ExtOps...>::_evaluate_design_br
-( std::multimap<double,std::vector<double>> const& Campaign, std::ostream& os )
+( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type, std::ostream& os )
 {
   delete _dagdoe; _dagdoe = new DAGDOE;
   mc::FFSum<6> Sum;
@@ -3329,17 +3312,18 @@ MBDOESLV<ExtOps...>::_evaluate_design_br
   // Evaluate cost function
   FFVar FBR = Sum( NELE, BRCRIT.data(), WCRIT.data() );
   double DBR;
+  std::string header = ( type.empty()? "DESIGN PERFORMANCE": type + " DESIGN PERFORMANCE" );
   try{
     _dagdoe->eval( 1, &FBR, &DBR, NCTOT, CTOT.data(), CTOT0.data() );
   }
   catch(...){
     if( options.DISPLEVEL )
-      _display_design( "DESIGN PERFORMANCE", DBR, std::multimap<double,std::vector<double>>(), os ); 
+      _display_design( header, DBR, std::multimap<double,std::vector<double>>(), os ); 
     return std::make_pair( 0./0., false ); // NaN
   }
 
   if( options.DISPLEVEL )
-    _display_design( "DESIGN PERFORMANCE", DBR, Campaign, os ); 
+    _display_design( header, DBR, Campaign, os ); 
   return std::make_pair( DBR, true );
 }
 
@@ -3347,7 +3331,7 @@ template <typename... ExtOps>
 inline
 std::pair<double,bool>
 MBDOESLV<ExtOps...>::_evaluate_design_fim
-( std::multimap<double,std::vector<double>> const& Campaign, std::ostream& os )
+( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type, std::ostream& os )
 {
   delete _dagdoe; _dagdoe = new DAGDOE;
   DOEBase::type = options.CRITERION;
@@ -3392,6 +3376,7 @@ MBDOESLV<ExtOps...>::_evaluate_design_fim
   // Evaluate cost function
   FFVar FFIM;
   double DFIM;
+  std::string header = ( type.empty()? "DESIGN PERFORMANCE": type + " DESIGN PERFORMANCE" );
   try{
     switch( options.RISK){
       case Options::NEUTRAL:
@@ -3412,25 +3397,25 @@ MBDOESLV<ExtOps...>::_evaluate_design_fim
           if( prsum + pr > options.CVARTHRES ) break;
           prsum += pr;
         }
-        std::cout << "VaR = " << VaR << std::endl;
+        //std::cout << "VaR = " << VaR << std::endl;
         DFIM = VaR;
         for( auto const& [crit,pr] : SA ){
           if( crit > VaR ) break;
           DFIM -= ( VaR - crit ) * pr / options.CVARTHRES;
         }
-        std::cout << "CVaR = " << DFIM << std::endl;
+        //std::cout << "CVaR = " << DFIM << std::endl;
         break;
       }
     }
   }
   catch(...){
     if( options.DISPLEVEL )
-      _display_design( "DESIGN PERFORMANCE", DFIM, std::multimap<double,std::vector<double>>(), os ); 
+      _display_design( header, DFIM, std::multimap<double,std::vector<double>>(), os ); 
     return std::make_pair( 0./0., false ); // NaN
   }
 
   if( options.DISPLEVEL )
-    _display_design( "DESIGN PERFORMANCE", DFIM, Campaign, os ); 
+    _display_design( header, DFIM, Campaign, os ); 
   return std::make_pair( DFIM, true );
 }
 

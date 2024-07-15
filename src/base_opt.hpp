@@ -102,6 +102,7 @@ struct SOLUTION_OPT
   std::vector<double> uf;
 };
 
+inline
 std::ostream&
 operator<<
 ( std::ostream& out, SOLUTION_OPT const& sol )

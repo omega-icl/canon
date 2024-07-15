@@ -1,32 +1,29 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
 PATH_CANON = $(shell cd ../.. ; pwd)
-LIB_CANON = -larmadillo #-L$(PATH_CANON)/lib -Wl,-rpath=$(PATH_CANON)/lib -lcanon
-INC_CANON = -I$(PATH_CANON)/include
-
 include $(PATH_CANON)/src/makeoptions.mk
 
 LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-main : main.o gmomcc.o gevmcc.o optcc.o palmcc.o
-	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@ $(LDFLAGS)
-
 doxydoc : doxydoc.o
-	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
+
+main : main.o gmomcc.o gevmcc.o optcc.o palmcc.o
+	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@ $(LDFLAGS)
 
 doe : doe.o
-	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
 
 doe% : doe%.o
-	$(CPP) $(PROF) $^ $(LIB_CANON) $(LIB_DEP) -o $@
+	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
 
 %.o : %.cpp
-	$(CPP) -c $(FLAG_CPP) $(INC_CANON) $(INC_DEP) $< -o $@
+	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
 
 %.o : %.c
-	$(CPP) -c $(FLAG_CPP) $(INC_CRONOS) $(INC_DEP) $< -o $@
+	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
 
 %.c : $(PATH_GAMS)/apifiles/C/api/%.c
 	cp $< $@

@@ -326,11 +326,14 @@ public:
     { _vartyp.assign( _vartyp.size(), typ ); }
 
   //! @brief Get constraints
-  std::tuple< std::vector<t_CTR>, std::vector<FFVar>, std::vector<FFVar>, std::vector<bool> > const& ctr() const
+  std::tuple< std::vector<t_CTR>, std::vector<FFVar>, std::vector<FFVar>, std::vector<bool> > const& ctr
+    ()
+    const
     { return _ctr; }
 
   //! @brief Reset constraints
-  void reset_ctr()
+  void reset_ctr
+    ()
     { std::get<0>(_ctr).clear(); std::get<1>(_ctr).clear(); std::get<2>(_ctr).clear(); std::get<3>(_ctr).clear(); }
 
   //! @brief Add constraint
@@ -342,7 +345,9 @@ public:
       std::get<3>(_ctr).push_back( is_redundant ); }
 
   //! @brief Get objective
-  std::tuple< std::vector<t_OBJ>, std::vector<FFVar>, std::vector<FFVar> > const& obj() const
+  std::tuple< std::vector<t_OBJ>, std::vector<FFVar>, std::vector<FFVar> > const& obj
+    ()
+    const
     { return _obj; }
 
   //! @brief Set objective
@@ -358,7 +363,8 @@ public:
     }
     
   //! @brief Reset objective
-  void reset_obj()
+  void reset_obj
+    ()
     { std::get<0>(_obj).clear(); std::get<1>(_obj).clear(); std::get<2>(_obj).clear(); }
 
   //! @brief Copy equations

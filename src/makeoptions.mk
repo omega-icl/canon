@@ -1,18 +1,12 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp30 ; pwd)
-#echo mcpp path is $(PATH_MC);
-include $(PATH_MC)/src/makeoptions.mk
+#PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp30 ; pwd)
+#include $(PATH_MC)/src/makeoptions.mk
 
-PATH_CRONOS = $(shell cd $(HOME)/Programs/bitbucket/cronos ; pwd)
-LIB_CRONOS   = 
-INC_CRONOS   = -I$(PATH_CRONOS)/include
-FLAG_CRONOS  = -DMC__USE_SOBOL
+PATH_CRONOS    = $(shell cd $(HOME)/Programs/bitbucket/cronos; pwd)
+include $(PATH_CRONOS)/src/makeoptions.mk
 
-PATH_SUNDIALS = /opt/sundials-6.7.0
-LIB_SUNDIALS = #-L$(PATH_SUNDIALS)/lib -lsundials_cvodes -lsundials_nvecserial -llapack -lblas
-INC_SUNDIALS = #-I$(PATH_SUNDIALS)/include
-FLAG_SUNDIALS =
+PATH_CANON    = $(shell cd $(HOME)/Programs/bitbucket/canon30; pwd)
 
 PATH_CLI =
 LIB_CLI  = -lboost_program_options
@@ -52,25 +46,24 @@ LIB_GAMS  =
 INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"
 
-FLAG_DEP = -fPIC $(FLAG_MC) $(FLAG_CRONOS) $(FLAG_SUNDIALS) $(FLAG_CLI) $(FLAG_SOBOL) $(FLAG_NLP) $(FLAG_MIP) $(FLAG_GAMS)
-LIB_DEP  = $(LIB_MC) $(LIB_CRONOS) $(LIB_SUNDIALS) $(LIB_CLI) $(LIB_SOBOL) $(LIB_NLP) $(LIB_MIP) $(LIB_GAMS)
-INC_DEP  = $(INC_MC) $(INC_CRONOS) $(INC_SUNDIALS) $(INC_CLI) $(INC_SOBOL) $(INC_NLP) $(INC_MIP) $(INC_GAMS)
-
 # COMPILATION <<-- CHANGE AS APPROPRIATE -->>
 
+PROF = #-pg
+OPTIM = -O2
 DEBUG = #-g
-PROF = -pg
-OPTIM = -O2 #-Ofast
-WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-unused-result
+WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-parentheses -Wno-unused-result
 CPP17 = -std=c++17
+CC    = gcc-13
+CPP   = g++-13
+# CPP   = icpc
 
-CC  = gcc-13
-CPP = g++-13
-# CPP = icpc
-FLAG_CPP = $(DEBUG) $(PROF) $(OPTIM) $(CPP17) $(WARN) $(FLAG_DEP) 
+# <<-- NO CHANGE BEYOND THIS POINT -->>
 
-LINK = $(CPP)
-FLAG_LINK = 
+FLAG_CPP  = $(DEBUG) $(OPTIM) $(CPP17) $(WARN) $(PROF)
+LINK      = $(CPP)
+FLAG_LINK = $(PROF)
 
-#LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
+FLAG_CANON = $(FLAG_CRONOS) $(FLAG_CLI) $(FLAG_SOBOL) $(FLAG_NLP) $(FLAG_MIP) $(FLAG_GAMS)
+LIB_CANON  = $(LIB_CRONOS) $(LIB_CLI) $(LIB_SOBOL) $(LIB_NLP) $(LIB_MIP) $(LIB_GAMS)
+INC_CANON  = -I$(PATH_CANON)/src $(INC_CRONOS) $(INC_CLI) $(INC_SOBOL) $(INC_NLP) $(INC_MIP) $(INC_GAMS)
 

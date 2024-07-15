@@ -18,17 +18,16 @@ int main()
 
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
 
-  const unsigned NP = 2;       // Number of estimated parameters
   const unsigned NX = 1;       // Number of experimental controls
-  const unsigned NY = 1;       // Number of outputs
-
-  mc::FFVar X[NX];  // Controls
+  std::vector<mc::FFVar> X(NX);  // Controls
   for( unsigned int i=0; i<NX; i++ ) X[i].set( &DAG );
 
-  mc::FFVar P[NP];  // Parameters
+  const unsigned NP = 2;       // Number of estimated parameters
+  std::vector<mc::FFVar> P(NP);  // Parameters
   for( unsigned int i=0; i<NP; i++ ) P[i].set( &DAG );
 
-  mc::FFVar Y[NY];  // Outputs
+  const unsigned NY = 1;       // Number of outputs
+  std::vector<mc::FFVar> Y(NY);  // Outputs
   Y[0] = P[0] * exp( P[1] * X[0] );
 
   /////////////////////////////////////////////////////////////////////////
@@ -36,32 +35,17 @@ int main()
 
   // Sampled parameters - uniform Sobol' sampling
   unsigned const NSAM = 21;
-  double PLB[NP] = { 1e0, -1e1 };
-  double PUB[NP] = { 1e1,  0e0 };
-  //double PSCA[NP] = { 1e0, 1e0 };
-  double PSCA[NP] = { std::fabs( PUB[0]-PLB[0]), std::fabs( PUB[1]-PLB[1]) };
-
-  typedef boost::random::sobol_engine< boost::uint_least64_t, 64u > sobol64;
-  typedef boost::variate_generator< sobol64, boost::uniform_01< double > > qrgen;
-  sobol64 engP( NP );
-  qrgen genP( engP, boost::uniform_01<double>() );
-  genP.engine().seed( 0 );
-
-  std::vector< std::vector< double > > v_PSAM( NSAM );
-  std::list< double const* > l_PSAM;
-  for( unsigned s=0; s<NSAM; ++s ){
-    v_PSAM[s].resize( NP );
-    for( unsigned k=0; k<NP; k++ )
-      v_PSAM[s][k] = PLB[k] + ( PUB[k] - PLB[k] ) * genP();
-    l_PSAM.push_back( v_PSAM[s].data() );
-  }
+  std::vector<double> PLB( { 1e0, -1e1 } );
+  std::vector<double> PUB( { 1e1,  0e0 } );
+  //std::vector<double> PSCA( { 1e0, 1e0 } );
+  std::vector<double> PSCA( { std::fabs( PUB[0]-PLB[0]), std::fabs( PUB[1]-PLB[1]) } );
 
   // Experimental control space
-  double XLB[NX] = { 0e0  };
-  double XUB[NX] = { 5e-1 };
+  std::vector<double> XLB( { 0e0  } );
+  std::vector<double> XUB( { 5e-1 } );
 
   // Output variance
-  double YVAR[NY] = { 1e0 };
+  std::vector<double> YVAR( { 1e0 } );
 
   mc::MBDOESLV DOE;
   DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
@@ -74,10 +58,10 @@ int main()
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 1;
-  DOE.set_dag( &DAG );
-  DOE.set_model( NY, Y, YVAR );
-  DOE.set_controls( NX, X, XLB, XUB );
-  DOE.set_parameters( NP, P, l_PSAM, PSCA );
+  DOE.set_dag( DAG );
+  DOE.set_model( Y, YVAR );
+  DOE.set_controls( X, XLB, XUB );
+  DOE.set_parameters( P, DOE.uniform_sample( NSAM, PLB, PUB ), PSCA );
   DOE.setup();
   DOE.sample_supports( 50 );
   DOE.combined_solve( 5 );

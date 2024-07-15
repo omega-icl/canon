@@ -1,4 +1,5 @@
-#undef SAVE_RESULTS		// <- Whether to save bounds to file
+#define SAVE_RESULTS		// <- Whether to save bounds to file
+#define MC__MBDOE_SHOW_APPORTION
 //#define MC__MBDOE_SETUP_DEBUG
 //#define MC__MBDOE_SAMPLE_DEBUG
 
@@ -13,55 +14,57 @@ int main()
 
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
 
-  size_t const NS = 8;       // Time stages
-  size_t const NK = 4;       // Number of estimated parameters
-  size_t const NC = NS/2+1;//NS+1;  // Number of experimental controls
-  size_t const NX = 3;       // Number of states
-  size_t const NY = 2;       // Number of outputs
-
+  const size_t NS = 5;  // Time stages
   std::vector<double> tk( NS+1 );
   tk[0] = 0.;
-  for( size_t k=0; k<NS; k++ ) tk[k+1] = tk[k] + 2.5e1; // [min]
+  for( size_t k=0; k<NS; k++ ) tk[k+1] = tk[k] + 2e0; // [hour]
 
+  const size_t NC = 3;  // Number of experimental controls
   std::vector<mc::FFVar> C( NC );  // Controls
   for( size_t i=0; i<NC; i++ ) C[i].set( &DAG );
-  mc::FFVar& T     = C[NS/2];//C[NS];
+  C[0].set("u1");
+  C[1].set("u2");
+  C[2].set("y10");
+  mc::FFVar& u1  = C[0];
+  mc::FFVar& u2  = C[1];
+  mc::FFVar& y10 = C[2];
 
-  std::vector<mc::FFVar> K( NK );  // Parameters
-  for( size_t i=0; i<NK; i++ ) K[i].set( &DAG );
-  mc::FFVar& nu    = K[0];
-  mc::FFVar& alpha = K[1];
-  mc::FFVar& K0    = K[2];
-  mc::FFVar& K1    = K[3];
-  double CAin = 10;     // [mol/L]
-  double CA0  = 5;      // [mol/L]
-  double Tref = 273.15; // [K]
-  double eps  = 1e-5;      // [mol/L]
+  const size_t NP = 4;  // Number of estimated parameters
+  std::vector<mc::FFVar> P( NP );  // Parameters
+  for( size_t i=0; i<NP; i++ ) P[i].set( &DAG );
+  P[0].set("p1");
+  P[1].set("p2");
+  P[2].set("p3");
+  P[3].set("p4");
+  mc::FFVar& p1 = P[0]; // max growth rate
+  mc::FFVar& p2 = P[1]; // half-saturation constant
+  mc::FFVar& p3 = P[2]; // proudct yield
+  mc::FFVar& p4 = P[3]; // respiration rate
 
+  const size_t NX = 2;  // Number of states
   std::vector<mc::FFVar> X( NX );  // States & state sensitivities
   for( size_t i=0; i<NX; i++ ) X[i].set( &DAG );
-  mc::FFVar& CA  = X[0];
-  mc::FFVar& CB  = X[1];
-  mc::FFVar& V   = X[2];
+  X[0].set("y1");
+  X[1].set("y2");
+  mc::FFVar& y1  = X[0]; // biomass
+  mc::FFVar& y2  = X[1]; // substrate
 
-  std::vector<std::vector<mc::FFVar>> RHS( NS, std::vector<mc::FFVar>(NX) );  // Right-hand side function
+  std::vector<mc::FFVar> RHS( NX*NS );  // Right-hand side function
   for( size_t i=0; i<NS; i++ ){
-    mc::FFVar& Qin = C[i/2];//C[i]; // [L/min]
-    mc::FFVar R = exp( K0 + K1 * ( 1 - T / Tref ) ) * ( pow( CA + eps, alpha ) - pow( eps, alpha ) );
-    RHS[i][0]   = Qin / V * ( CAin - CA ) - R;
-    RHS[i][1] = - Qin / V * CB + nu * R;
-    RHS[i][2] = Qin;
+    mc::FFVar r = p1 * y2 / ( p2 + y2 );
+    RHS[NX*i]   = ( r - u1 - p4 ) * y1;
+    RHS[NX*i+1] = -r * y1 / p3 + u1 * ( u2 - y2 );
   }
   
   std::vector<mc::FFVar> IC( NX );   // Initial value function
-  IC[0] = CA0;
-  IC[1] = 0e0;
-  IC[2] = 1e0; // [L]
+  IC[0] = y10; //7e0;
+  IC[1] = 1e-1;
 
+  const size_t NY = 2;  // Number of outputs
   std::vector<std::vector<mc::FFVar>> FCT( NS, std::vector<mc::FFVar>( NY*NS, 0. ) );  // State functions
-  for( unsigned i=0; i<NS; i++ ){
-    FCT[i][NY*i]   = CA;
-    FCT[i][NY*i+1] = CB;
+  for( size_t i=0; i<NS; i++ ){
+    FCT[i][NY*i]   = y1;
+    FCT[i][NY*i+1] = y2;
   }
 
   mc::ODESLVS_CVODES IVP;
@@ -71,8 +74,8 @@ int main()
   IVP.options.FSACORR   = mc::BASE_CVODES::Options::STAGGERED;//STAGGERED1;//SIMULTANEOUS;
   IVP.options.NMAX      = 2000;
   IVP.options.DISPLAY   = 0;
-  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-8;
-  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-8;
+  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-10;
+  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-9;
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
   IVP.options.ASACHKPT  = 2000;
 #if defined( SAVE_RESULTS )
@@ -87,69 +90,69 @@ int main()
   IVP.set_initial( IC );
   IVP.set_function( FCT );
   IVP.setup();
-
+/*
   /////////////////////////////////////////////////////////////////////////
   // Simulate IVP-ODE
-/*
+
   // Nominal model parameters
-  K0.set( -3.1 );
-  K1.set(  2.4 );
-  nu.set(  0.5 );
-  alpha.set( 1.0 );
+  p1.set( 0.31 );
+  p2.set( 0.18 );
+  p3.set( 0.55 );
+  p4.set( 0.05 );
   IVP.setup();
 
-  std::vector<double> dC( { 0.1, 0.0, 0.0, 0.0, 0.0, 323.15 } );
-  IVP.solve_state( dC );
+  double dC[NC] = { 5.000000e-02, 8.915310e+00 };
+  IVP.states( dC );
 #if defined( SAVE_RESULTS )
   std::ofstream direcSTA;
-  direcSTA.open( "test1_STA.dat", std::ios_base::out );
+  direcSTA.open( "test2_STA.dat", std::ios_base::out );
   IVP.record( direcSTA );
 #endif
+
+  return 0;
 */
   /////////////////////////////////////////////////////////////////////////
-  // Perform MBDOE
+  // Define MBDOE
 
   size_t const NEXP = 5;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NKSAM = 200;
-  std::vector<double> KLB(NK), KUB(NK);
-//  KLB[0] =         KUB[0] = 5e-1;    // nu
-//  KLB[1] =         KUB[1] = 1e0;     // alpha
-//  KLB[2] =         KUB[2] = -3.1;  // K0
-//  KLB[3] =         KUB[3] = 2.4;   // K1 
-  KLB[0] =         KUB[0] = 5e-1;    // nu
-  KLB[1] =         KUB[1] = 1e0;     // alpha
-  KLB[2] = -5.866; KUB[2] = -0.543;  // K0
-  KLB[3] = 0.454;  KUB[3] = 4.388;   // K1 
+  size_t const NPSAM = 500;
+  std::vector<double> PLB( NP ), PUB( NP );
+//  PLB[0] =  PUB[0] = 0.31;
+//  PLB[1] =  PUB[1] = 0.18;
+//  PLB[2] =  PUB[2] = 0.55;
+//  PLB[3] =  PUB[3] = 0.05;
+  PLB[0] = 1e-1;  PUB[0] = 1e0;
+  PLB[1] = 5e-2;  PUB[1] = 1e0;
+  PLB[2] = 1e-1;  PUB[2] = 2e0;
+  PLB[3] = 1e-2;  PUB[3] = 2e-1;
 
   // Experimental control space
-  size_t const NCSAM = 500;
-  std::vector<double> CLB(NC), CUB(NC);
-  for( size_t i=0; i<NC-1; ++i ){
-    CLB[i] = 0e0;
-    CUB[i] = 1e-1;    // [L/h]
-  }
-  CLB[NC-1] = 273.15; // [K]
-  CUB[NC-1] = 323.15; // [K]
+  size_t const NCSAM = 100;
+  std::vector<double> CLB( NC ), CUB( NC );
+  CLB[0] = 5e-2;   CUB[0] = 2e-1;
+  CLB[1] = 5e0;    CUB[1] = 35e0;
+  CLB[2] = 1e0;    CUB[2] = 1e1;
 
   // Output variance
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;
+  DOE.options.CRITERION = mc::DOEBase::BROPT;
   DOE.options.RISK      = mc::MBDOESLV<>::Options::NEUTRAL;//AVERSE;//
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
+  DOE.options.MINLPSLV.MAXITER = 100;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
   DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
-  DOE.options.MINLPSLV.NLPSLV.OPTIMTOL  = 1e-6;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
+  DOE.options.NLPSLV.OPTIMTOL  = 2e-5;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 0;
   DOE.set_model( IVP, YVAR );
   DOE.set_controls( C, CLB, CUB );
-  DOE.set_parameters( K, DOE.uniform_sample( NKSAM, KLB, KUB ) );
+  DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) );
 
   // Solve MBDOE
   DOE.setup();
@@ -158,7 +161,7 @@ int main()
   //DOE.effort_solve( NEXP );
   //DOE.gradient_solve( DOE.efforts(), true );
   //DOE.effort_solve( NEXP, DOE.efforts() );
-  //DOE.file_export( "test1" );
+  //DOE.file_export( "test2" );
   auto campaign = DOE.campaign();
 
 /*
@@ -168,18 +171,17 @@ int main()
     campaign.insert( std::make_pair( 1, c ) );
 */
 /*
-  KLB[0] =         KUB[0] = 5e-1;    // nu
-  KLB[1] =         KUB[1] = 1e0;     // alpha
-  KLB[2] = -5.866; KUB[2] = -0.543;  // K0
-  KLB[3] = 0.454;  KUB[3] = 4.388;   // K1 
-  DOE.set_parameters( K, DOE.uniform_sample( 200, KLB, KUB ) );
+  PLB[0] = 1e-1;  PUB[0] = 1e0;
+  PLB[1] = 5e-2;  PUB[1] = 1e0;
+  PLB[2] = 1e-1;  PUB[2] = 2e0;
+  PLB[3] = 1e-2;  PUB[3] = 2e-1;
+  DOE.set_parameters( P, DOE.uniform_sample( 100, PLB, PUB ) );
 */
-
   DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV<>::Options::NEUTRAL;//AVERSE;//
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
- 
+
   DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV<>::Options::AVERSE;//NEUTRAL;//
   DOE.setup();
@@ -195,10 +197,10 @@ int main()
   // Simulate experimental campaign
 
   // Nominal model parameters
-  K0.set( -3.1 );
-  K1.set(  2.4 );
-  nu.set(  0.5 );
-  alpha.set( 1.0 );
+  p1.set( 0.31 );
+  p2.set( 0.18 );
+  p3.set( 0.55 );
+  p4.set( 0.05 );
   IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-10;
   IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-10;
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
@@ -220,10 +222,10 @@ int main()
 
     // Define and solve MLE problem
     mc::FFGraph< mc::FFODE<0>, mc::FFGRADODE<0> > DAGMLE;
-    std::vector<mc::FFVar> KMLE( NK );  // Parameters
-    for( size_t i=0; i<NK; i++ ){
-       KMLE[i].set( &DAGMLE );
-       K[i].unset();
+    std::vector<mc::FFVar> PMLE( NP );  // Parameters
+    for( size_t i=0; i<NP; i++ ){
+       PMLE[i].set( &DAGMLE );
+       P[i].unset();
     }
     mc::FFODE<0> OpODE;
     mc::FFVar FMLE( 0. );
@@ -254,11 +256,11 @@ int main()
         C[i].set( c.second[i] );
         //std::cout << "C[" << i << "] = " << c.second[i] << std::endl;
       }
-      IVP.set_parameter( K );
+      IVP.set_parameter( P );
       IVP.set_function( MLE );
       IVP.setup();
       mc::ODESLVS_CVODES<>* pIVP = &IVP;
-      FMLE += OpODE( 0, NK, KMLE.data(), pIVP );
+      FMLE += OpODE( 0, NP, PMLE.data(), pIVP );
 
       iexp++;
     }
@@ -286,12 +288,12 @@ int main()
 #endif
 
     NLP.set_dag( &DAGMLE );
-    NLP.add_var( NK, KMLE.data(), -1e1, 1e1 );
+    NLP.add_var( NP, PMLE.data(), 1e-2, 1e1 );
     NLP.set_obj( mc::BASE_OPT::MIN, FMLE );
     NLP.setup();
 
-    std::vector<double> KMLE0( { 0.5, 1.0, -3.1, 2.4 } );
-    NLP.solve( KMLE0.data() );
+    std::vector<double> PMLE0( { 0.31, 0.18, 0.55, 0.05 } );
+    NLP.solve( PMLE0.data() );
     //NLP.solve( 100 );
     //std::cout << "NLP LOCAL SOLUTION:\n" << NLP.solution();
     //std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-6 )   << std::endl;
@@ -304,6 +306,6 @@ int main()
       std::cout << "  " << xk;
     std::cout << std::endl;
   }
-  
+
   return 0;
 }

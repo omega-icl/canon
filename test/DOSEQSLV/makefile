@@ -1,14 +1,12 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-PATH_CANON = $(shell cd ../../../.. ; pwd)
+PATH_CANON = $(shell cd ../.. ; pwd)
 include $(PATH_CANON)/src/makeoptions.mk
-
-LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-relu_relu_model_20_20 : relu_relu_model_20_20.o gmomcc.o gevmcc.o optcc.o palmcc.o
-	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@ $(LDFLAGS)
+test% : test%.o gmomcc.o gevmcc.o optcc.o palmcc.o
+	$(CPP) $< $(LIB_CANON) -o $@
 
 %.o : %.cpp
 	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
@@ -22,5 +20,6 @@ relu_relu_model_20_20 : relu_relu_model_20_20.o gmomcc.o gevmcc.o optcc.o palmcc
 #####
 
 clean:
-	rm -f relu_relu_model_20_20 *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *~
+	rm -f test? test?b
+	rm -f *.o *.out *.dat *.eps *.dot *.svg *.log *~
 

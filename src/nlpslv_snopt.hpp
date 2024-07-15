@@ -135,11 +135,13 @@ struct WORKER_BASE
     = 0;
 };
 
-thread_local WORKER_BASE* WORKER_BASE::PTR_WORKER_SNOPT = nullptr;
-thread_local void (WORKER_BASE::*PTR_CBACK_SNOPT)( int*, int*, double*,
+inline thread_local WORKER_BASE* WORKER_BASE::PTR_WORKER_SNOPT = nullptr;
+inline thread_local void (WORKER_BASE::*PTR_CBACK_SNOPT)( int*, int*, double*,
   int*, int*, double*, int*, int*, double*, int* ) = nullptr;
 
-void REG_CBACK_SNOPT
+inline 
+void
+REG_CBACK_SNOPT
 ( WORKER_BASE*th, void (WORKER_BASE::*usr)( int*, int*, double*,
   int*, int*, double*, int*, int*, double*, int* ) )
 {
@@ -150,7 +152,9 @@ void REG_CBACK_SNOPT
   PTR_CBACK_SNOPT  = usr;
 }
 
-void UNREG_CBACK_SNOPT
+inline
+void
+UNREG_CBACK_SNOPT
 ()
 {
 #ifdef MC__NLPSLV_SNOPT_CHECK
@@ -161,7 +165,9 @@ void UNREG_CBACK_SNOPT
 }
 
 extern "C"
-void WRP_CBACK_SNOPT
+inline
+void
+WRP_CBACK_SNOPT
 ( int *Status, int *n, double *x, int *needF, int *neF, double *F, int *needG, int *neG,
   double *G, char *cu, int *lencu, int *iu, int *leniu, double *ru, int *lenru )
 {
@@ -961,7 +967,7 @@ public:
     double QPFEASTOL;
    //! @brief Corresponds to "Minor iterations limit" in snOptA. If the number of minor iterations for the optimality phase of the QP subproblem exceeds this value, then all nonbasic QP variables that have not yet moved are frozen at their current values and the reduced QP is solved to optimality.
     int QPMAXITER;
-    //! @brief Corresponds to "QPSolver" in snOptA, which specifies the method used to solve the QP subproblems: CHOL - Cholesky QP solver; CG - conjugate-gradient QP solver; QN - quasi-Newton QP solver.
+    //! @brief Corresponds to "QPSolver" in snOptA, which specifies the method used to solve the QP subproblems: Cholesky QP solver (CHOL), conjugate-gradient QP solver (CG), quasi-Newton QP solver (QN).
     QP_STRATEGY QPMETH;
     //! @brief Corresponds to "Summary file" in snOptA, which specifies whether (>0) or not (<=0) to generate the summary file.
     int DISPLEVEL;

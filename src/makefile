@@ -6,17 +6,18 @@
 
 export version = 3.0
 
-export rootpath = $(shell cd .. ; pwd)
-export srcpath  = $(rootpath)/src
-export incpath  = $(rootpath)/include
-export binpath  = $(rootpath)/bin
-export libpath  = $(rootpath)/lib
+export rootpath       = $(shell cd .. ; pwd)
+export srcpath        = $(rootpath)/src
+export interfacepath  = $(rootpath)/src/interface
+export incpath        = $(rootpath)/include
+export binpath        = $(rootpath)/bin
+export libpath        = $(rootpath)/lib
 
 #####
 
-install: dirs canon_inst
+install: dirs_create canon_install interface_install
 
-dirs :
+dirs_create :
 	@if test ! -e $(incpath)/; then \
 		echo creating directory for header files; \
 		mkdir $(incpath); \
@@ -25,25 +26,34 @@ dirs :
 		echo creating directory for executables; \
 		mkdir $(binpath); \
 	fi
-#	@if test ! -e $(libpath)/; then \
-#		echo creating directory for compiled libraries; \
-#		mkdir $(libpath); \
-#	fi
+	@if test ! -e $(libpath)/; then \
+		echo creating directory for compiled libraries; \
+		mkdir $(libpath); \
+	fi
 
-canon_inst:
+canon_install:
 	-(cd $(srcpath); make -f canon.mk install)
+
+interface_install:
+	-(cd $(interfacepath); make -f canon.mk install)
 
 #####
 
-clean: canon_clean
+clean: canon_clean interface_clean
 
 canon_clean:
 	-(cd $(srcpath); make -f canon.mk clean)
 
+interface_clean:
+	-(cd $(interfacepath); make -f canon.mk clean)
+
 #####
 
-cleaninstall: canon_cleandist
+cleaninstall: canon_cleandist interface_cleandist
 
 canon_cleandist:
 	-(cd $(srcpath); make -f canon.mk cleandist)
+
+interface_cleandist:
+	-(cd $(interfacepath); make -f canon.mk cleandist)
 

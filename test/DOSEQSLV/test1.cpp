@@ -1,0 +1,132 @@
+#define USE_PROFIL
+#include <fstream>
+#include <iomanip>
+
+#ifdef MC__USE_SNOPT
+  #include "nlpslv_snopt.hpp"
+#elif  MC__USE_IPOPT
+  #include "nlpslv_ipopt.hpp"
+#endif
+
+#include "odeslvs_cvodes.hpp"
+
+////////////////////////////////////////////////////////////////////////
+int main()
+////////////////////////////////////////////////////////////////////////
+{
+  /////////////////////////////////////////////////////////////////////////
+  // Define IVP-ODE
+
+  mc::FFGraph IVPDAG;  // DAG describing the problem
+
+  const unsigned NS = 10;  // Time stages
+  double t0 = 0., tf = 1.;       // Time span
+  std::vector<double> TS( NS+1 );  // Time stages
+  for( unsigned int i=0; i<=NS; i++ ) TS[i] = t0 + i * ( tf - t0 ) / NS; 
+
+  const unsigned NP = NS;  // Number of parameters
+  std::vector<mc::FFVar> P(NP);   // Parameters
+  for( unsigned int i=0; i<NP; i++ ) P[i].set( &IVPDAG );
+
+  const unsigned NX = 1;  // Number of states
+  std::vector<mc::FFVar> X(NX);   // States
+  for( unsigned int i=0; i<NX; i++ ) X[i].set( &IVPDAG );
+
+  std::vector<mc::FFVar> IC(NX);  // Initial value function
+  IC[0] = 1e0;
+
+  std::vector<std::vector<mc::FFVar>> RHS(NS); // Right-hand side function
+  for( unsigned k=0; k<NS; k++ )
+    RHS[k].assign( { P[k] - X[0] } );
+
+  const unsigned NQ = 1;  // Number of state quadratures
+  std::vector<mc::FFVar> Q(NQ);   // State quadratures
+  for( unsigned i=0; i<NQ; i++ ) Q[i].set( &IVPDAG );
+
+  std::vector<std::vector<mc::FFVar>> QUAD(NS); // Quadrature function
+  for( unsigned k=0; k<NS; k++ )
+    QUAD[k].assign( { 0.5 * mc::sqr( P[k] ) } );
+
+  const unsigned NF = 2;  // Number of state functions
+  std::vector<std::vector<mc::FFVar>> FCT(NS);  // State functions
+  for( unsigned k=0; k<NS-1; k++ )
+    FCT[k].assign( { Q[0], 0. } );
+  FCT[NS-1].assign( { Q[0], X[0] } );
+
+
+  mc::ODESLVS_CVODES IVP;
+  
+  IVP.options.INTMETH   = mc::BASE_CVODES::Options::MSBDF;//MSADAMS;//
+  IVP.options.NLINSOL   = mc::BASE_CVODES::Options::FIXEDPOINT;//NEWTON;//
+  IVP.options.LINSOL    = mc::BASE_CVODES::Options::DIAG;//DENSE;//
+  IVP.options.FSACORR   = mc::BASE_CVODES::Options::STAGGERED;//STAGGERED1;//SIMULTANEOUS;
+  IVP.options.NMAX      = 2000;
+  IVP.options.DISPLAY   = 0;
+  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-9;
+  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-8;
+  IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
+  IVP.options.ASACHKPT  = 2000;
+
+  IVP.set_dag( &IVPDAG );
+  IVP.set_time( TS );
+  IVP.set_state( X );
+  IVP.set_parameter( P );
+  IVP.set_differential( RHS );
+  IVP.set_initial( IC );
+  IVP.set_quadrature( QUAD, Q );
+  IVP.set_function( FCT );
+  IVP.setup();
+
+  /////////////////////////////////////////////////////////////////////////
+  // Define DAG
+
+  mc::FFGraph< mc::FFODE<0>, mc::FFGRADODE<0> > DAG;
+
+  std::vector<mc::FFVar> PP(NP);  // Parameters
+  for( unsigned int i=0; i<NP; i++ ) PP[i].set( &DAG );
+
+  mc::FFODE<0> OpODE;
+  mc::ODESLVS_CVODES<>* pIVP = &IVP;
+  std::vector<mc::FFVar> F(NF);
+  for( unsigned int j=0; j<NF; j++ )
+    F[j] = OpODE( j, NP, PP.data(), pIVP );
+  std::cout << DAG;
+
+  //std::vector<double> dP( NP, -1e0 ), dF( NF );
+  //DAG.eval( NF, F, dF.data(), NP, PP, dP.data() ); 
+
+  // Local optimization
+#ifdef MC__USE_SNOPT
+  mc::NLPSLV_SNOPT< mc::FFODE<0>, mc::FFGRADODE<0> > NLP;
+  NLP.options.DISPLEVEL = 1;
+  NLP.options.MAXITER   = 100;
+  NLP.options.FEASTOL   = 1e-6;
+  NLP.options.OPTIMTOL  = 1e-6;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT< mc::FFODE<0>, mc::FFGRADODE<0> >::Options::FSYM;//AD;//SYM;
+  NLP.options.GRADCHECK = true;
+  NLP.options.MAXTHREAD = 12;
+#else
+  mc::NLPSLV_IPOPT< mc::FFODE<0>, mc::FFGRADODE<0> > NLP;
+  NLP.options.DISPLEVEL = 5;
+  NLP.options.MAXITER   = 100;
+  NLP.options.FEASTOL   = 1e-6;
+  NLP.options.OPTIMTOL  = 1e-6;
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT< mc::FFODE<0>, mc::FFGRADODE<0> >::Options::FAD;
+  NLP.options.GRADCHECK = false;
+  NLP.options.MAXTHREAD = 8;
+#endif
+  NLP.set_dag( &DAG );                                          // DAG
+  NLP.add_var( PP, -1e1, 1e1 );                             // decision variables
+  NLP.set_obj( mc::BASE_OPT::MIN, F[0] );   // objective
+  NLP.add_ctr( mc::BASE_OPT::EQ, F[1] );    // constraints
+  NLP.setup();
+
+  std::vector<double> p0( NP, -1e0 );
+  NLP.solve( p0.data() );
+  //NLP.solve( 1000 );
+  std::cout << "NLP LOCAL SOLUTION:\n" << NLP.solution();
+  std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-6 )   << std::endl;
+  std::cout << "STATIONARY: " << NLP.is_stationary( 1e-6 ) << std::endl;
+
+  return 0;
+}

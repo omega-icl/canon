@@ -1124,7 +1124,7 @@ public:
   {
     //! @brief Constructor
     Options():
-      FEASTOL(1e-8), OPTIMTOL(1e-6), MAXITER(100), GRADMETH(FSYM), HESSMETH(LBFGS),
+      FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FSYM), HESSMETH(LBFGS),
       LINMETH(MA57), GRADCHECK(false), DISPLEVEL(0), TIMELIMIT(72e2), MAXTHREAD(0)
       {} 
     //! @brief Assignment operator
@@ -1144,8 +1144,8 @@ public:
       }
     //! @brief Enumeration type for Hessian strategy
     enum HESSIAN_STRATEGY{
-      EXACT=0, 	//!< Use exact second derivatives from AD
-      LBFGS,	//!< Perform a limited-memory quasi-Newton approximation
+      EXACT=0, 	//!< Exact second derivatives from AD
+      LBFGS,	//!< Limited-memory quasi-Newton approximation
     };
     //! @brief Enumeration type for gradient strategy
     enum GRADIENT_STRATEGY{
@@ -1157,14 +1157,14 @@ public:
     };
     //! @brief Enumeration type for gradient strategy
     enum LINEAR_SOLVER{
-      MA27=0,       //!< use the Harwell routine MA27
-      MA57,         //!< use the Harwell routine MA57
-      MA77,         //!< use the Harwell routine HSL_MA77
-      MA86,         //!< use the Harwell routine HSL_MA86
-      MA97,         //!< use the Harwell routine HSL_MA97
-      PARDISO,      //!< use the Pardiso package
-      WSMP,         //!< use WSMP package
-      MUMPS         //!< use MUMPS package
+      MA27=0,       //!< Harwell routine MA27
+      MA57,         //!< Harwell routine MA57
+      MA77,         //!< Harwell routine HSL_MA77
+      MA86,         //!< Harwell routine HSL_MA86
+      MA97,         //!< Harwell routine HSL_MA97
+      PARDISO,      //!< Pardiso package
+      WSMP,         //!< WSMP package
+      MUMPS         //!< MUMPS package
     };
     //! @brief Corresponds to "constr_viol_tol" in Ipopt, which specifies the final accuracy on the constraints
     double FEASTOL;
