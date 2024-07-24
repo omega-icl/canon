@@ -18,18 +18,14 @@
 #include <iomanip>
 #include <armadillo>
 
-#ifdef MC__USE_PROFIL
+#if defined( MC__USE_PROFIL )
  #include "mcprofil.hpp"
+#elif defined( MC__USE_BOOST )
+ #include "mcboost.hpp"
+#elif defined( MC__USE_FILIB )
+ #include "mcfilib.hpp"
 #else
- #ifdef MC__USE_BOOST
-  #include "mcboost.hpp"
- #else
-  #ifdef MC__USE_FILIB
-   #include "mcfilib.hpp"
-  #else
-   #include "interval.hpp"
-  #endif
- #endif
+ #include "interval.hpp"
 #endif
 
 #ifdef MC__USE_GUROBI
@@ -48,6 +44,7 @@
 
 #include "base_mbdoe.hpp"
 
+#define MC__FFBRCRIT_LOG
 
 ////////////////////////////////////////////////////////////////////////
 // EXTERNAL OPERATIONS
@@ -1033,6 +1030,448 @@ const
 ////////////////////////////////////////////////////////////////////////
 
 template<unsigned int ID>
+class FFBRCrit
+: public FFOp,
+  public DOEBase
+{
+public:
+  // Constructors
+  FFBRCrit
+    ()
+    : FFOp( (int)EXTERN )
+    {}
+
+  static size_t nUNC;
+  static size_t nOUT;
+
+  // Declaration
+  FFVar& operator()
+    ( unsigned const nVar, FFVar const* pVar, std::map<unsigned,double>* mEFF,
+      unsigned int nUNC, unsigned int nOUT )
+    const
+    {
+#ifdef MC__FFBRCRIT_CHECK
+      assert( mEFF );
+#endif
+      data = mEFF; // no local copy - make sure mEFF isn't going out of scope!
+      info = ID;
+      this->nUNC = nUNC;
+      this->nOUT = nOUT;
+#ifdef MC__FFBRCRIT_CHECK
+      assert( nVar == mEFF->size()*nUNC*nOUT );
+#endif
+      return **insert_external_operation( *this, 1, nVar, pVar );
+    }
+
+  // Evaluation overloads
+  template< typename T >
+  void eval
+    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+    const
+    {
+      throw std::runtime_error("Error: No generic overload for FFBRCrit\n");
+    }
+
+  void eval
+    ( unsigned const nRes, FFDep* vRes, unsigned const nVar, FFDep const* vVar, unsigned const* mVar )
+    const
+    {
+#ifdef MC__FFBRCRIT_TRACE
+      std::cout << "FFBRCrit::eval: FFDep\n";
+#endif
+      vRes[0] = 0;
+      for( unsigned i=0; i<nVar; ++i ) vRes[0] += vVar[i];
+      vRes[0].update( FFDep::TYPE::N );
+    }
+    
+  void eval
+    ( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+    const;
+
+  void eval
+    ( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+      unsigned const* mVar )
+    const;
+    
+  void eval
+    ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+    const;
+
+  void eval
+    ( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
+      unsigned const* mVar )
+    const;
+
+  void deriv
+    ( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
+    const;
+
+  // Properties
+  std::string name
+    ()
+    const
+    { 
+      switch( DOEBase::type ){
+        case BROPT: return "Bayes Risk";
+        default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+      }
+    }
+
+  //! @brief Return whether or not operation is commutative
+  bool commutative
+    ()
+    const
+    { return false; }
+};
+
+template<unsigned int ID> inline size_t FFBRCrit<ID>::nUNC = 0;
+template<unsigned int ID> inline size_t FFBRCrit<ID>::nOUT = 0;
+
+template<unsigned int ID>
+class FFGradBRCrit
+: public FFOp,
+  public DOEBase
+{
+public:
+  // Constructors
+  FFGradBRCrit
+    ()
+    : FFOp( (int)EXTERN )
+    {}
+
+  static size_t nUNC;
+  static size_t nOUT;
+
+  // Functor
+  FFVar& operator()
+    ( unsigned const idep, unsigned const nVar, FFVar const* pVar, std::map<unsigned,double>* mEFF,
+      unsigned int nUNC, unsigned int nOUT )
+    const
+    {
+#ifdef MC__FFGRADBRCRIT_CHECK
+      assert( mEFF );
+#endif
+      data = mEFF; // no local copy - make sure mEFF isn't going out of scope!
+      info = ID+1;
+      this->nUNC = nUNC;
+      this->nOUT = nOUT;
+#ifdef MC__FFBRCRIT_CHECK
+      assert( nVar == mEFF->size()*nUNC*nOUT );
+#endif
+      return *(insert_external_operation( *this, nVar, nVar, pVar )[idep]);
+    }
+  FFVar** operator()
+    ( unsigned const nVar, FFVar const* pVar, std::map<unsigned,double>* mEFF,
+      unsigned int nUNC, unsigned int nOUT )
+    const
+    {
+#ifdef MC__FFGRADBRCRIT_CHECK
+      assert( mEFF );
+#endif
+      data = mEFF; // no local copy - make sure mEFF isn't going out of scope!
+      info = ID+1;
+      this->nUNC = nUNC;
+      this->nOUT = nOUT;
+#ifdef MC__FFBRCRIT_CHECK
+      assert( nVar == mEFF->size()*nUNC*nOUT );
+#endif
+      return insert_external_operation( *this, nVar, nVar, pVar );
+    }
+
+  // Evaluation overloads
+  template< typename T >
+  void eval
+    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+    const
+    {
+      throw std::runtime_error("Error: No generic overload for FFGradBRCrit\n");
+    }
+
+  void eval
+    ( unsigned const nRes, FFDep* vRes, unsigned const nVar, FFDep const* vVar, unsigned const* mVar )
+    const
+    {
+#ifdef MC__FFGRADBRCRIT_TRACE
+      std::cout << "FFGradBRCrit::eval: FFDep\n";
+#endif
+      vRes[0] = 0;
+      for( unsigned i=0; i<nVar; ++i )
+        vRes[0] += vVar[i];
+      vRes[0].update( FFDep::TYPE::N );
+      for( unsigned j=1; j<nRes; ++j )
+        vRes[j] = vRes[0];
+    }
+
+  void eval
+    ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+    const;
+    
+  void eval
+    ( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+    const;
+
+  // Properties
+  std::string name
+    ()
+    const
+    {
+      switch( DOEBase::type ){
+        case BROPT: return "Grad Bayes Risk";
+        default:    throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+      }
+    }
+  //! @brief Return whether or not operation is commutative
+  bool commutative
+    ()
+    const
+    { return false; }
+};
+
+template<unsigned int ID> inline size_t FFGradBRCrit<ID>::nUNC = 0;
+template<unsigned int ID> inline size_t FFGradBRCrit<ID>::nOUT = 0;
+
+template<unsigned int ID>
+inline void
+FFBRCrit<ID>::eval
+( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFBRCRIT_TRACE
+  std::cout << "FFBRCrit::eval: FFVar\n";
+#endif
+  std::map<unsigned,double>* mEFF = static_cast<std::map<unsigned,double>*>( data );
+#ifdef MC__FFBRCRIT_CHECK
+  assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
+#endif
+
+  vRes[0] = operator()( nVar, vVar, mEFF, nUNC, nOUT );
+}
+
+template<unsigned int ID>
+inline void
+FFGradBRCrit<ID>::eval
+( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFGRADBRCRIT_TRACE
+  std::cout << "FFGradBRCrit::eval: FFVar\n";
+#endif
+  std::map<unsigned,double>* mEFF = static_cast<std::map<unsigned,double>*>( data );
+#ifdef MC__FFBRCRIT_CHECK
+  assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == nVar );
+#endif
+
+  FFVar** ppRes = operator()( nVar, vVar, mEFF, nUNC, nOUT );
+  for( unsigned j=0; j<nRes; ++j )
+    vRes[j] = *(ppRes[j]);
+}
+
+template<unsigned int ID>
+inline void
+FFBRCrit<ID>::eval
+( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFBRCRIT_TRACE
+  std::cout << "FFBRCrit::eval: double\n";
+#endif
+  std::map<unsigned,double>* mEFF = static_cast<std::map<unsigned,double>*>( data );
+#ifdef MC__FFBRCRIT_CHECK
+  assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
+#endif
+
+  vRes[0] = 0.;
+  size_t const inc = mEFF->size()*nOUT;
+  size_t pj = 0;
+  for( unsigned j=0; j<nUNC; ++j, pj+=inc ){
+    size_t pk = pj + inc;
+    for( unsigned k=j+1; k<nUNC; ++k, pk+=inc ){
+      arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      size_t pi = 0;
+      for( auto const& [Id,Eff] : *mEFF ){
+//        std::cout << "y[" << j << "][" << pi << "] = " << arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false );
+//        std::cout << "y[" << k << "][" << pi << "] = " << arma::vec( const_cast<double*>(vVar+pk+pi), nOUT, false );
+        arma::vec const& Eijk = arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false )
+                              - arma::vec( const_cast<double*>(vVar+pk+pi), nOUT, false );
+        if( !sigmayinv.empty() )
+          Et_Vinv_E += Eff * Eijk.t() * sigmayinv * Eijk;
+        else
+          Et_Vinv_E += Eff * Eijk.t() * Eijk;
+        pi += nOUT;
+      }
+      double BRjk = std::exp( -0.125 * Et_Vinv_E(0,0) );
+//      std::cout << "BR[" << j << "," << k << "] = " << BRjk << std::endl; 
+      if( !weighting.empty() ) BRjk *= std::sqrt( weighting(j)*weighting(k) );
+      vRes[0] += BRjk;
+//      std::cout << "vRes[" << j << "," << k << "] = " << vRes[0] << std::endl; 
+    }
+  }
+#ifdef MC__FFBRCRIT_LOG
+  vRes[0] = std::log( vRes[0] );
+#endif
+
+#ifdef MC__FFBRCRIT_DEBUG
+  std::cout << name() << " [" << 0 << "]: " << vRes[0] << std::endl;
+  { int dum; std::cout << "Press 1"; std::cin >> dum; }
+#endif
+}
+
+template<unsigned int ID>
+inline void
+FFGradBRCrit<ID>::eval
+( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFGRADBRCRIT_TRACE
+  std::cout << "FFGradBRCrit::eval: double\n";
+#endif
+  std::map<unsigned,double>* mEFF = static_cast<std::map<unsigned,double>*>( data );
+#ifdef MC__FFBRCRIT_CHECK
+  assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
+#endif
+
+#ifdef MC__FFBRCRIT_LOG
+  double BRCrit = 0.;
+#endif
+  size_t const inc = mEFF->size()*nOUT;
+  arma::vec GradBR( vRes, nRes, false );
+  GradBR.zeros();
+  arma::vec GradBRjk( inc, arma::fill::none );
+  size_t pj = 0;
+  for( unsigned j=0; j<nUNC; ++j, pj+=inc ){
+    size_t pk = pj + inc;
+    for( unsigned k=j+1; k<nUNC; ++k, pk+=inc ){
+      arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      size_t pi = 0;
+      for( auto const& [Id,Eff] : *mEFF ){
+//        std::cout << "y[" << j << "][" << pi << "] = " << arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false );
+//        std::cout << "y[" << k << "][" << pi << "] = " << arma::vec( const_cast<double*>(vVar+pk+pi), nOUT, false );
+        arma::vec const& Eijk = arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false )
+                              - arma::vec( const_cast<double*>(vVar+pk+pi), nOUT, false );
+        if( !sigmayinv.empty() ){
+//          arma::vec& SEijk = GradBRjk.subvec(pi,pi+nOUT-1);
+          GradBRjk.subvec(pi,pi+nOUT-1) = sigmayinv * Eijk;
+          Et_Vinv_E += Eff * Eijk.t() * GradBRjk.subvec(pi,pi+nOUT-1);
+          GradBRjk.subvec(pi,pi+nOUT-1) *= Eff/4;
+        }
+        else{
+          Et_Vinv_E += Eff * Eijk.t() * Eijk;
+          GradBRjk.subvec(pi,pi+nOUT-1) = (Eff/4) * Eijk;
+        }
+        pi += nOUT;
+      }
+      double BRjk = std::exp( -0.125 * Et_Vinv_E(0,0) );
+      if( !weighting.empty() ) BRjk *= std::sqrt( weighting(j)*weighting(k) );
+#ifdef MC__FFBRCRIT_LOG
+      BRCrit += BRjk;
+#endif
+      GradBR.subvec(pj,pj+inc-1) -= GradBRjk * BRjk;
+      GradBR.subvec(pk,pk+inc-1) += GradBRjk * BRjk;
+    }
+  }
+#ifdef MC__FFBRCRIT_LOG
+  GradBR /= BRCrit;
+#endif
+
+#ifdef MC__FFBRCRIT_DEBUG
+  std::cout << GradBR;
+  { int dum; std::cout << "Press 1"; std::cin >> dum; }
+#endif
+}
+
+template<unsigned int ID>
+inline void
+FFBRCrit<ID>::eval
+( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
+  unsigned const* mVar )
+const
+{
+#ifdef MC__FFBRCRIT_TRACE
+  std::cout << "FFBRCrit::eval: fadbad::F<FFVar>\n";
+#endif
+  std::map<unsigned,double>* mEFF = static_cast<std::map<unsigned,double>*>( data );
+#ifdef MC__FFBRCRIT_CHECK
+  assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
+#endif
+
+  std::vector<FFVar> vVarVal( nVar );
+  for( unsigned i=0; i<nVar; ++i )
+    vVarVal[i] = vVar[i].val();
+  vRes[0] = operator()( nVar, vVarVal.data(), mEFF, nUNC, nOUT );
+  for( unsigned i=0; i<nVar; ++i )
+    vRes[0].setDepend( vVar[i] );
+
+  FFGradBRCrit<ID> GradBRCrit;
+  FFVar const*const* vGradBRCrit = GradBRCrit( nVar, vVarVal.data(), mEFF, nUNC, nOUT ); 
+  for( unsigned j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( unsigned i=0; i<nVar; ++i ){
+      if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
+      vRes[0][j] += *vGradBRCrit[i] * vVar[i][j];
+    }
+  }
+}
+
+template<unsigned int ID>
+inline void
+FFBRCrit<ID>::eval
+( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+  unsigned const* mVar )
+const
+{
+#ifdef MC__FFBRCRIT_TRACE
+  std::cout << "FFBRCrit::eval: fadbad::F<double>\n";
+#endif
+
+  std::vector<double> vVarVal( nVar );
+  for( unsigned i=0; i<nVar; ++i )
+    vVarVal[i] = vVar[i].val();
+  double ResVal; 
+  eval( 1, &ResVal, nVar, vVarVal.data(), nullptr );
+  vRes[0] = ResVal;
+  for( unsigned i=0; i<nVar; ++i ){
+    vRes[0].setDepend( vVar[i] );
+//    std::cout << "vVar[" << i << "] = " << vVarVal[i] << std::endl;
+  }
+  
+  FFGradBRCrit<ID> GradBRCrit;
+  GradBRCrit.nUNC = nUNC;
+  GradBRCrit.nOUT = nOUT;
+  GradBRCrit.data = data;
+  std::vector<double> vGradBRCrit( nVar ); 
+  GradBRCrit.eval( nVar, vGradBRCrit.data(), nVar, vVarVal.data(), nullptr );
+  for( unsigned j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( unsigned i=0; i<nVar; ++i ){
+      if( vVar[i][j] == 0. ) continue;
+      vRes[0][j] += vGradBRCrit[i] * vVar[i][j];
+    }
+  }
+}
+
+template<unsigned int ID>
+inline void
+FFBRCrit<ID>::deriv
+( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
+const
+{
+#ifdef MC__FFBRCRIT_TRACE
+  std::cout << "FFBRCrit::deriv\n";
+#endif
+  std::map<unsigned,double>* mEFF = static_cast<std::map<unsigned,double>*>( data );
+#ifdef MC__FFBRCRIT_CHECK
+  assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
+#endif
+
+  FFGradBRCrit<ID> GradBRCrit;
+  FFVar const*const* vGradBRCrit = GradBRCrit( nVar, vVar, mEFF, nUNC, nOUT );
+  for( unsigned i=0; i<nVar; ++i )
+    vDer[0][i] = *vGradBRCrit[i];
+}
+
+////////////////////////////////////////////////////////////////////////
+
+template<unsigned int ID>
 class FFBREff
 : public FFOp,
   public DOEBase
@@ -1254,8 +1693,8 @@ const
 #endif
 
   vRes[0] = 0.;
-  for( unsigned j=0, s=0; j<vOUT->size(); ++j ){
-    for( unsigned k=j+1; k<vOUT->size(); ++k, ++s ){
+  for( unsigned j=0; j<vOUT->size(); ++j ){
+    for( unsigned k=j+1; k<vOUT->size(); ++k ){
       arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
       for( unsigned i=0; i<nVar; ++i ){
         arma::vec const& Ejk  = vOUT->at(j).at(i) - vOUT->at(k).at(i);
@@ -1264,14 +1703,14 @@ const
       }
       if( !weighting.empty() ) vRes[0] += std::sqrt( weighting(j)*weighting(k) ) * std::exp( -0.125 * Et_Vinv_E(0,0) );
       else                     vRes[0] += std::exp( -0.125 * Et_Vinv_E(0,0) );
-#ifdef MC__FFBREFF_DEBUG
-      std::cout << name() << " [" << s << "]: " << vRes[s] << std::endl;
-#endif
     }
   }
-  // COULD CONSIDER TAKING THE LOG HERE
+#ifdef MC__FFBRCRIT_LOG
+  vRes[0] = std::log( vRes[0] );
+#endif
 
-#ifdef MC__FFBREFF_DEBUG
+#ifdef MC__FFBRCRIT_DEBUG
+  std::cout << name() << " [" << 0 << "]: " << vRes[0] << std::endl;
   { int dum; std::cout << "Press 1"; std::cin >> dum; }
 #endif
 }
@@ -1289,33 +1728,72 @@ const
 #ifdef MC__FFGRADBREFF_CHECK
   assert( vOUT && !vOUT->empty() && nRes == nVar && nVar == vOUT->back().size() );
 #endif
+
+#ifdef MC__FFBRCRIT_LOG
+  double BRCrit = 0.;
+#endif
+  arma::vec GradBR( vRes, nRes, false );
+  GradBR.zeros();
+  arma::vec GradBRjk( nVar, arma::fill::none );
+  for( unsigned j=0; j<vOUT->size(); ++j ){
+    for( unsigned k=j+1; k<vOUT->size(); ++k ){
+      arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      for( unsigned i=0; i<nVar; ++i ){
+        arma::vec const& Ejk   = vOUT->at(j).at(i) - vOUT->at(k).at(i);
+        if( !sigmayinv.empty() ){
+          GradBRjk.subvec(i,i) = -0.125 * Ejk.t() * sigmayinv * Ejk;
+          Et_Vinv_E += vVar[i] * GradBRjk(i);
+        }
+        else{
+          GradBRjk.subvec(i,i) = -0.125 * Ejk.t() * Ejk;
+          Et_Vinv_E += vVar[i] * GradBRjk(i);
+        }
+      }
+      double BRjk = std::exp( Et_Vinv_E(0,0) );
+      if( !weighting.empty() ) BRjk *= std::sqrt( weighting(j)*weighting(k) );
+#ifdef MC__FFBRCRIT_LOG
+      BRCrit += BRjk;
+#endif
+      GradBR += GradBRjk * BRjk;
+    }
+  }
+#ifdef MC__FFBRCRIT_LOG
+  GradBR /= BRCrit;
+#endif
+
+/*
   for( unsigned i=0; i<nVar; ++i )
     vRes[i] = 0.;
-
-  for( unsigned j=0, s=0; j<vOUT->size(); ++j ){
-    for( unsigned k=j+1; k<vOUT->size(); ++k, ++s ){
+  for( unsigned j=0; j<vOUT->size(); ++j ){
+    for( unsigned k=j+1; k<vOUT->size(); ++k ){
       arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
       for( unsigned i=0; i<nVar; ++i ){
         arma::vec const& Ejk  = vOUT->at(j).at(i) - vOUT->at(k).at(i);
         if( !sigmayinv.empty() ) Et_Vinv_E += vVar[i] * Ejk.t() * sigmayinv * Ejk;
         else                     Et_Vinv_E += vVar[i] * Ejk.t() * Ejk;
       }
+#ifdef MC__FFBRCRIT_LOG
+      if( !weighting.empty() ) BRCrit += std::sqrt( weighting(j)*weighting(k) ) * std::exp( -0.125 * Et_Vinv_E(0,0) );
+      else                     BRCrit += std::exp( -0.125 * Et_Vinv_E(0,0) );
+#endif
       arma::mat der(1,1,arma::fill::none);
       for( unsigned i=0; i<nVar; ++i ){
         arma::vec const& Ejk  = vOUT->at(j).at(i) - vOUT->at(k).at(i);
-        // NORMALLY WEIGHT WITH SCENARIO JOINT PROBABILITY HERE
         if( !sigmayinv.empty() ) der = -0.125 * Ejk.t() * sigmayinv * Ejk * std::exp( -0.125 * Et_Vinv_E(0,0) );
         else                     der = -0.125 * Ejk.t() * Ejk * std::exp( -0.125 * Et_Vinv_E(0,0) );
         if( !weighting.empty() ) vRes[i] += std::sqrt( weighting(j)*weighting(k) ) * der(0,0);
         else                     vRes[i] += der(0,0);
       }
-#ifdef MC__FFBREFF_DEBUG
-      std::cout << name() << " [" << i << "]: " << vRes[i] << std::endl;
-#endif
     }
   }
-
+#ifdef MC__FFBRCRIT_LOG
+  for( unsigned i=0; i<nVar; ++i )
+    vRes[i] /= BRCrit;
+#endif
+*/
 #ifdef MC__FFBREFF_DEBUG
+  for( unsigned i=0; i<nVar; ++i )
+    std::cout << name() << " [" << i << "]: " << vRes[i] << std::endl;
   { int dum; std::cout << "Press 1"; std::cin >> dum; }
 #endif
 }
@@ -1744,40 +2222,36 @@ public:
 
 protected:
 
-#ifdef MC__USE_PROFIL
+#if defined( MC__USE_PROFIL )
  typedef ::INTERVAL I;
+#elif defined( MC__USE_BOOST )
+ typedef boost::numeric::interval_lib::save_state<boost::numeric::interval_lib::rounded_transc_opp<double>> T_boost_round;
+ typedef boost::numeric::interval_lib::checking_base<double> T_boost_check;
+ typedef boost::numeric::interval_lib::policies<T_boost_round,T_boost_check> T_boost_policy;
+ typedef boost::numeric::interval<double,T_boost_policy> I;
+#elif defined( MC__USE_FILIB )
+ typedef filib::interval<double> I;
 #else
- #ifdef MC__USE_BOOST
-  typedef boost::numeric::interval_lib::save_state<boost::numeric::interval_lib::rounded_transc_opp<double>> T_boost_round;
-  typedef boost::numeric::interval_lib::checking_base<double> T_boost_check;
-  typedef boost::numeric::interval_lib::policies<T_boost_round,T_boost_check> T_boost_policy;
-  typedef boost::numeric::interval<double,T_boost_policy> I;
- #else
-  #ifdef MC__USE_FILIB
-   typedef filib::interval<double> I;
-  #else
-   typedef Interval I;
-  #endif
- #endif
+ typedef Interval I;
 #endif
 
   typedef FFGraph< ExtOps... > DAG;
-  typedef FFGraph< FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBREff<7>, FFGradBREff<7>, ExtOps... > DAGDOE;
+  typedef FFGraph< FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBRCrit<7>, FFGradBRCrit<7>, FFBREff<9>, FFGradBREff<9>, ExtOps... > DAGDOE;
 
   typedef ODESLVS_CVODES< ExtOps... > IVPODE;
 
-#ifdef MC__USE_GUROBI
+#if defined( MC__USE_GUROBI )
   typedef MIPSLV_GUROBI<I> MIP;
-#elif  MC__USE_CPLEX
+#elif defined( MC__USE_CPLEX )
   typedef MIPSLV_CPLEX<I> MIP;
 #endif
 
-#ifdef MC__USE_SNOPT
-  typedef NLPSLV_SNOPT< FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBREff<7>, FFGradBREff<7> > NLP;
-#elif  MC__USE_IPOPT
-  typedef NLPSLV_IPOPT< FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBREff<7>, FFGradBREff<7> > NLP;
+#if defined( MC__USE_SNOPT )
+  typedef NLPSLV_SNOPT< FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBRCrit<7>, FFGradBRCrit<7>, FFBREff<9>, FFGradBREff<9> > NLP;
+#elif defined( MC__USE_IPOPT )
+  typedef NLPSLV_IPOPT< FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBRCrit<7>, FFGradBRCrit<7>, FFBREff<9>, FFGradBREff<9> > NLP;
 #endif
-  typedef MINLPSLV< I, NLP, MIP, FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBREff<7>, FFGradBREff<7> > MINLP;
+  typedef MINLPSLV< I, NLP, MIP, FFODE<0>, FFGRADODE<0>, FFDOECrit<2>, FFGradDOECrit<2>, FFDOEEff<4>, FFGradDOEEff<4>, FFSum<6>, FFBRCrit<7>, FFGradBRCrit<7>, FFBREff<9>, FFGradBREff<9> > MINLP;
 
   using BASE_MBDOE<ExtOps...>::_ny;
   using BASE_MBDOE<ExtOps...>::_np;
@@ -1896,7 +2370,7 @@ public:
         NLPSLV.MAXITER              = 500;
         NLPSLV.FEASTOL              = 1e-6;
         NLPSLV.OPTIMTOL             = 1e-6;
-        NLPSLV.GRADMETH             = NLP::Options::FAD;
+        NLPSLV.GRADMETH             = NLP::Options::FSYM;
         NLPSLV.GRADCHECK            = 0;
         NLPSLV.MAXTHREAD            = 0;
 #elif  MC__USE_IPOPT
@@ -1904,7 +2378,7 @@ public:
         NLPSLV.MAXITER              = 500;
         NLPSLV.FEASTOL              = 1e-6;
         NLPSLV.OPTIMTOL             = 1e-5;
-        NLPSLV.GRADMETH             = NLP::Options::FAD;
+        NLPSLV.GRADMETH             = NLP::Options::FSYM;
         NLPSLV.HESSMETH             = NLP::Options::LBFGS;
         NLPSLV.GRADCHECK            = 0;
         NLPSLV.MAXTHREAD            = 0;
@@ -2146,9 +2620,12 @@ protected:
       std::ostream& os=std::cout );
 
   //! @brief Build Bayesian risk for gradient-based search
+//  void _build_br
+//    ( std::vector<FFVar>& BRCRIT, std::vector<double>& WCRIT, std::vector<FFVar>& CTOT,
+//      std::map<unsigned,double> const& EOpt, std::ostream& os );
   void _build_br
-    ( std::vector<FFVar>& BRCRIT, std::vector<double>& WCRIT, std::vector<FFVar>& CTOT,
-      std::map<unsigned,double> const& EOpt, std::ostream& os );
+    ( std::vector<FFVar>& BROUT, std::vector<FFVar>& CTOT, std::map<unsigned,double> const& EOpt,
+      std::ostream& os );
 
   //! @brief Generate samples for refined supports
   bool _update_supports
@@ -2902,7 +3379,7 @@ MBDOESLV<ExtOps...>::_effort_minimize_br
 ( unsigned const NEXP, std::map<unsigned,double> const& EIni, std::ostream& os )
 {
   delete _dagdoe; _dagdoe = new DAGDOE;
-  mc::FFBREff<7> OpDOECrit;
+  mc::FFBREff<9> OpDOECrit;
   mc::FFSum<6> Sum;
 
   unsigned const NSUPP = _vCONSAM.size();
@@ -3051,21 +3528,19 @@ template <typename... ExtOps>
 inline
 void
 MBDOESLV<ExtOps...>::_build_br
-( std::vector<FFVar>& BRCRIT, std::vector<double>& WCRIT, std::vector<FFVar>& CTOT,
-  std::map<unsigned,double> const& EOpt, std::ostream& os )
+( std::vector<FFVar>& BROUT, std::vector<FFVar>& CTOT, std::map<unsigned,double> const& EOpt,
+  std::ostream& os )
 {
   unsigned const NOUT = _dOUT.size();
   unsigned const NEFF = EOpt.size();
   unsigned const NUNC = _vPARVAL.size();
-  unsigned const NELE = NUNC*(NUNC-1)/2;
-  BRCRIT.resize( NELE );
-  WCRIT.resize( NELE );
+  BROUT.clear();
+  BROUT.reserve( NUNC*NEFF*NOUT );
 
   if( _ny ){
 
     std::vector<FFVar> vCref( CTOT.size() );
-    std::vector< std::vector<FFVar> > vOUTref( NUNC );
-    std::vector< std::vector<FFVar*> > vOUTndx( NUNC );
+    std::vector<FFVar> vOUTref( NOUT );
 
     for( unsigned s=0; s<NUNC; ++s ){
       // Set parameter scenario
@@ -3078,56 +3553,22 @@ MBDOESLV<ExtOps...>::_build_br
 #endif
 
       // Define reference outputs in current scenario
-      vOUTref[s].resize( NOUT );
       _dagdoe->insert( _dag, _nc, _vCON.data(), vCref.data() );
-      _dagdoe->insert( _dag, NOUT, _vOUT.data(), vOUTref[s].data() );
+      _dagdoe->insert( _dag, NOUT, _vOUT.data(), vOUTref.data() );
 
       // Define outputs in current scenario for each support
       FFVar* Cndx = CTOT.data();
-      for( unsigned k=0; k<NEFF; ++k, Cndx+=_nc )
-        vOUTndx[s].push_back( _dagdoe->compose( NOUT, vOUTref[s].data(), _nc, vCref.data(), Cndx ) );
-    }
-
-    for( unsigned j=0, s=0; j<NUNC; ++j ){
-      for( unsigned k=j+1; k<NUNC; ++k, ++s ){
-        assert( vOUTndx[j].size() == vOUTndx[k].size() );
-        
-        // Define BR criterion in current scenario
-        WCRIT[s] = std::sqrt( _vPARWEI.at(j) * _vPARWEI.at(k) );
-        FFVar SUMRHOij = 0.;
-        auto itEOpt = EOpt.cbegin();
-        for( auto itOUTj=vOUTndx[j].cbegin(), itOUTk=vOUTndx[k].cbegin(); itOUTj!=vOUTndx[j].cend(); ++itOUTj, ++itOUTk, ++itEOpt ){
-          double const& eff = itEOpt->second;
-          FFVar RHOij = 0.;
-          for( unsigned int i=0; i<NOUT; ++i ){
-            if( _vOUTVAR.size() == NOUT )
-              RHOij += sqr( *itOUTj[i] - *itOUTk[i] ) / _vOUTVAR[i];
-            else
-              RHOij += sqr( *itOUTj[i] - *itOUTk[i] );
-          }
-          SUMRHOij += eff * RHOij;
-        }
-        BRCRIT[s] = exp( -0.125 * SUMRHOij );
+      for( unsigned k=0; k<NEFF; ++k, Cndx+=_nc ){
+        FFVar* vOUTcomp = _dagdoe->compose( NOUT, vOUTref.data(), _nc, vCref.data(), Cndx );
+        BROUT.insert( BROUT.end(), vOUTcomp, vOUTcomp+NOUT );
+        delete[] vOUTcomp;
+//        for( unsigned i=0; i<NOUT; ++i )
+//          std::cout << "BROUT[" << s << "][" << k << "][" << i << "] -> " << BROUT[BROUT.size()-NOUT+i] << std::endl;
       }
     }
-#ifdef MC__MBDOE_SOLVE_DEBUG
-    FFSubgraph sgBR = _dagdoe->subgraph( NELE, BRCRIT.data() );
-    std::vector<FFExpr> exprBR = FFExpr::subgraph( _dag, sgBR ); 
-    for( unsigned j=0, s=0; j<NUNC; ++j )
-      for( unsigned k=j+1; k<NUNC; ++k, ++s )
-        std::cout << "BRCRIT[" << j << "][" << k << "] = " << exprBR[s] << std::endl;
-#endif
-
-    // Clean-up
-    for( unsigned s=0; s<NUNC; ++s )
-      for( auto& pOUT : vOUTndx[s] )
-        delete[] pOUT;
   }
-    
 
   else if( _ivpode ){
-
-    std::vector< std::vector<FFVar**> > vOUTndx( NUNC );
 
     for( unsigned s=0; s<NUNC; ++s ){
       // Set parameter scenario
@@ -3144,50 +3585,18 @@ MBDOESLV<ExtOps...>::_build_br
       mc::FFODE<0> OpODE;
       for( unsigned k=0; k<NEFF; ++k, Cndx+=_nc ){
         IVPODE* pivpode = _ivpode;
-        vOUTndx[s].push_back( OpODE( _nc, Cndx, pivpode ) ); 
+        for( unsigned i=0; i<NOUT; ++i ){
+          FFVar** vOUTODE = OpODE( _nc, Cndx, pivpode );
+          BROUT.push_back( *(vOUTODE[i]) );
 #ifdef MC__MBDOE_SOLVE_DEBUG
-        for( unsigned int i=0; i<_ivpode->nf(); ++i )
-          std::cout << "  " << *(vOUTndx[s].back()[i]);
+          std::cout << "  " << BROUT.back();
+#endif
+        }
+#ifdef MC__MBDOE_SOLVE_DEBUG
         std::cout << std::endl;
 #endif
       }
     }
-
-    for( unsigned j=0, s=0; j<NUNC; ++j ){
-      for( unsigned k=j+1; k<NUNC; ++k, ++s ){
-        assert( vOUTndx[j].size() == vOUTndx[k].size() );
-        
-        // Define BR criterion in current scenario
-        WCRIT[s] = std::sqrt( _vPARWEI.at(j) * _vPARWEI.at(k) );
-        FFVar SUMRHOij = 0.;
-        auto itEOpt = EOpt.cbegin();
-        for( unsigned e=0; e<NEFF; ++e, ++itEOpt ){
-        //for( auto itOUTj=vOUTndx[j].cbegin(), itOUTk=vOUTndx[k].cbegin(); itOUTj!=vOUTndx[j].cend(); ++itOUTj, ++itOUTk, ++itEOpt ){
-          double const& eff = itEOpt->second;
-          FFVar RHOij = 0.;
-          for( unsigned int i=0; i<NOUT; ++i ){
-            if( _vOUTVAR.size() == NOUT )
-              RHOij += sqr( *(vOUTndx[j][e][i]) - *(vOUTndx[k][e][i]) ) / _vOUTVAR[i];
-              //RHOij += sqr( *(*itOUTj[i]) - *(*itOUTk[i]) ) / _vOUTVAR[i];
-            else{
-              //std::cout << *(vOUTndx[j][e][i]) << "  " << *(vOUTndx[k][e][i]) << std::endl;
-              RHOij += sqr( *(vOUTndx[j][e][i]) - *(vOUTndx[k][e][i]) );
-              //std::cout << *(*itOUTj[i]) << "  " << *(*itOUTk[i]) << std::endl;
-              //RHOij += sqr( *(*itOUTj[i]) - *(*itOUTk[i]) );
-            }
-          }
-          SUMRHOij += eff * RHOij;
-        }
-        BRCRIT[s] = exp( -0.125 * SUMRHOij );
-      }
-    }
-#ifdef MC__MBDOE_SOLVE_DEBUG
-    FFSubgraph sgBR = _dagdoe->subgraph( NELE, BRCRIT.data() );
-    std::vector<FFExpr> exprBR = FFExpr::subgraph( _dag, sgBR ); 
-    for( unsigned j=0, s=0; j<NUNC; ++j )
-      for( unsigned k=j+1; k<NUNC; ++k, ++s )
-        std::cout << "BRCRIT[" << j << "][" << k << "] = " << exprBR[s] << std::endl;
-#endif
   }
 }
 
@@ -3283,7 +3692,7 @@ MBDOESLV<ExtOps...>::_evaluate_design_br
 ( std::multimap<double,std::vector<double>> const& Campaign, std::string const& type, std::ostream& os )
 {
   delete _dagdoe; _dagdoe = new DAGDOE;
-  mc::FFSum<6> Sum;
+  mc::FFBRCrit<7> OpBRCrit;
 
   // Concatenate experimental controls
   unsigned const NCTOT = _nc * Campaign.size();
@@ -3303,16 +3712,16 @@ MBDOESLV<ExtOps...>::_evaluate_design_br
   }
 
   // Define cost function
-  unsigned const NUNC = _vPARVAL.size();
-  unsigned const NELE = NUNC*(NUNC-1)/2;
-  std::vector<FFVar> BRCRIT;
-  std::vector<double> WCRIT;
-  _build_br( BRCRIT, WCRIT, CTOT, EOpt, os );
-
+  std::vector<FFVar> BROUT;
+  _build_br( BROUT, CTOT, EOpt, os );
+  
   // Evaluate cost function
-  FFVar FBR = Sum( NELE, BRCRIT.data(), WCRIT.data() );
+  unsigned const NUNC = _vPARVAL.size();
+  unsigned const NOUT = _dOUT.size();
+  DOEBase::set_weighting( _vPARWEI );
+  FFVar& FBR = OpBRCrit( BROUT.size(), BROUT.data(), &EOpt, NUNC, NOUT );
   double DBR;
-  std::string header = ( type.empty()? "DESIGN PERFORMANCE": type + " DESIGN PERFORMANCE" );
+  std::string header( type.empty()? "DESIGN PERFORMANCE": type + " DESIGN PERFORMANCE" );
   try{
     _dagdoe->eval( 1, &FBR, &DBR, NCTOT, CTOT.data(), CTOT0.data() );
   }
@@ -3445,7 +3854,7 @@ MBDOESLV<ExtOps...>::_gradient_minimize_br
 ( std::map<unsigned,double> const& EOpt, bool const update, std::ostream& os )
 {
   delete _dagdoe; _dagdoe = new DAGDOE;
-  mc::FFSum<6> Sum;
+  mc::FFBRCrit<7> OpBRCrit;
 
   // Concatenate experimental controls
   unsigned const NCTOT = _nc * EOpt.size();
@@ -3469,20 +3878,22 @@ MBDOESLV<ExtOps...>::_gradient_minimize_br
   }
 
   // Define cost function
+  std::vector<FFVar> BROUT;
+  _build_br( BROUT, CTOT, EOpt, os );
   unsigned const NUNC = _vPARVAL.size();
-  unsigned const NELE = NUNC*(NUNC-1)/2;
-  std::vector<FFVar> BRCRIT;
-  std::vector<double> WCRIT;
-  _build_br( BRCRIT, WCRIT, CTOT, EOpt, os );
+  unsigned const NOUT = _dOUT.size();
+  FFVar& FBR = OpBRCrit( BROUT.size(), BROUT.data(), const_cast<std::map<unsigned,double>*>(&EOpt), NUNC, NOUT );
 
   // Local NLP optimization
   NLP doeref;
+  DOEBase::set_weighting( _vPARWEI );
   DOEBase::set_scaling( _vPARSCA );
   DOEBase::type  = options.CRITERION;
   doeref.options = options.NLPSLV;
   doeref.set_dag( _dagdoe ); // DAG
   doeref.add_var( NCTOT, CTOT.data(), CTOTLB.data(), CTOTUB.data() ); // decision variables
-  doeref.set_obj( mc::BASE_OPT::MIN, Sum( NELE, BRCRIT.data(), WCRIT.data() ) ); // minimize Bayesian risk
+//  doeref.set_obj( mc::BASE_OPT::MIN, Sum( NELE, BRCRIT.data(), WCRIT.data() ) ); // minimize Bayesian risk
+  doeref.set_obj( mc::BASE_OPT::MIN, FBR ); // minimize Bayesian risk
   doeref.setup();
   doeref.solve( CTOT0.data() );
 

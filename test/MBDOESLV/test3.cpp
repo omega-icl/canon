@@ -117,7 +117,7 @@ int main()
   size_t const NEXP = 5;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NPSAM = 500;
+  size_t const NPSAM = 1000;
   std::vector<double> PLB( NP ), PUB( NP );
 //  PLB[0] =  PUB[0] = 0.31;
 //  PLB[1] =  PUB[1] = 0.18;
@@ -147,7 +147,7 @@ int main()
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
   DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
-  DOE.options.NLPSLV.OPTIMTOL  = 2e-5;
+  DOE.options.NLPSLV.OPTIMTOL  = 1e-5;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 0;
   DOE.set_model( IVP, YVAR );

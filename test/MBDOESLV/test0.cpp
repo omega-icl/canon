@@ -45,10 +45,10 @@ int main()
   std::vector<double> XUB( { 5e-1 } );
 
   // Output variance
-  std::vector<double> YVAR( { 1e0 } );
+  std::vector<double> YVAR( { 1e-1 } );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
+  DOE.options.CRITERION = mc::DOEBase::BROPT;//DOPT;//
   DOE.options.RISK      = mc::MBDOESLV<>::Options::AVERSE;//NEUTRAL;//
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
@@ -58,6 +58,7 @@ int main()
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 1;
+  //DOE.options.NLPSLV.GRADMETH = DOE.options.NLPSLV.FSYM;//FAD;
   DOE.set_dag( DAG );
   DOE.set_model( Y, YVAR );
   DOE.set_controls( X, XLB, XUB );
@@ -76,7 +77,7 @@ int main()
   DOE.setup();
   DOE.evaluate_design( campaign );
  
-  DOE.options.CRITERION = mc::DOEBase::BROPT;//DOPT;//
+  DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV<>::Options::AVERSE;//NEUTRAL;//
   DOE.setup();
   DOE.evaluate_design( campaign );
