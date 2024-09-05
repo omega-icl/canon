@@ -1,3 +1,6 @@
+//#define MC__NLPSLV_SNOPT_DEBUG
+//#define MC__NLPSLV_SNOPT_DEBUG_CALLBACK
+
 #include <fstream>
 #include <iomanip>
 #include "interval.hpp"
@@ -12,7 +15,7 @@
 // Computers & Operations Research 58 (2015) 67–74
 // http://dx.doi.org/10.1016/j.cor.2014.12.010
 
-const unsigned N = 15;  // Number of circles
+const unsigned N = 10;  // Number of circles
 
 ////////////////////////////////////////////////////////////////////////
 int main()
@@ -24,22 +27,22 @@ int main()
   for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
 
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT<>* NLP = new mc::NLPSLV_SNOPT;
+  mc::NLPSLV_SNOPT* NLP = new mc::NLPSLV_SNOPT;
   NLP->options.DISPLEVEL = 1;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FSYM;
+  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;
   NLP->options.GRADCHECK = false;
   NLP->options.MAXTHREAD = 8;
 #else
-  mc::NLPSLV_IPOPT<>* NLP = new mc::NLPSLV_IPOPT;
+  mc::NLPSLV_IPOPT* NLP = new mc::NLPSLV_IPOPT;
   NLP->options.DISPLEVEL = 5;
   NLP->options.MAXITER   = 5000;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::BSYM;//FSYM;
-  NLP->options.HESSMETH  = mc::NLPSLV_IPOPT<>::Options::LBFGS;
+  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT::Options::BSYM;//FSYM;
+  NLP->options.HESSMETH  = mc::NLPSLV_IPOPT::Options::LBFGS;
   NLP->options.GRADCHECK = false;
   NLP->options.MAXTHREAD = 8;
 #endif
@@ -82,18 +85,18 @@ int main()
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP->solution();
   std::cout << "FEASIBLE:   " << NLP->is_feasible( 1e-7 )   << std::endl;
   std::cout << "STATIONARY: " << NLP->is_stationary( 1e-7 ) << std::endl;
-/*
+
   NLP->options.DISPLEVEL = 0;
   for( NLP->options.MAXTHREAD = 16; NLP->options.MAXTHREAD <= 16; NLP->options.MAXTHREAD*=2 ){
     double tStart = mc::userclock();
-    NLP->solve( 10 );
+    NLP->solve( 1000 );
     std::cout << "MULTISTART ON " << NLP->options.MAXTHREAD << " THREADS: " << mc::userclock()-tStart << " CPU-sec\n";
   }
 
   std::cout << "NLP LOCAL SOLUTION: " << NLP->solution();
   std::cout << "FEASIBLE:   " << NLP->is_feasible( 1e-7 )   << std::endl;
   std::cout << "STATIONARY: " << NLP->is_stationary( 1e-7 ) << std::endl;
-*/
+
   delete NLP;
   return 0;
 }

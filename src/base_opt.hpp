@@ -77,21 +77,23 @@ struct SOLUTION_OPT
   //! @brief Copy constructor
   SOLUTION_OPT
     ( const SOLUTION_OPT &sol )
-    : stat( sol.stat ), x( sol.x ), ux( sol.ux ), f( sol.f ), uf( sol.uf )
+    : stat( sol.stat ), p( sol.p ), x( sol.x ), ux( sol.ux ), f( sol.f ), uf( sol.uf )
     {}
 
   SOLUTION_OPT& operator=
     ( SOLUTION_OPT const& sol )
-    { stat = sol.stat; x = sol.x; ux = sol.ux; f = sol.f; uf = sol.uf; 
+    { stat = sol.stat; p = sol.p; x = sol.x; ux = sol.ux; f = sol.f; uf = sol.uf; 
       return *this; }
 
   //! @brief Resets the solution fields
   void reset
     ( int const stat_ = -999 )
-    { stat = stat_; x.clear(); ux.clear(); f.clear(); uf.clear(); }
+    { stat = stat_; p.clear(); x.clear(); ux.clear(); f.clear(); uf.clear(); }
 
   //! @brief Solver status
   int stat;
+  //! @brief Parameter values
+  std::vector<double> p;
   //! @brief Variable values
   std::vector<double> x;
   //! @brief Variable bound multipliers
@@ -109,6 +111,10 @@ operator<<
 {
   std::cout << "STATUS: " << sol.stat << std::endl;
   std::cout << std::scientific << std::setprecision(6) << std::right;
+  for( unsigned int i=0; i<sol.p.size(); i++ ){
+    std::cout << "P[" << i << "]:  LEVEL = " << std::setw(13) << sol.p[i];
+    std::cout << std::endl;
+  }
   for( unsigned int i=0; i<sol.x.size(); i++ ){
     std::cout << "X[" << i << "]:  LEVEL = " << std::setw(13) << sol.x[i];
     if( i < sol.ux.size() )

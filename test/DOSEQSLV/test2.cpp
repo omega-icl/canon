@@ -8,7 +8,7 @@
   #include "nlpslv_ipopt.hpp"
 #endif
 
-#include "odeslvs_cvodes.hpp"
+#include "ffode.hpp"
 
 ////////////////////////////////////////////////////////////////////////
 int main()
@@ -24,7 +24,7 @@ int main()
   /////////////////////////////////////////////////////////////////////////
   // Define IVP-ODE
 
-  mc::FFGraph IVPDAG;  // DAG describing the problem
+  mc::FFGraph DAG;  // DAG describing the problem
 
   const unsigned NS = 40;  // Time stages
   std::vector<double> TS( NS+1 );  // Time stages
@@ -32,11 +32,11 @@ int main()
 
   const unsigned NU = NS; // Number of parameters
   std::vector<mc::FFVar> U(NU);  // Parameters
-  for( unsigned int i=0; i<NU; i++ ) U[i].set( &IVPDAG );
+  for( unsigned int i=0; i<NU; i++ ) U[i].set( &DAG );
 
   const unsigned NX = 1;  // Number of states
   std::vector<mc::FFVar> X(NX);  // States
-  for( unsigned int i=0; i<NX; i++ ) X[i].set( &IVPDAG );
+  for( unsigned int i=0; i<NX; i++ ) X[i].set( &DAG );
 
   std::vector<mc::FFVar> IC(NX);   // Initial value function
   IC[0] = X0;
@@ -47,7 +47,7 @@ int main()
 
   const unsigned NQ = 1;  // Number of state quadratures
   std::vector<mc::FFVar> Q(NQ);  // State quadratures
-  for( unsigned i=0; i<NQ; i++ ) Q[i].set( &IVPDAG );
+  for( unsigned i=0; i<NQ; i++ ) Q[i].set( &DAG );
 
   std::vector<std::vector<mc::FFVar>> QUAD(NS); // Quadrature function
   for( unsigned k=0; k<NS; k++ )
@@ -72,7 +72,7 @@ int main()
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
   IVP.options.ASACHKPT  = 2000;
 
-  IVP.set_dag( &IVPDAG );
+  IVP.set_dag( &DAG );
   IVP.set_time( TS );
   IVP.set_state( X );
   IVP.set_parameter( U );
@@ -83,43 +83,37 @@ int main()
   IVP.setup();
 
   /////////////////////////////////////////////////////////////////////////
-  // Define DAG
+  // Define DOSEQ
 
-  mc::FFGraph< mc::FFODE<0>, mc::FFGRADODE<0> > DAG;
-
-  std::vector<mc::FFVar> UU(NU);  // Parameters
-  for( unsigned int i=0; i<NU; i++ ) UU[i].set( &DAG );
-
-  mc::FFODE<0> OpODE;
-  mc::ODESLVS_CVODES<>* pIVP = &IVP;
+  mc::FFODE OpODE;
   std::vector<mc::FFVar> F(NF);
-  for( unsigned int j=0; j<NF; j++ ) F[j] = OpODE( j, NU, UU.data(), pIVP );
+  for( unsigned int j=0; j<NF; j++ ) F[j] = OpODE( j, NU, U.data(), &IVP );
   std::cout << DAG;
 
   // Local optimization
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT< mc::FFODE<0>, mc::FFGRADODE<0> > NLP;
+  mc::NLPSLV_SNOPT NLP;
   NLP.options.DISPLEVEL = 0;
   NLP.options.MAXITER   = 200;
   NLP.options.FEASTOL   = 1e-7;
   NLP.options.OPTIMTOL  = 1e-7;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT< mc::FFODE<0>, mc::FFGRADODE<0> >::Options::FAD;//SYM;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;//FAD;
   NLP.options.GRADCHECK = false;
-  NLP.options.MAXTHREAD = 12;
+  NLP.options.MAXTHREAD = 4;
 #else
-  mc::NLPSLV_IPOPT< mc::FFODE<0>, mc::FFGRADODE<0> > NLP;
+  mc::NLPSLV_IPOPT NLP;
   NLP.options.DISPLEVEL = 0;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-6;
   NLP.options.OPTIMTOL  = 1e-6;
-  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT< mc::FFODE<0>, mc::FFGRADODE<0> >::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 8;
 #endif
-  NLP.set_dag( &DAG );                    // DAG
-  NLP.add_var( UU, 0., UM );              // decision variables
-  NLP.set_obj( mc::BASE_OPT::MAX, F[0] ); // objective
-  NLP.add_ctr( mc::BASE_OPT::EQ, F[1] );  // constraints
+  NLP.set_dag( &DAG );                     // DAG
+  NLP.add_var( U, 0., UM );                // decision variables
+  NLP.set_obj( mc::BASE_OPT::MAX, F[0] );  // objective
+  NLP.add_ctr( mc::BASE_OPT::EQ,  F[1] );  // constraints
   NLP.setup();
 
   //std::vector<double> U0( NU, 1e-1 );
@@ -129,13 +123,13 @@ int main()
   std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-6 )   << std::endl;
   std::cout << "STATIONARY: " << NLP.is_stationary( 1e-6 ) << std::endl;
 
-  pIVP->options.RESRECORD = 50;
+  OpODE.pODESLV()->options.RESRECORD = 50;
   std::vector<double> dF(NF);
-  DAG.eval( NF, F.data(), dF.data(), NU, UU.data(), NLP.solution().x.data() );
+  DAG.eval( NF, F.data(), dF.data(), NU, U.data(), NLP.solution().x.data() );
 
   std::ofstream xfile, ufile;
   xfile.open( "test2_XOPT.log", std::ios_base::out );
-  pIVP->record( xfile );
+  OpODE.pODESLV()->record( xfile );
   ufile.open( "test2_UOPT.log", std::ios_base::out );
   for( unsigned int k=0; k<NS; k++ ){
     ufile << std::right << std::setw(15) << TS[k] << std::right << std::setw(15) << NLP.solution().x[k] << std::endl;

@@ -1,3 +1,6 @@
+#undef MC__NLPSLV_SNOPT_DEBUG
+#undef MC__NLPSLV_SNOPT_DEBUG_CALLBACK
+
 #define USE_PROFIL
 #include <fstream>
 #include <iomanip>
@@ -20,12 +23,12 @@ int main()
   // Local optimization
 #ifdef MC__USE_SNOPT
   mc::NLPSLV_SNOPT NLP;
-  NLP.options.DISPLEVEL = 0;
+  NLP.options.DISPLEVEL = 1;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::BSYM;
-  NLP.options.GRADCHECK = false;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FAD;
+  NLP.options.GRADCHECK = true;
   NLP.options.MAXTHREAD = 0;
 #else
   mc::NLPSLV_IPOPT NLP;
@@ -33,8 +36,8 @@ int main()
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::BAD;//BSYM;
-  NLP.options.HESSMETH  = mc::NLPSLV_IPOPT<>::Options::EXACT;//LBFGS;//
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT::Options::BAD;//BSYM;
+  NLP.options.HESSMETH  = mc::NLPSLV_IPOPT::Options::EXACT;//LBFGS;//
   NLP.options.GRADCHECK = true;
   NLP.options.MAXTHREAD = 0;
 #endif
@@ -45,6 +48,7 @@ int main()
   NLP.set_obj( mc::BASE_OPT::MAX, P[0]+sqr(P[1]) );    // objective
   //NLP.add_ctr( mc::BASE_OPT::LE, P[0]*P[1]-RHS ); // constraints
   NLP.add_ctr( mc::BASE_OPT::LE, P[0]*P[1]-4 ); // constraints
+  NLP.add_ctr( mc::BASE_OPT::LE, P[0]+P[1]-4 ); // constraints
   NLP.setup();
 
   double p0[NP] = { 5., 1. };
@@ -55,6 +59,8 @@ int main()
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP.solution();
   std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-7 )   << std::endl;
   std::cout << "STATIONARY: " << NLP.is_stationary( 1e-7 ) << std::endl;
+
+return 0;
 
   NLP.set_obj_lazy( mc::BASE_OPT::MAX, P[0]*P[1] );    // new objective
   NLP.solve( p0 ); //, Ip );

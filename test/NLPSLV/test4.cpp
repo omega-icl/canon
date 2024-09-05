@@ -77,7 +77,6 @@ inline std::vector< arma::mat > FFDOptBase::M;
 inline std::vector< CPPL::dsymatrix > FFDOptBase::M;
 #endif
 
-template<unsigned int ID>
 class FFDOpt
 : public FFOp,
   public FFDOptBase
@@ -86,7 +85,7 @@ public:
   // Construction
   FFDOpt
     ()
-    : FFOp( (int)EXTERN )
+    : FFOp( EXTERN )
     {}
 
   // Definition
@@ -94,17 +93,25 @@ public:
     ( unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID;
       return **insert_external_operation( *this, 1, nVar, pVar );
     }
 
   // Evaluation
-  template< typename T >
-  void eval
-    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
     const
     {
-      throw std::runtime_error("Error: No generic implementation for DOpt\n");
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<double> ) )
+        return eval( nRes, static_cast<fadbad::F<double>*>(vRes), nVar, static_cast<fadbad::F<double> const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFDOpt::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
     }
 
   void eval
@@ -178,7 +185,6 @@ public:
     { return false; }
 };
 
-template<unsigned int ID>
 class FFDOptGrad
 : public FFOp,
   public FFDOptBase
@@ -187,7 +193,7 @@ public:
   // Construction
   FFDOptGrad
     ()
-    : FFOp( (int)EXTERN )
+    : FFOp( EXTERN )
     {}
 
   // Definition
@@ -195,24 +201,29 @@ public:
     ( unsigned const idep, unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID+1;
       return *(insert_external_operation( *this, nVar, nVar, pVar )[idep]);
     }
   FFVar** operator()
     ( unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID+1;
       return insert_external_operation( *this, nVar, nVar, pVar );
     }
 
   // Evaluation
-  template< typename T >
-  void eval
-    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
     const
     {
-      throw std::runtime_error("Error: No generic implementation for DOptGrad\n");
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFDOptGrad::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
     }
 
   void eval
@@ -304,7 +315,6 @@ public:
     { return false; }
 };
 
-template<unsigned int ID>
 class FFDOptHess
 : public FFOp,
   public FFDOptBase
@@ -313,7 +323,7 @@ public:
   // Construction
   FFDOptHess
     ()
-    : FFOp( (int)EXTERN )
+    : FFOp( EXTERN )
     {}
 
   // Definition
@@ -321,7 +331,6 @@ public:
     ( unsigned const idep, unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID+2;
       return *(insert_external_operation( *this, nVar*nVar, nVar, pVar )[idep]);
     }
     
@@ -329,17 +338,23 @@ public:
     ( unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID+2;
       return insert_external_operation( *this, nVar*nVar, nVar, pVar );
     }
 
   // Evaluation
-  template< typename T >
-  void eval
-    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
     const
     {
-      throw std::runtime_error("Error: No generic implementation for DOptHess\n");
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFDOptHess::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
     }
 
   void eval
@@ -438,9 +453,8 @@ public:
     { return false; }
 };
 
-template<unsigned int ID>
 inline void
-FFDOpt<ID>::eval
+FFDOpt::eval
 ( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
   unsigned const* mVar )
 const
@@ -457,7 +471,7 @@ const
   for( unsigned i=0; i<nVar; ++i )
     vRes[0].setDepend( vVar[i] );
 
-  FFDOptGrad<ID> DOptGrad;
+  FFDOptGrad DOptGrad;
   std::vector<double> vDOptGrad( nVar ); 
   DOptGrad.eval( nVar, vDOptGrad.data(), nVar, vVarVal.data(), nullptr );
   for( unsigned j=0; j<vRes[0].size(); ++j ){
@@ -469,30 +483,28 @@ const
   }
 }
 
-template<unsigned int ID>
 inline void
-FFDOpt<ID>::deriv
+FFDOpt::deriv
 ( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
 const
 {
   assert( nRes == 1 && nVar == M.size() && M.begin() != M.end() );
   std::cout << "FFDOpt::deriv: FFVar\n";
 
-  FFDOptGrad<ID> DOptGrad;
+  FFDOptGrad DOptGrad;
   for( unsigned i=0; i<nVar; ++i )
     vDer[0][i] = DOptGrad( i, nVar, vVar );
 }
 
-template<unsigned int ID>
 inline void
-FFDOptGrad<ID>::deriv
+FFDOptGrad::deriv
 ( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
 const
 {
   assert( nRes == nVar && nVar == M.size() && M.begin() != M.end() );
   std::cout << "FFDOptGrad::deriv: FFVar\n";
 
-  FFDOptHess<ID> DOptHess;
+  FFDOptHess DOptHess;
   for( unsigned i=0; i<nVar; ++i )
     for( unsigned j=0; j<nVar; ++j )
       vDer[i][j] = DOptHess( i*nVar+j, nVar, vVar );
@@ -504,7 +516,7 @@ const
 int main()
 ////////////////////////////////////////////////////////////////////////
 {
-  mc::FFGraph< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFDOptHess<0> > DAG;
+  mc::FFGraph DAG;
   const unsigned NP = 4;
   const unsigned NS = mc::FFDOptBase::read( NP, "test4.fim" );//, true ); 
   mc::FFVar S[NS];
@@ -513,25 +525,25 @@ int main()
     S[i].set( &DAG );
     S0[i] = 1./NS;
   }
-  mc::FFDOpt<0> DOpt;
+  mc::FFDOpt DOpt;
 
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFDOptHess<0> > NLP;
+  mc::NLPSLV_SNOPT NLP;
   NLP.options.DISPLEVEL = 1;
   NLP.options.MAXITER   = 200;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFDOptHess<0> >::Options::FSYM;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 0;
 #else
-  mc::NLPSLV_IPOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFDOptHess<0> > NLP;
+  mc::NLPSLV_IPOPT NLP;
   NLP.options.DISPLEVEL = 5;
   NLP.options.MAXITER   = 200;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFDOptHess<0> >::Options::FSYM;//BSYM;
-  NLP.options.HESSMETH  = mc::NLPSLV_IPOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFDOptHess<0> >::Options::LBFGS;//EXACT;
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT::Options::FSYM;//BSYM;
+  NLP.options.HESSMETH  = mc::NLPSLV_IPOPT::Options::LBFGS;//EXACT;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 0;
 #endif

@@ -99,11 +99,10 @@ The return value of mc::MINLPSLV::optimize is per the enumeration mc::MINLPSLV::
 #include <chrono>
 
 #include "interval.hpp"
-#include "spoly.hpp"
 #include "gamsio.hpp"
-#ifdef MC__USE_SNOPT
+#if defined( MC__USE_SNOPT )
   #include "nlpslv_snopt.hpp"
-#elif  MC__USE_IPOPT
+#elif defined( MC__USE_IPOPT )
   #include "nlpslv_ipopt.hpp"
 #endif
 #include "mipslv_gurobi.hpp"
@@ -120,62 +119,61 @@ namespace mc
 //! at: \ref page_MINLPSLV
 ////////////////////////////////////////////////////////////////////////
 template <typename T=Interval,
-#ifdef MC__USE_SNOPT
-          typename NLP=NLPSLV_SNOPT<>,
-#elif  MC__USE_IPOPT
-          typename NLP=NLPSLV_IPOPT<>,
+#if defined( MC__USE_SNOPT )
+          typename NLP=NLPSLV_SNOPT,
+#elif defined( MC__USE_IPOPT )
+          typename NLP=NLPSLV_IPOPT,
 #endif
-          typename MIP=MIPSLV_GUROBI<T>,
-          typename... ExtOps>
+          typename MIP=MIPSLV_GUROBI<T>>
 class MINLPSLV
-#if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<ExtOps...>,
+#if defined( MC__WITH_GAMS )
+: protected virtual GAMSIO,
   protected SBBSLV<T>,
-  public virtual BASE_NLP<ExtOps...>
+  public virtual BASE_NLP
 #else
 : protected SBBSLV<T>,
-  public virtual BASE_NLP<ExtOps...>
+  public virtual BASE_NLP
 #endif
 {
 public:
 
-  using BASE_NLP<ExtOps...>::dag;
-  using BASE_NLP<ExtOps...>::set_dag;
-  using BASE_NLP<ExtOps...>::reset;
+  using BASE_NLP::dag;
+  using BASE_NLP::set_dag;
+  using BASE_NLP::reset;
   
-  using BASE_NLP<ExtOps...>::par;
-  using BASE_NLP<ExtOps...>::set_par;
-  using BASE_NLP<ExtOps...>::add_par;
-  using BASE_NLP<ExtOps...>::reset_par;
+  using BASE_NLP::par;
+  using BASE_NLP::set_par;
+  using BASE_NLP::add_par;
+  using BASE_NLP::reset_par;
   
-  using BASE_NLP<ExtOps...>::var;
-  using BASE_NLP<ExtOps...>::set_var;
-  using BASE_NLP<ExtOps...>::add_var;
-  using BASE_NLP<ExtOps...>::reset_var;
-  using BASE_NLP<ExtOps...>::update_vartyp;
+  using BASE_NLP::var;
+  using BASE_NLP::set_var;
+  using BASE_NLP::add_var;
+  using BASE_NLP::reset_var;
+  using BASE_NLP::update_vartyp;
 
-  using BASE_NLP<ExtOps...>::set;
-  using BASE_NLP<ExtOps...>::set_obj;
-  using BASE_NLP<ExtOps...>::add_ctr;
-  using BASE_NLP<ExtOps...>::reset_ctr;
+  using BASE_NLP::set;
+  using BASE_NLP::set_obj;
+  using BASE_NLP::add_ctr;
+  using BASE_NLP::reset_ctr;
 
   typedef void (*ROUND)( unsigned const, unsigned const*, double* );
 
 protected:
 
-  using BASE_NLP<ExtOps...>::_dag;
-  using BASE_NLP<ExtOps...>::_var;
-  using BASE_NLP<ExtOps...>::_vartyp;
-  using BASE_NLP<ExtOps...>::_varlb;
-  using BASE_NLP<ExtOps...>::_varlm;
-  using BASE_NLP<ExtOps...>::_varub;
-  using BASE_NLP<ExtOps...>::_varum;
-  using BASE_NLP<ExtOps...>::_par;
-  using BASE_NLP<ExtOps...>::_obj;
-  using BASE_NLP<ExtOps...>::_ctr;
+  using BASE_NLP::_dag;
+  using BASE_NLP::_var;
+  using BASE_NLP::_vartyp;
+  using BASE_NLP::_varlb;
+  using BASE_NLP::_varlm;
+  using BASE_NLP::_varub;
+  using BASE_NLP::_varum;
+  using BASE_NLP::_par;
+  using BASE_NLP::_obj;
+  using BASE_NLP::_ctr;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<ExtOps...>::_varini;
+  using GAMSIO::_varini;
 #endif
 
 public:
@@ -186,7 +184,7 @@ public:
      INFEASIBLE,        //!< MINLP appears to be infeasible (nonconvex MINLP could still be feasible)
      UNBOUNDED,         //!< MIP subproblem returns an unbounded solution
      INTERRUPTED,       //!< MINLP algorithm was interrupted prior to convergence
-     FAILED,            //!< MINLP algorithm encountered numerical difficulties
+     FAILURE,           //!< MINLP algorithm encountered numerical difficulties
      ABORTED            //!< MINLP algorithm aborted after critical error
   };
 
@@ -291,6 +289,7 @@ public:
     //! @brief Enumeration type for MINLPSLV exception handling
     enum TYPE{
       SETUP,		//!< Incomplete setup before a solve
+      PARAM,	        //!< Undefined parameter values
       SEARCHALG,	//!< Invalid search strategy
       INTERN=-33	//!< Internal error
     };
@@ -303,6 +302,8 @@ public:
       switch( _ierr ){
       case SETUP:
         return "MINLPSLV::Exceptions  Incomplete setup before a solve";
+      case PARAM:
+        return "MINLPSLV::Exceptions  Undefined parameter values";
       case SEARCHALG:
         return "MINLPSLV::Exceptions  Invalid search algorithm";
       case INTERN:
@@ -400,8 +401,26 @@ protected:
   //! @brief Global solver for MIP subproblem
   MIP                       _MIPSLV;
 
+  //! @brief size of parameters in MINLP model
+  size_t                    _nP;
+  
+  //! @brief Parameters in MINLP model
+  std::vector<FFVar>        _Pvar;
+
+  //! @brief Parameter dependencies
+  std::vector<FFDep>        _Pdep;
+
+  //! @brief Parameter values
+  std::vector<double>       _Pval;
+  
+  //!@brief vector of parameter values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> _FPval;
+
+  //!@brief vector of parameter values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> _BPval;
+
   //! @brief Number of decision variables (independent and dependent) in MINLP model
-  unsigned                  _nX;
+  size_t                    _nX;
 
   //! @brief Reference variables in MINLP feasibility pump
   std::vector<FFVar>        _Xref;
@@ -427,11 +446,8 @@ protected:
   //! @brief Decision variable bounds with integer fixing
   std::vector<T>            _Xbndi;
 
-  //! @brief vector of zeros for offset calculation in functions
-  std::vector<double>       _X0;
-
-  //! @brief vector of polynomial variables for linear function gradients
-  std::vector<SPoly<>>      _PXvar;
+  //! @brief vector of zeros for constant term calculation in functions
+  std::vector<FFVar>        _X0;
 
   //! @brief vector of forward derivatives for linear function gradients
   std::vector<fadbad::F<double>> _FXval;
@@ -439,8 +455,11 @@ protected:
   //! @brief vector of backward derivatives for linear function gradients
   std::vector<fadbad::B<double>> _BXval;
 
+  //! @brief vector of decision variable levels
+  std::vector<double>       _Xini;
+
   //! @brief number of functions (objective and constraints) in MINLP model
-  unsigned                  _nF;
+  size_t                    _nF;
 
   //! @brief Cost function in MINLP feasibility pump
   FFVar                     _Ffeas;
@@ -455,7 +474,7 @@ protected:
   std::vector<T>            _Fbnd;
 
   //! @brief vector of function offsets
-  std::vector<double>       _Foff;
+  std::vector<FFVar>        _Foff;
 
   //! @brief Functions in MINLP model
   std::vector<unsigned>     _Ftyp;
@@ -468,6 +487,9 @@ protected:
 
   //! @brief list of operations in nonlinear functions
   FFSubgraph                _Fop;
+  
+  //! @brief Function values
+  std::vector<double>       _Fval;
 
   //! @brief vector of forward derivatives for linear function gradients
   std::vector<fadbad::F<double>> _FFval;
@@ -476,7 +498,7 @@ protected:
   std::vector<fadbad::B<double>> _BFval;
 
   //!@brief number of nonzero elements in the linear part of each function
-  unsigned                  _nA;
+  size_t                    _nA;
 
   //!@brief row coordinates of nonzero elements in the linear part of each function
   std::vector<int>          _iAfun;
@@ -484,11 +506,14 @@ protected:
   //!@brief column coordinates of nonzero elements in the linear part of each function
   std::vector<int>          _jAvar;
 
+  //!@brief Expressions of nonzero elements in the linear part of each function
+  std::vector<FFVar>        _Avar;
+
   //!@brief values of nonzero elements in the linear part of each function
   std::vector<double>       _Aval;
 
   //!@brief number of nonzero elements in the derivative of the nonlinear part of each function
-  unsigned                  _nG;
+  size_t                    _nG;
 
   //!@brief row coordinates of nonzero elements in the derivative of the nonlinear part of each function
   std::vector<int>          _iGfun;
@@ -501,9 +526,6 @@ protected:
 
   //! @brief derivative values of the nonlinear part of each function
   std::vector<double>       _Gval;
-
-  //!@brief set of indices of nonlinear constraints 
-  std::set<unsigned>        _Gndx;
 
   //! @brief list of operations in function derivatives
   FFSubgraph                _Gop;
@@ -604,7 +626,7 @@ protected:
 
   //! @brief Test feasibility
   bool _test_feasible
-    ( double const* Xini, std::ostream& os );
+    ( double const* Xval, std::ostream& os );
 
   //! @brief Solve local NLP subproblem
   bool _solve_local
@@ -652,7 +674,8 @@ public:
 
   //! @brief Constructor
   MINLPSLV()
-    : _issetup(false)
+    : _status(FAILURE), _issetup(false), _nP(0), _nX(0), _nF(0), _nA(0), _nG(0),
+      _rootrel(FAILURE), _solution(FAILURE), _incumbent(FAILURE)
     { stats.reset(); }
 
   //! @brief Destructor
@@ -677,15 +700,15 @@ public:
 
   //! @brief Solve MINLP model to local optimality using outer-approximation
   int optimize
-    ( double const* Xini=nullptr,  T const* Xbnd=nullptr, ROUND const& f=nearest,
-      std::ostream& os=std::cout );
+    ( double const* Xini=nullptr, T const* Xbnd=nullptr, double const* Pval=nullptr,
+      ROUND const& f=nearest, std::ostream& os=std::cout );
 
   //! @brief Get incumbent info
   SOLUTION_OPT const& get_incumbent
     () 
     const
     { return _incumbent; }
-    
+
   //! @brief Get reference to local NLP solver
   NLP& local_solver
     ()
@@ -700,7 +723,7 @@ public:
   bool is_bounded
     ( double const& maxdiam )
     { _isbnd = true;
-      for( unsigned i=0; _isbnd && i<_nX; i++ ){
+      for( size_t i=0; _isbnd && i<_nX; i++ ){
         if( Op<T>::diam(_Xbnd[i]) < BASE_OPT::INF/10 ) continue;
         _isbnd = false;
       }
@@ -735,8 +758,8 @@ public:
 private:
 
   //! @brief Private methods to block default compiler methods
-  MINLPSLV( MINLPSLV<T,NLP,MIP,ExtOps...> const& ) =delete;
-  MINLPSLV<T,NLP,MIP,ExtOps...>& operator=( MINLPSLV<T,NLP,MIP,ExtOps...> const& ) =delete;
+  MINLPSLV( MINLPSLV<T,NLP,MIP> const& ) = delete;
+  MINLPSLV<T,NLP,MIP>& operator=( MINLPSLV<T,NLP,MIP> const& ) = delete;
 
   //! @brief Interval representation of 'unbounded' variables
   static T _IINF;
@@ -806,18 +829,18 @@ private:
 
 };
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
-inline T MINLPSLV<T,NLP,MIP,ExtOps...>::_IINF = BASE_OPT::INF * T(-1,1);
+template <typename T, typename NLP, typename MIP>
+inline T MINLPSLV<T,NLP,MIP>::_IINF = BASE_OPT::INF * T(-1,1);
 
 #if defined (MC__WITH_GAMS)
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::read
+MINLPSLV<T,NLP,MIP>::read
 ( std::string const& filename, bool const init )
 {
   _tstart = stats.start();
 
-  bool flag = this->GAMSIO<ExtOps...>::read( filename, init, options.DISPLEVEL>1? true: false );
+  bool flag = this->GAMSIO::read( filename, init, options.DISPLEVEL>1? true: false );
 
   stats.walltime_setup += stats.walltime( _tstart );
   stats.walltime_all   += stats.walltime( _tstart );
@@ -825,9 +848,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::read
 }
 #endif
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::setup
+MINLPSLV<T,NLP,MIP>::setup
 ( std::ostream& os )
 {
   //stats.reset();
@@ -851,6 +874,10 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
 #endif
   _MIPSLV.options = options.MIPSLV;
 
+  // full set of parameters
+  _Pvar = _par;
+  _nP = _Pvar.size();
+
   // decision variables
   _Xvar = _var;
   _Xlow = _varlb;
@@ -858,17 +885,25 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _Xtyp = _vartyp;
   _Xint.clear();
   _Xcnt.clear();
-  for( unsigned i=0; i<_var.size(); i++ )
+  for( size_t i=0; i<_var.size(); i++ )
     if( _Xtyp[i] ) _Xint.insert( i );
     else           _Xcnt.insert( i );
   _ismip = !_Xint.empty();
   _Xrel.clear();
   _Xbnd.clear();
   _nX = _Xvar.size();
-  
-  // set variable dependencies
+
+  // full set of variable initial values from GAMS
+#if defined (MC__WITH_GAMS)
+  _Xini = _varini;
+#else
+  _Xini.clear();
+#endif
+
+  // set dependencies
+  _Pdep.assign( _nP, 0. );
   _Xdep.resize( _nX );
-  for( unsigned i=0; i<_nX; ++i )
+  for( size_t i=0; i<_nX; ++i )
     _Xdep[i].indep( _Xvar[i].id().second );
 
   // full set of functions
@@ -882,7 +917,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   if( std::get<0>(_obj).size() ){
     _Ftyp.push_back( std::get<0>(_obj)[0] );
     _Fvar.push_back( std::get<1>(_obj)[0] );
-    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data() ); 
+    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
     _Fdep.push_back( depF );
   }
   else{
@@ -893,7 +928,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _Fbnd.push_back( _IINF );
 
   // Constraints
-  for( unsigned i=0; i<std::get<0>(_ctr).size(); i++ ){
+  for( size_t i=0; i<std::get<0>(_ctr).size(); i++ ){
     _Ftyp.push_back( std::get<0>(_ctr)[i] );
     _Fvar.push_back( std::get<1>(_ctr)[i] );
     switch( std::get<0>(_ctr)[i] ){
@@ -901,7 +936,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
       case BASE_OPT::LE: _Fbnd.push_back( T(-BASE_OPT::INF,0) ); break;
       case BASE_OPT::GE: _Fbnd.push_back( T(0,BASE_OPT::INF) );  break;
     }
-    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data() ); 
+    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
     _Fdep.push_back( depF );
   }
   _nF = _Fvar.size();
@@ -917,16 +952,12 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _Flin.clear();
   _Fnlin.clear();
   _Foff.clear();
-  _X0.resize( _nX, 0. );
-  for( unsigned j=0; j<_nF; j++ ){
-    double CtrCst = 0.;
+  _X0.resize( _nX, FFVar(_dag,0.) );
+  for( size_t j=0; j<_nF; j++ ){
     if( _Fdep[j].worst() > FFDep::L )
       _Fnlin.insert( j );
-    else{
+    else
       _Flin.insert( j );
-      _dag->eval( 1, &_Fvar[j], &CtrCst, _nX, _Xvar.data(), _X0.data() );       
-    }
-    _Foff.push_back(  CtrCst );
   }
 #ifdef MC__MINLPSLV_DEBUG
   assert( _nF == _Flin.size() + _Fnlin.size() );
@@ -963,55 +994,60 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::setup
   _issetup = true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
+MINLPSLV<T,NLP,MIP>::_set_gradient
 ()
 {
   // sparse linear function gradients
   _iAfun.clear(); _jAvar.clear(); _Aval.clear(); 
-  if( !_Flin.empty() ) _PXvar.resize( _nX );
   for( auto const& iF : _Flin ){
-    // Initialize participating variables in fadbad::F<double>
-    for( unsigned iX=0; iX<_nX; ++iX )
-      _PXvar[iX].var( iX );
-    SPoly<> POLFvar;
-    _dag->eval( 1, &_Fvar[iF], &POLFvar, _nX, _Xvar.data(), _PXvar.data() );
-    // Gather derivatives
-    for( auto const& [mon,coef] : POLFvar.mapmon() ){
-      if( !mon.tord ) continue;
-#ifdef MC__MINLPSLV_DEBUG
-      assert( mon.tord == 1 && mon.expr.size() == 1 );
-#endif
+    _cleanup_gradient();
+    switch( options.NLPSLV.GRADMETH ){
+      default:
+      case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+    }
+
+    // Gather derivative expressions
+    for( size_t k=0; k<std::get<0>(_Fgrad); ++k ){
       _iAfun.push_back( iF );
-      _jAvar.push_back( mon.expr.cbegin()->first );
-      _Aval.push_back( coef );
+      _jAvar.push_back( std::get<2>(_Fgrad)[k] );
+      _Avar.push_back( std::get<3>(_Fgrad)[k] );
 #ifdef MC__MINLPSLV_DEBUG
-      std::cout << "  _Aval[" << iF << "," << mon.expr.cbegin()->first << "] = " 
-                << coef << std::endl;
+      std::cout << "  _Avar[" << _iAfun.back() << "," << _jAvar.back() << "] = " << _Avar.back() << std::endl;
 #endif
     }
   }
-  _nA = _Aval.size();
+  _nA = _Avar.size();
+
+  // Compute constant offset expressions
+  FFVar* Ftmp = _dag->compose( _Flin, _Fvar.data(), _nX, _Xvar.data(), _X0.data() );
+  _Foff.assign( _nF, 0. );
+  for( auto const& iF : _Flin ){
+    _Foff[iF] = Ftmp[iF];
+#ifdef MC__MINLPSLV_DEBUG
+     std::cout << "  _Foff[" << iF << "] = " << _Foff[iF] << std::endl;
+#endif
+  }
+  delete[] Ftmp;
 
   // sparse nonlinear function gradients
   _iGfun.clear(); _jGvar.clear(); _Gvar.clear(); 
   for( auto const& iF : _Fnlin ){
     _cleanup_gradient();
-    // Compute symbolic derivative
     switch( options.NLPSLV.GRADMETH ){
       case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
       case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
       default: break;
     }
     // Gather derivative expressions
-    for( unsigned k=0; k<std::get<0>(_Fgrad); ++k ){
+    for( size_t k=0; k<std::get<0>(_Fgrad); ++k ){
       _iGfun.push_back( iF );
       _jGvar.push_back( std::get<2>(_Fgrad)[k] );
       _Gvar.push_back( std::get<3>(_Fgrad)[k] );
 #ifdef MC__MINLPSLV_DEBUG
-      std::cout << "  _Gvar[" << iF << "," << std::get<2>(_Fgrad)[k] << "] = " 
-                << std::get<3>(_Fgrad)[k] << std::endl;
+      std::cout << "  _Gvar[" << _iGfun.back() << "," << _jGvar.back() << "] = " << _Gvar.back() << std::endl;
 #endif
     }
 
@@ -1019,7 +1055,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
     switch( options.NLPSLV.GRADMETH ){
       case NLP::Options::FAD:
       case NLP::Options::BAD:
-        for( unsigned iX=0; iX<_nX; ++iX ){
+        for( size_t iX=0; iX<_nX; ++iX ){
           if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
           _jGvar.push_back( iX );
@@ -1027,16 +1063,18 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_gradient
           std::cout << "  _Gvar[" << iF << "," << iX << "]" << std::endl;
 #endif
         }
-      default: break;
+        break;
+      default:
+        break;
     }
   }
-  _nG = _iGfun.size();
+  _nG = _jGvar.size();
   _cleanup_gradient();
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_cleanup_gradient
+MINLPSLV<T,NLP,MIP>::_cleanup_gradient
 ()
 {
   std::get<0>(_Fgrad) = 0;
@@ -1045,13 +1083,13 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_cleanup_gradient
   delete[] std::get<3>(_Fgrad);  std::get<3>(_Fgrad) = nullptr;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_is_integer_feasible
+MINLPSLV<T,NLP,MIP>::_is_integer_feasible
 ( double const* Xval, double const& feastol )
 const
 {
-  for( unsigned i=0; i<_var.size(); i++ ){
+  for( size_t i=0; i<_var.size(); i++ ){
     if( !_Xtyp[i] ) continue;
     if( std::fabs( Xval[i] - std::round(Xval[i]) ) > feastol )
       return false;
@@ -1059,13 +1097,13 @@ const
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_is_integer_equal
+MINLPSLV<T,NLP,MIP>::_is_integer_equal
 ( double const* Xval, double const* Xref )
 const
 {
-  for( unsigned i=0; i<_var.size(); i++ ){
+  for( size_t i=0; i<_var.size(); i++ ){
     if( !_Xtyp[i] ) continue;
     if( std::fabs( Xval[i] - Xref[i] ) > options.FEASTOL )
       return false;
@@ -1073,9 +1111,9 @@ const
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_interrupted
+MINLPSLV<T,NLP,MIP>::_interrupted
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 const
 {
@@ -1085,9 +1123,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_converged
+MINLPSLV<T,NLP,MIP>::_converged
 ()
 const
 {
@@ -1097,9 +1135,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP,ExtOps...>::_finalize
+MINLPSLV<T,NLP,MIP>::_finalize
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   STATUS const status, std::ostream& os )
 {
@@ -1109,27 +1147,27 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_finalize
   return _status;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_test_feasible
-( double const* Xini, std::ostream& os )
+MINLPSLV<T,NLP,MIP>::_test_feasible
+( double const* Xval, std::ostream& os )
 {
   // Test integer feasibility first
-  if( !_is_integer_feasible( Xini, options.FEASTOL ) )
+  if( !_is_integer_feasible( Xval, options.FEASTOL ) )
     return false;
 
   // Test other constraint feasibility next
   auto tNLP = stats.start();
   _NLPSLV.restore_model();
-  bool flag = _NLPSLV.is_feasible( Xini, options.FEASTOL );
+  bool flag = _NLPSLV.is_feasible( Xval, options.FEASTOL );
   _solution = _NLPSLV.solution();
   stats.walltime_slvnlp += stats.walltime( tNLP );
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_local
+MINLPSLV<T,NLP,MIP>::_solve_local
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart,
   double const* Xini, T const* Xbnd, bool const pumpfeas,
   bool const inccut, std::ostream& os )
@@ -1169,17 +1207,17 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_local
   _solution.reset();
   _NLPSLV.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( tstart ) );
 #ifdef MC__MINLPSLV_DEBUG
-  for( unsigned iX=0; iX<_nX; ++iX )
+  for( size_t iX=0; iX<_nX; ++iX )
     std::cout << "MINLPSLV::Xini[" << iX << "] = " << Xini[iX] << " in " << Xbnd[iX] << std::endl;
 #endif
-  _NLPSLV.solve( Xini, Xbnd );
+  _NLPSLV.solve( Xini, Xbnd, _Pval.data() );
   if( _NLPSLV.is_feasible( options.FEASTOL ) )
     _solution = _NLPSLV.solution();
 
   // Extra local solves from random starting points
   if( _isbnd && options.MSLOC > 1 ){
     _NLPSLV.options.TIMELIMIT = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( tstart ) );
-    _NLPSLV.solve( options.MSLOC-1, Xbnd );
+    _NLPSLV.solve( options.MSLOC-1, Xbnd, _Pval.data() );
     if( _NLPSLV.is_feasible( options.FEASTOL )
      && (_solution.x.empty() || objscal*_NLPSLV.solution().f[0] < objscal*_solution.f[0]) )
       _solution = _NLPSLV.solution();
@@ -1194,9 +1232,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_local
   return !_solution.x.empty();
 }
   
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_init_master
+MINLPSLV<T,NLP,MIP>::_init_master
 ()
 {
   auto tMIP = stats.start();
@@ -1210,7 +1248,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_init_master
   // Set polyhedral main variables
   _POLXvar.clear();
   auto itX = _Xvar.begin();
-  for( unsigned i=0; itX!=_Xvar.end(); ++itX, i++ )
+  for( size_t i=0; itX!=_Xvar.end(); ++itX, i++ )
     _POLXvar.push_back( PolVar<T>( &_POLenv, *itX, T(_Xlow[i],_Xupp[i]), (_Xtyp[i]? false: true) ) );
 
   // Set polyhedral slack variables
@@ -1229,9 +1267,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_init_master
   stats.walltime_slvnlp += stats.walltime( tMIP );
 }
   
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_update_master
+MINLPSLV<T,NLP,MIP>::_update_master
 ( bool const locfeas, bool const pumpfeas, bool const inccut, bool const intrel )
 {
   auto tMIP = stats.start();
@@ -1311,9 +1349,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_update_master
   return true;
 }
 
-//template <typename T, typename NLP, typename MIP, typename... ExtOps>
+//template <typename T, typename NLP, typename MIP>
 //inline bool
-//MINLPSLV<T,NLP,MIP,ExtOps...>::_add_rootnode_cut
+//MINLPSLV<T,NLP,MIP>::_add_rootnode_cut
 //()
 //{
 //  double const Zrel = (_Ftyp[0]==BASE_OPT::MIN? _Zrel: -_Zrel );
@@ -1321,9 +1359,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_update_master
 //  return true;
 //}
 
-//template <typename T, typename NLP, typename MIP, typename... ExtOps>
+//template <typename T, typename NLP, typename MIP>
 //inline bool
-//MINLPSLV<T,NLP,MIP,ExtOps...>::_add_incumbent_cut
+//MINLPSLV<T,NLP,MIP>::_add_incumbent_cut
 //()
 //{
 //  double const Ztol = 0; //std::max( options.CVATOL, 0.5 * options.CVRTOL * std::fabs( _Zinc + _Zrel ) );
@@ -1335,14 +1373,14 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_update_master
 //  return true;
 //}
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
+MINLPSLV<T,NLP,MIP>::_add_outerapproximation_cuts
 ( std::vector<double> const& Xval, std::vector<double>& Fval, std::vector<double>& Fmul )
 {
   // Initialize cuts
   _POLcuts.assign( _nF, nullptr );
-  for( unsigned i=0; i<_nF; i++ ){
+  for( size_t i=0; i<_nF; i++ ){
   
     // Only add linear cuts at first iteration
     bool islin = (_Fnlin.find(i) == _Fnlin.end()? true: false);
@@ -1351,8 +1389,8 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
     // Define cut type: objective
     if( !i ){
       if( islin ) switch( _Ftyp[0] ){
-        case BASE_OPT::MIN: _POLcuts[0] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -_Foff[0], _POLSvar.front(), -1. ); continue;
-        case BASE_OPT::MAX: _POLcuts[0] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -_Foff[0], _POLSvar.front(),  1. ); continue;
+        case BASE_OPT::MIN: _POLcuts[0] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -_Fval[0], _POLSvar.front(), -1. ); continue;
+        case BASE_OPT::MAX: _POLcuts[0] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -_Fval[0], _POLSvar.front(),  1. ); continue;
         default: return false;
       }
       else switch( _Ftyp[0] ){
@@ -1364,9 +1402,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
 
     // Define cut type: linear and convex constraints
     if( islin ) switch( _Ftyp[i] ){
-      case BASE_OPT::EQ: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, -_Foff[i] ); continue;
-      case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -_Foff[i] ); continue;
-      case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -_Foff[i] ); continue;
+      case BASE_OPT::EQ: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::EQ, -_Fval[i] ); continue;
+      case BASE_OPT::LE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -_Fval[i] ); continue;
+      case BASE_OPT::GE: _POLcuts[i] = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -_Fval[i] ); continue;
       default: return false;
     }
     else if( options.LINMETH == Options::CVX ) switch( _Ftyp[i] ){
@@ -1401,7 +1439,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
 
   // Populate linear cuts
   if( _iter == 1 ){
-    for( unsigned ie=0; ie<_nA; ie++ ){
+    for( size_t ie=0; ie<_nA; ie++ ){
       if( _Aval[ie] == 0. ) continue;
       _POLcuts[_iAfun[ie]]->append( _POLXvar[_jAvar[ie]], _Aval[ie] ).rhs();
     }
@@ -1414,15 +1452,23 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
       case NLP::Options::BAD:
         _BXval.resize( _nX );
         // Initialize participating variables in fadbad::B<double>
-        for( unsigned iX=0; iX<_nX; ++iX )
+        for( size_t iX=0; iX<_nX; ++iX )
           _BXval[iX] = Xval[iX];
         _BFval.resize( _nF );
-        _dag->eval( _Fop, _Bwk, _Fnlin, _Fvar.data(), _BFval.data(), _nX, _Xvar.data(), _BXval.data() );
+        if( _nP ){
+          _BPval.resize( _nP );
+          // Initialize parameters in fadbad::B<double>
+          for( size_t iP=0; iP<_nP; ++iP ) _BPval[iP] = _Pval[iP];
+          _dag->eval( _Fop, _Bwk, _Fnlin, _Fvar.data(), _BFval.data(), _nX, _Xvar.data(), _BXval.data(), _nP, _Pvar.data(), _BPval.data() );
+        }
+        else{
+          _dag->eval( _Fop, _Bwk, _Fnlin, _Fvar.data(), _BFval.data(), _nX, _Xvar.data(), _BXval.data() );
+        }
         _Bwk.clear();
         for( auto const& iF : _Fnlin )
           _BFval[iF].diff( iF, _nF );
         // Gather derivatives
-        for( unsigned ie=0; ie<_nG; ie++ ){
+        for( size_t ie=0; ie<_nG; ie++ ){
 #ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
           std::cout << "MINLPSLV::_Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = "
                     << _BXval[ _jGvar[ie] ].d( _iGfun[ie] ) << std::endl;
@@ -1435,7 +1481,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
       case NLP::Options::FAD:
         _FXval.resize( _nX );
         // Initialize participating variables in fadbad::F<double>
-        for( unsigned iX=0; iX<_nX; ++iX ){
+        for( size_t iX=0; iX<_nX; ++iX ){
 #ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
           std::cout << "MINLPSLV::Xval[" << iX << "] = " << Xval[iX] << std::endl;
 #endif
@@ -1443,15 +1489,21 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
           _FXval[iX].diff( iX, _nX );
         }
         _FFval.resize( _nF );
-        _dag->eval( _Fop, _Fwk, _Fnlin, _Fvar.data(), _FFval.data(), _nX, _Xvar.data(), _FXval.data() );
-        // Gather derivatives
-
+        if( _nP ){
+          _FPval.resize( _nP );
+          // Initialize parameters in fadbad::F<double>
+          for( size_t iP=0; iP<_nP; ++iP ) _FPval[iP] = _Pval[iP];
+          _dag->eval( _Fop, _Fwk, _Fnlin, _Fvar.data(), _FFval.data(), _nX, _Xvar.data(), _FXval.data(), _nP, _Pvar.data(), _FPval.data() );
+        }
+        else{
+          _dag->eval( _Fop, _Fwk, _Fnlin, _Fvar.data(), _FFval.data(), _nX, _Xvar.data(), _FXval.data() );
+        }
 #ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
-      for( auto const& iF : _Fnlin )
-        std::cout << "MINLPSLV::Fval[" << iF << "] = " << _FFval[iF].x() << std::endl;
+        for( auto const& iF : _Fnlin )
+          std::cout << "MINLPSLV::Fval[" << iF << "] = " << _FFval[iF].x() << std::endl;
 #endif
-
-        for( unsigned ie=0; ie<_nG; ie++ ){
+        // Gather derivatives
+        for( size_t ie=0; ie<_nG; ie++ ){
 #ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
           std::cout << "MINLPSLV::_Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = "
                     << _FFval[ _iGfun[ie] ].d( _jGvar[ie] ) << std::endl;
@@ -1463,9 +1515,12 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
       // Compute symbolic derivative
       case NLP::Options::BSYM:
       case NLP::Options::FSYM:
-        _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data() );
+        if( _nP )
+          _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data(), _nP, _Pvar.data(), _Pval.data() );
+        else
+          _dag->eval( _Gop, _dwk, _nG, _Gvar.data(), _Gval.data(), _nX, _Xvar.data(), Xval.data() );
 #ifdef MC__MINLPSLV_DEBUG_LINEARIZATION
-        for( unsigned ie=0; ie<_nG; ie++ )
+        for( size_t ie=0; ie<_nG; ie++ )
           std::cout << "MINLPSLV::_Gval[" << _iGfun[ie] << "," << _jGvar[ie] << "] = " << _Gval[ie] << std::endl;
 #endif
         break;
@@ -1480,22 +1535,22 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_outerapproximation_cuts
   }
   
   // Populate linearized nonlinear cuts
-  for( unsigned ie=0; ie<_nG; ie++ ){
+  for( size_t ie=0; ie<_nG; ie++ ){
     if( !_POLcuts[_iGfun[ie]] || _Gval[ie] == 0. ) continue;
     _POLcuts[_iGfun[ie]]->append( _POLXvar[_jGvar[ie]], _Gval[ie] ).rhs() += _Gval[ie] * Xval[_jGvar[ie]];
   }
 
 #ifdef MC__MINLPSLV_DEBUG
-  for( unsigned i=0; i<_nF; i++ )
+  for( size_t i=0; i<_nF; i++ )
     if( _POLcuts[i] ) std::cout << " _POLcuts[" << i << "]: " << *_POLcuts[i] << std::endl;
   int dum; std::cout << "PRESS 1 TO CONTINUE"; std::cin >> dum;
 #endif
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_add_integer_cut
+MINLPSLV<T,NLP,MIP>::_add_integer_cut
 ( std::vector<double> const& Xint )
 {
   // Add constraints for the linear cut: \|y-\bar{y}\|_1 \geq 1
@@ -1504,9 +1559,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_add_integer_cut
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_set_integer_cut
+MINLPSLV<T,NLP,MIP>::_set_integer_cut
 ( std::vector<double> const& Xint, std::vector<PolVar<T>>& linvar,
   std::vector<double>& linwei, double& cst )
 {
@@ -1514,7 +1569,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_integer_cut
   cst = 0.;
   linvar.clear();
   linwei.clear();
-  for( auto&& j: _Xint ){
+  for( auto const& j: _Xint ){
     if( Xint[j] <= std::ceil(_Xlow[j]) + options.FEASTOL ){
       linvar.push_back( _POLXvar[j] );
       linwei.push_back( 1. );
@@ -1542,22 +1597,22 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_set_integer_cut
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLPSLV<T,NLP,MIP,ExtOps...>::_add_anticycling_cut
+MINLPSLV<T,NLP,MIP>::_add_anticycling_cut
 ( std::vector<double> const& Xval, std::vector<double> const& Xrel )
 {
   // Add linear cut: [\bar{y}-\hat{y}]^T[y-\hat{y}] \geq 0
   auto ACcut = *_POLenv.add_cut( nullptr, PolCut<T>::GE, 0. );
-  for( auto&& j: _Xint )
+  for( auto const& j: _Xint )
     ACcut->append( _POLXvar[j], Xval[j]-Xrel[j] ).rhs() += Xval[j]*(Xval[j]-Xrel[j]);
 
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_master
+MINLPSLV<T,NLP,MIP>::_solve_master
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   auto tMIP = stats.start();
@@ -1570,25 +1625,27 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_solve_master
   return _MIPSLV.get_status();
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP,ExtOps...>::_propagate_bounds
+MINLPSLV<T,NLP,MIP>::_propagate_bounds
 ( T* Xbnd )
 {
   auto tCP = stats.start();
 #ifdef MC__MINLPSLV_DEBUG
   _dag->output( _dag->subgraph( _Flin, _Fvar.data() ) );
-  for( unsigned i=0; i<_nX; i++ )
+  for( size_t i=0; i<_nX; i++ )
     std::cout << "X[" << i << "] = " << Xbnd[i] << std::endl;
-  for( unsigned i=0; i<_nF; i++ )
+  for( size_t i=0; i<_nF; i++ )
     std::cout << "F[" << i << "] = " << _Fbnd[i] << std::endl;
   std::cout << "FLin = { ";
   for( auto const& i: _Flin ) std::cout << i << " ";
   std::cout << "}" << std::endl;
 #endif
-  
+
   // Apply constraint propagation
   int flag = 0;
+  for( size_t i=0; i<_nP; i++ )
+    _Pvar[i].set( _Pval[i] );
   try{
     flag = _dag->reval( _CPbnd, _nF-1, _Fvar.data()+1, _Fbnd.data()+1, _nX, _Xvar.data(),
                         Xbnd, _IINF, options.CPMAX, options.CPTHRES );
@@ -1596,13 +1653,15 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_propagate_bounds
     //                    Xbnd, _IINF, options.CPMAX, options.CPTHRES );
 
     // Round binary and integer variables accordingly
-    for( unsigned ix=0; ix<_nX; ++ix )
+    for( size_t ix=0; ix<_nX; ++ix )
       if( _Xtyp[ix] > 0 ) Xbnd[ix] = T( std::ceil( Op<T>::l(Xbnd[ix]) ), std::floor( Op<T>::u(Xbnd[ix]) ) );
   }
   catch(...){ std::cout << "Exception caught\n"; }
+  for( size_t i=0; i<_nP; i++ )
+    _Pvar[i].unset();
 #ifdef MC__MINLPSLV_DEBUG
   std::cout << "\nVariable Domain: " << flag << std::endl;
-  for( unsigned i=0; i<_nX; i++ )
+  for( size_t i=0; i<_nX; i++ )
     std::cout << _Xvar[i] << " X[" << i << "] = " << Xbnd[i] << std::endl;
 #endif
 
@@ -1610,9 +1669,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_propagate_bounds
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline typename SBBSLV<T>::STATUS
-MINLPSLV<T,NLP,MIP,ExtOps...>::subproblems
+MINLPSLV<T,NLP,MIP>::subproblems
 ( typename SBBSLV<T>::TASK const task, SBBNode<T>* node,
   std::vector<double>& p, double& f, double const& INC, std::ostream& os )
 {
@@ -1701,7 +1760,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::subproblems
     else{
       status = SBBSLV<T>::NORMAL;
       // round integer bounds
-      for( auto& i : _Xint ){
+      for( auto const& i : _Xint ){
         if( std::ceil( Op<T>::l( node->P(i) ) ) > std::floor( Op<T>::u( node->P(i) ) ) ){
           status = SBBSLV<T>::INFEASIBLE;
           break;
@@ -1729,10 +1788,10 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::subproblems
   return status;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
-(  double const* Xini, T const* Xbnd, ROUND const& f, std::ostream& os )
+MINLPSLV<T,NLP,MIP>::optimize
+(  double const* Xini, T const* Xbnd, double const* Pval, ROUND const& f, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
   _tstart = stats.start();
@@ -1741,16 +1800,30 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
   _Zinc =  _objscal * BASE_OPT::INF;
   _Zrel = -_objscal * BASE_OPT::INF;
   _incumbent.reset();
+ 
+  // Update parameter values
+  if( !_Pvar.empty() && !Pval ) throw MINLPSLV::Exceptions( MINLPSLV::Exceptions::PARAM );
+  if( Pval ) _Pval.assign( Pval, Pval+_nP );
+#ifdef MC__MINLPSLV_DEBUG
+  for( size_t i=0; !Pvar.empty() && P0 && i<_nP; i++ )
+    std::cout << "  Pval[" << i << "] = " << Pval[i] << std::endl;
+#endif
+
+  // Update linear constraint coefficients
+  _Aval.resize( _nA );
+  _Fval.assign( _nF, 0. );
+  _dag->eval( _dwk, _nA,   _Avar.data(), _Aval.data(), _nP, _Pvar.data(), _Pval.data() );
+  _dag->eval( _dwk, _Flin, _Foff.data(), _Fval.data(), _nP, _Pvar.data(), _Pval.data() );
 
   // Search strategy
   int flag = 0;
   switch( options.SEARCHALG ){
     case Options::OA:
-      flag = _optimize_oa( Xini, Xbnd, os );
+      flag = _optimize_oa( !Xini && !_Xini.empty()? _Xini.data(): Xini, Xbnd, os );
       break;
 
     case Options::BB:
-      flag = _optimize_bb( Xini, Xbnd, os );
+      flag = _optimize_bb( !Xini && !_Xini.empty()? _Xini.data(): Xini, Xbnd, os );
       break;
 
     default:
@@ -1760,14 +1833,14 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::optimize
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_bb
+MINLPSLV<T,NLP,MIP>::_optimize_bb
 (  double const* Xini, T const* Xbnd, std::ostream& os )
 {
   // Initialize and reduce variable bounds
   _Xbnd.resize( _nX );
-  for( unsigned i=0; i<_nX; i++ ){
+  for( size_t i=0; i<_nX; i++ ){
     _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
     if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) )
       return _finalize( _tstart, STATUS::INFEASIBLE );
@@ -1793,9 +1866,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_bb
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
+MINLPSLV<T,NLP,MIP>::_optimize_oa
 (  double const* Xini, T const* Xbnd, std::ostream& os )
 {
   //auto tstart = stats.start();
@@ -1804,13 +1877,13 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
   _display_init( os );
   
   // Initial point
-  if( Xini ) _varini.assign( Xini, Xini+_var.size() );
-  else       _varini.clear(); // No default initial guess
+  //if( Xini ) _varini.assign( Xini, Xini+_var.size() );
+  //else       _varini.clear(); // No default initial guess
 
   // Initialize and reduce variable bounds
   bool locfeas = true;
   _Xbnd.resize( _nX );
-  for( unsigned i=0; i<_nX; i++ ){
+  for( size_t i=0; i<_nX; i++ ){
     _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
     if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) ){
       locfeas = false;
@@ -1829,12 +1902,13 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
   // Solve relaxed MINLP model
   if( locfeas ){
     is_bounded( BASE_OPT::INF/10 ); // set _isbnd flag
-    locfeas = _solve_local( _tstart, _varini.data(), _Xbnd.data(), false, false, os );
+    //locfeas = _solve_local( _tstart, _varini.data(), _Xbnd.data(), false, false, os );
+    locfeas = _solve_local( _tstart, Xini, _Xbnd.data(), false, false, os );
   }
 #ifdef MC__MINLPSLV_DEBUG
   //std::cout << _solution;
   std::cout << "_Zloc = " << _solution.f[0] << std::endl;
-  for( unsigned i=0; i<_nX; i++ )
+  for( size_t i=0; i<_nX; i++ )
     if( std::fabs(_solution.x[i]) > 1e-5 )
       std::cout << "_Xloc[" << i << "] = " << _solution.x[i] << std::endl;
 #endif
@@ -1925,13 +1999,13 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
       case MIP::TIMELIMIT:
         return _finalize( _tstart, STATUS::INTERRUPTED );
       default:
-        return _finalize( _tstart, STATUS::FAILED );
+        return _finalize( _tstart, STATUS::FAILURE );
     }
 
     // Retrieve MIP solution
     if( !pumpfeas )
       _Zrel = _objscal * _MIPSLV.get_variable( _POLSvar.front() );
-    for( unsigned i=0; i<_nX; i++ ){
+    for( size_t i=0; i<_nX; i++ ){
       //std::cout << "Retrieve " << _POLXvar[i] << "(DAG: " << _POLXvar[i].var() << ")" << std::endl;
       try{
         _Xrel[i] = _MIPSLV.get_variable( _POLXvar[i] );
@@ -1945,7 +2019,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
     }
 #ifdef MC__MINLPSLV_DEBUG
     std::cout << "_Zrel = " << _Zrel << std::endl;
-    for( unsigned i=0; i<_nX; i++ )
+    for( size_t i=0; i<_nX; i++ )
       if( std::fabs(_Xrel[i]) > 1e-5 )
         std::cout << "_Xrel[" << i << "] = " << _Xrel[i] << std::endl;
 #endif
@@ -1961,7 +2035,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
     // Apply feasibility pump if NLP model found infeasible at current MIP integer fixing
     else if( pumpfeas ){
       if( !_solve_local( _tstart, _Xrel.data(), _Xbnd.data(), true, !locfeas, os ) )
-        return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible unless MINLP is infeasible
+        return _finalize( _tstart, STATUS::FAILURE ); // may not be infeasible unless MINLP is infeasible
 #ifdef MC__MINLPSLV_DEBUG
       std::cout << _solution;
 #endif
@@ -1972,10 +2046,10 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
         if( _Xint.size() < _nX ){
           for( auto const& i: _Xint ) _Xbndi[i] = _Xrel[i];
           if( !_solve_local( _tstart, _solution.x.data(), _Xbndi.data(), false, false, os ) )
-            return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible after feasibility pump
+            return _finalize( _tstart, STATUS::FAILURE ); // may not be infeasible after feasibility pump
         }
         else if( !_test_feasible( _solution.x.data(), os ) )
-          return _finalize( _tstart, STATUS::FAILED ); // may not be infeasible after feasibility pump
+          return _finalize( _tstart, STATUS::FAILURE ); // may not be infeasible after feasibility pump
 #ifdef MC__MINLPSLV_DEBUG
         std::cout << _solution;
 #endif
@@ -2001,7 +2075,7 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
 #ifdef MC__MINLPSLV_DEBUG
       //std::cout << _solution;
       std::cout << "_Zloc = " << _solution.f[0] << std::endl;
-      for( unsigned i=0; i<_nX; i++ )
+      for( size_t i=0; i<_nX; i++ )
         if( std::fabs(_solution.x[i]) > 1e-5 )
           std::cout << "_Xloc[" << i << "] = " << _solution.x[i] << std::endl;
 #endif
@@ -2039,9 +2113,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_optimize_oa
   return _finalize( _tstart, STATUS::SUCCESSFUL );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::Options::display
+MINLPSLV<T,NLP,MIP>::Options::display
 ( std::ostream & out ) const
 {
   // Display MINLPSLV Options
@@ -2066,10 +2140,10 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::Options::display
       << DISPLEVEL << std::endl;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline std::ostream&
 operator <<
-( std::ostream & out, MINLPSLV<T,NLP,MIP,ExtOps...> const& MINLP )
+( std::ostream & out, MINLPSLV<T,NLP,MIP> const& MINLP )
 {
   out << std::left << std::endl
       << std::setfill('_') << std::setw(72) << "#" << std::endl << "#" << std::endl << std::setfill(' ')
@@ -2084,9 +2158,9 @@ operator <<
   return out;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_setup
+MINLPSLV<T,NLP,MIP>::_display_setup
 ( std::ostream& os )
 {
   if( options.DISPLEVEL < 2 ) return;
@@ -2095,9 +2169,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_setup
   _display_flush( os ); 
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_init
+MINLPSLV<T,NLP,MIP>::_display_init
 ( std::ostream& os)
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -2110,15 +2184,15 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_init
   _display_flush( os ); 
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_final
+MINLPSLV<T,NLP,MIP>::_display_final
 ( unsigned const iter, std::chrono::microseconds const& walltime,
   std::ostream& os )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::endl << "#  TERMINATION AFTER ";
-  if( iter ) _odisp << _iter-1 << " ITERATIONS: ";
+  if( iter ) _odisp << _iter << " ITERATIONS: ";
   else       _odisp << "0 ITERATION: ";
   _odisp << std::fixed << std::setprecision(3) << walltime.count()*1e-6 << " SEC"
          << std::endl;
@@ -2147,9 +2221,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_final
   _display_flush( os );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
+MINLPSLV<T,NLP,MIP>::_display_add
 ( std::chrono::time_point<std::chrono::system_clock> const& tstart )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -2157,9 +2231,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
          << std::setw(7) << stats.to_time( stats.walltime( tstart ) ) << "s";
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
+MINLPSLV<T,NLP,MIP>::_display_add
 ( const double dval )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -2167,27 +2241,27 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
          << std::setw(_DPREC+8) << dval;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
+MINLPSLV<T,NLP,MIP>::_display_add
 ( const unsigned ival )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(_IPREC) << ival;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_add
+MINLPSLV<T,NLP,MIP>::_display_add
 ( const std::string &sval )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(3) << sval;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_display_flush
+MINLPSLV<T,NLP,MIP>::_display_flush
 ( std::ostream &os )
 {
   if( _odisp.str() == "" ) return;
@@ -2196,9 +2270,9 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_display_flush
   return;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline std::set<unsigned>
-MINLPSLV<T,NLP,MIP,ExtOps...>::_branch_subset
+MINLPSLV<T,NLP,MIP>::_branch_subset
 ( SBBNode<T> const* node )
 {
   // Find maximal magnitude
@@ -2241,12 +2315,12 @@ MINLPSLV<T,NLP,MIP,ExtOps...>::_branch_subset
   return branchset;
 }
     
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLPSLV<T,NLP,MIP,ExtOps...>::_set_options_sbbslv
+MINLPSLV<T,NLP,MIP>::_set_options_sbbslv
 ()
 {
-  SBBSLV<T>::options.BRANCHING_USERFUNCTION = MINLPSLV<T,NLP,MIP,ExtOps...>::_branch_subset;
+  SBBSLV<T>::options.BRANCHING_USERFUNCTION = MINLPSLV<T,NLP,MIP>::_branch_subset;
   SBBSLV<T>::options.STOPPING_ABSTOL        = options.CVATOL;
   SBBSLV<T>::options.STOPPING_RELTOL        = options.CVRTOL;
   SBBSLV<T>::options.DISPLAY_LEVEL          = options.DISPLEVEL?2:0;

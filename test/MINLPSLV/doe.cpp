@@ -7,6 +7,7 @@
 #include <armadillo>
 
 #include "ffunc.hpp"
+#include "spoly.hpp"
 
 #ifdef MC__USE_PROFIL
  #include "mcprofil.hpp"
@@ -87,7 +88,6 @@ struct FFDOptBase
 inline std::vector< arma::mat > FFDOptBase::M;
 inline unsigned FFDOptBase::nRep;
 
-template<unsigned int ID>
 class FFDOpt
 : public FFOp,
   public FFDOptBase
@@ -96,7 +96,7 @@ public:
   // Constructors
   FFDOpt
     ()
-    : FFOp( (int)EXTERN )
+    : FFOp( EXTERN )
     {}
 
   // Declaration
@@ -104,7 +104,6 @@ public:
     ( unsigned const idep, unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID;
       return *(insert_external_operation( *this, nRep, nVar, pVar )[idep]);
     }
 
@@ -112,17 +111,27 @@ public:
     ( unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID;
       return insert_external_operation( *this, nRep, nVar, pVar );
     }
 
   // Evaluation overloads
-  template< typename T >
-  void eval
-    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
     const
     {
-      throw std::runtime_error("Error: No generic implementation for DOpt\n");
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<double> ) )
+        return eval( nRes, static_cast<fadbad::F<double>*>(vRes), nVar, static_cast<fadbad::F<double> const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<FFVar> ) )
+        return eval( nRes, static_cast<fadbad::F<FFVar>*>(vRes), nVar, static_cast<fadbad::F<FFVar> const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFDOpt::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
     }
 
   void eval
@@ -193,7 +202,6 @@ public:
     { return false; }
 };
 
-template<unsigned int ID>
 class FFDOptGrad
 : public FFOp,
   public FFDOptBase
@@ -202,7 +210,7 @@ public:
   // Constructors
   FFDOptGrad
     ()
-    : FFOp( (int)EXTERN )
+    : FFOp( EXTERN )
     {}
 
   // Functor
@@ -210,24 +218,29 @@ public:
     ( unsigned const idep, unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID+1;
       return *(insert_external_operation( *this, nRep * nVar, nVar, pVar )[idep]);
     }
   FFVar** operator()
     ( unsigned const nVar, FFVar const* pVar )
     const
     {
-      info = ID+1;
       return insert_external_operation( *this, nRep * nVar, nVar, pVar );
     }
 
   // Evaluation overloads
-  template< typename T >
-  void eval
-    ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
     const
     {
-      throw std::runtime_error("Error: No generic implementation for DOptGrad\n");
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFDOptGrad::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
     }
 
   void eval
@@ -291,9 +304,8 @@ public:
     { return false; }
 };
 
-template<unsigned int ID>
 inline void
-FFDOpt<ID>::eval
+FFDOpt::eval
 ( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
   unsigned const* mVar )
 const
@@ -311,7 +323,7 @@ const
       vRes[s].setDepend( vVar[i] );
   }
 
-  static FFDOptGrad<ID> DOptGrad;
+  static FFDOptGrad DOptGrad;
   FFVar const*const* vDOptGrad = DOptGrad( nVar, vVarVal.data() ); 
   for( unsigned s=0; s<nRep; ++s ){
     for( unsigned j=0; j<vRes[0].size(); ++j ){
@@ -324,9 +336,8 @@ const
   }
 }
 
-template<unsigned int ID>
 inline void
-FFDOpt<ID>::eval
+FFDOpt::eval
 ( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
   unsigned const* mVar )
 const
@@ -345,7 +356,7 @@ const
       vRes[s].setDepend( vVar[i] );
   }
 
-  static FFDOptGrad<ID> DOptGrad;
+  static FFDOptGrad DOptGrad;
   static std::vector<double> vDOptGrad( nRep * nVar ); 
   DOptGrad.eval( nRep * nVar, vDOptGrad.data(), nVar, vVarVal.data(), nullptr );
   for( unsigned s=0; s<nRep; ++s ){
@@ -359,23 +370,21 @@ const
   }
 }
 
-template<unsigned int ID>
 inline void
-FFDOpt<ID>::deriv
+FFDOpt::deriv
 ( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
 const
 {
   assert( nRes == nRep && nVar * nRep == M.size() );
   //std::cout << "FFDOpt::deriv: FFVar\n";
 
-  static FFDOptGrad<ID> DOptGrad;
+  static FFDOptGrad DOptGrad;
   FFVar const*const* vDOptGrad = DOptGrad( nVar, vVar ); 
   for( unsigned s=0; s<nRep; ++s )
     for( unsigned i=0; i<nVar; ++i )
       vDer[s][i] = *vDOptGrad[s*nVar+i];
 }
 
-template<unsigned int ID>
 class FFSum
 : public FFOp
 {
@@ -390,19 +399,54 @@ public:
   FFVar& operator()
     ( unsigned const nVar, FFVar const* pVar )
     const
-    {
-      info = ID;
-      return **insert_external_operation( *this, 1, nVar, pVar );
-    }
+    { return **insert_external_operation( *this, 1, nVar, pVar ); }
   FFVar& operator()
     ( unsigned const nVar, FFVar const*const* pVar )
     const
+    { return **insert_external_operation( *this, 1, nVar, pVar ); }
+
+  // Evaluation overloads
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
+    const
     {
-      info = ID;
-      return **insert_external_operation( *this, 1, nVar, pVar );
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<double> ) )
+        return eval( nRes, static_cast<fadbad::F<double>*>(vRes), nVar, static_cast<fadbad::F<double> const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<FFVar> ) )
+        return eval( nRes, static_cast<fadbad::F<FFVar>*>(vRes), nVar, static_cast<fadbad::F<FFVar> const*>(vVar), mVar );
+      else if( idU == typeid( I ) )
+        return eval( nRes, static_cast<I*>(vRes), nVar, static_cast<I const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFSum::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
     }
 
   // Evaluation overloads
+  virtual bool reval
+    ( std::type_info const& idU, unsigned const nRes, void const* vRes, unsigned const nVar, void* vVar )
+    const
+    {
+      if( idU == typeid( I ) )
+       return reval( nRes, static_cast<I const*>(vRes), nVar, static_cast<I*>(vVar) );
+       //return true;
+
+      throw std::runtime_error( "FFSum::reval ** No evaluation method for type"+std::string(idU.name())+"\n" );
+    }
+
+  bool reval
+    ( unsigned const nRes, I const* vRes, unsigned const nVar, I* vVar )
+    const
+    {
+      //std::cout << "FFDOpt::reval: I\n"; 
+      return true;
+    }
+    
   template< typename T >
   void eval
     ( unsigned const nRes, T* vRes, unsigned const nVar, T const* vVar, unsigned const* mVar )
@@ -518,16 +562,16 @@ public:
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFSum<2> > NLP;
+ typedef mc::NLPSLV_SNOPT NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFSum<2> > NLP;
+ typedef mc::NLPSLV_IPOPT NLP;
 #endif
 
 #include "minlpslv.hpp"
-typedef mc::MINLPSLV< I, NLP, MIP, mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFSum<2> > MINLP;
+typedef mc::MINLPSLV< I, NLP, MIP > MINLP;
 
-typedef mc::FFGraph< mc::FFDOpt<0>, mc::FFDOptGrad<0>, mc::FFSum<2> > DAG;
+typedef mc::FFGraph DAG;
 
 ////////////////////////////////////////////////////////////////////////
 // APPORTIONMENT
@@ -664,8 +708,8 @@ int main()
 
   int const nExp = 8;
   DAG tree;
-  mc::FFDOpt<0> DOpt;
-  mc::FFSum<2> Sum;
+  mc::FFDOpt DOpt;
+  mc::FFSum Sum;
   mc::FFVar E[nEff];
   for( unsigned int i=0; i<nEff; i++ )
     E[i].set( &tree );
@@ -693,9 +737,9 @@ int main()
   doe.options.LINMETH                 = MINLP::Options::CVX;
   doe.options.MAXITER                 = 40;
   doe.options.MSLOC                   = 1;
-  doe.options.CPMAX                   = 5;
+  doe.options.CPMAX                   = 2;
 #ifdef MC__USE_SNOPT
-  doe.options.NLPSLV.DISPLEVEL        = 0;
+  doe.options.NLPSLV.DISPLEVEL        = 1;
   doe.options.NLPSLV.MAXITER          = 100;
   doe.options.NLPSLV.FEASTOL          = 1e-7;
   doe.options.NLPSLV.OPTIMTOL         = 1e-7;
@@ -703,7 +747,7 @@ int main()
   doe.options.NLPSLV.GRADCHECK        = 0;
   doe.options.NLPSLV.MAXTHREAD        = 0;
 #elif  MC__USE_IPOPT
-  doe.options.NLPSLV.DISPLEVEL        = 0;
+  doe.options.NLPSLV.DISPLEVEL        = 5;
   doe.options.NLPSLV.MAXITER          = 100;
   doe.options.NLPSLV.FEASTOL          = 1e-7;
   doe.options.NLPSLV.OPTIMTOL         = 1e-7;
@@ -729,8 +773,8 @@ int main()
 
   doe.setup();
   //doe.optimize( ini.data() );
-  //doe.optimize( ini.data(), nullptr, apportion );
-  doe.optimize( ini.data(), nullptr, effrounding );
+  //doe.optimize( ini.data(), nullptr, nullptr, apportion );
+  doe.optimize( ini.data(), nullptr, nullptr, effrounding );
   doe.stats.display();
 
   std::cout << "Optimal efforts:" << std::endl;
@@ -739,7 +783,7 @@ int main()
     if( Xi > 1e-1 ) std::cout << "X[" << i << "]: " << Xi << std::endl;
     ++i;
   }
-  //return 0;
+  return 0;
   
 ///////////////////////
 // RISK-AVERSE DESIGN
@@ -758,8 +802,8 @@ int main()
 
   doe2.setup();
   //doe2.optimize( ini.data() );
-  //doe2.optimize( ini.data(), nullptr, apportion );
-  doe2.optimize( ini.data(), nullptr, effrounding );
+  //doe2.optimize( ini.data(), nullptr, nullptr, apportion );
+  doe2.optimize( ini.data(), nullptr, nullptr, effrounding );
   doe2.stats.display();
 
   std::cout << "Optimal efforts:" << std::endl;

@@ -61,22 +61,22 @@ int main()
 {
 
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT<>* NLP = new mc::NLPSLV_SNOPT;
+  mc::NLPSLV_SNOPT* NLP = new mc::NLPSLV_SNOPT;
   NLP->options.DISPLEVEL = 0;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FSYM;
+  NLP->options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;
   NLP->options.GRADCHECK = false;
   NLP->options.MAXTHREAD = 0;
 #elif MC__USE_IPOPT
-  mc::NLPSLV_IPOPT<>* NLP = new mc::NLPSLV_IPOPT;
+  mc::NLPSLV_IPOPT* NLP = new mc::NLPSLV_IPOPT;
   NLP->options.DISPLEVEL = 0;
   NLP->options.MAXITER   = 200;
   NLP->options.FEASTOL   = 1e-8;
   NLP->options.OPTIMTOL  = 1e-8;
-  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT<>::Options::FSYM;
-  NLP->options.HESSMETH  = mc::NLPSLV_IPOPT<>::Options::LBFGS;
+  NLP->options.GRADMETH  = mc::NLPSLV_IPOPT::Options::FSYM;
+  NLP->options.HESSMETH  = mc::NLPSLV_IPOPT::Options::LBFGS;
   NLP->options.GRADCHECK = false;
   NLP->options.MAXTHREAD = 0;
 #endif
@@ -103,7 +103,7 @@ int main()
   NLP->add_var( Ep,   1.0e-2, 1.0e0 );
   NLP->add_var( Yp,   0.0e0,  1.0e0 );
   NLP->add_var( P,    0.0e0,  1.0e2 );
-  NLP->add_par( Msp,  Mspdef );
+  NLP->add_par( Msp );//,  Mspdef );
 
   NLP->set_obj( mc::BASE_OPT::MIN, sum( NS, P.data() ) );
   NLP->add_ctr( mc::BASE_OPT::EQ, sum( NS, Mout.data() ) - Msp );
@@ -126,7 +126,7 @@ int main()
     NLP->add_ctr( mc::BASE_OPT::LE, Pout  - Pd[i] );
   }
   NLP->setup();
-  NLP->solve( 200 );
+  NLP->solve( 200, nullptr, nullptr, &Mspdef );
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP->solution();
   std::cout << "FEASIBLE:   " << NLP->is_feasible( 1e-7 )   << std::endl;
   std::cout << "STATIONARY: " << NLP->is_stationary( 1e-7 ) << std::endl;

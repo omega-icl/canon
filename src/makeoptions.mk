@@ -1,12 +1,9 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-#PATH_MC = $(shell cd $(HOME)/Programs/bitbucket/mcpp30 ; pwd)
-#include $(PATH_MC)/src/makeoptions.mk
-
-PATH_CRONOS    = $(shell cd $(HOME)/Programs/bitbucket/cronos; pwd)
+PATH_CRONOS    = $(shell cd $(HOME)/Programs/bitbucket/cronos40; pwd)
 include $(PATH_CRONOS)/src/makeoptions.mk
 
-PATH_CANON    = $(shell cd $(HOME)/Programs/bitbucket/canon30; pwd)
+PATH_CANON    = $(shell cd $(HOME)/Programs/bitbucket/canon40; pwd)
 
 PATH_CLI =
 LIB_CLI  = -lboost_program_options

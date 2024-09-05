@@ -1,7 +1,9 @@
 #define SAVE_RESULTS		// <- Whether to save bounds to file
-#define MC__MBDOE_SHOW_APPORTION
+#define CANON__MBDOE_SHOW_APPORTION
 //#define MC__MBDOE_SETUP_DEBUG
 //#define MC__MBDOE_SAMPLE_DEBUG
+#undef MC__FFGRADDOECRIT_DEBUG
+#undef MC__FFGRADDOEEFF_DEBUG
 
 #include "mbdoeslv.hpp"
 
@@ -10,7 +12,7 @@ int main()
 ////////////////////////////////////////////////////////////////////////
 {
   /////////////////////////////////////////////////////////////////////////
-  // Define IVP-ODE
+  // Define model
 
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
 
@@ -20,16 +22,16 @@ int main()
   for( unsigned k=0; k<NS; k++ ) tk[k+1] = tk[k] + 2e0; // [hour]
 
   const unsigned NP = 4;  // Number of estimated parameters
-  const unsigned NC = 2;  // Number of experimental controls
+  const unsigned NU = 2;  // Number of experimental controls
   const unsigned NX = 2;  // Number of states
   const unsigned NY = 2;  // Number of outputs
 
-  std::vector<mc::FFVar> C( NC );  // Controls
-  for( unsigned int i=0; i<NC; i++ ) C[i].set( &DAG );
-  C[0].set("u1");
-  C[1].set("u2");
-  mc::FFVar& u1 = C[0];
-  mc::FFVar& u2 = C[1];
+  std::vector<mc::FFVar> U( NU );  // Controls
+  for( unsigned int i=0; i<NU; i++ ) U[i].set( &DAG );
+  U[0].set("u1");
+  U[1].set("u2");
+  mc::FFVar& u1 = U[0];
+  mc::FFVar& u2 = U[1];
 
   std::vector<mc::FFVar> P( NP );  // Parameters
   for( unsigned int i=0; i<NP; i++ ) P[i].set( &DAG );
@@ -75,7 +77,7 @@ int main()
   IVP.options.DISPLAY   = 0;
   IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-10;
   IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-8;
-  IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
+  IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS  = 1;
   IVP.options.ASACHKPT  = 2000;
 #if defined( SAVE_RESULTS )
   IVP.options.RESRECORD = 100;
@@ -84,32 +86,30 @@ int main()
   IVP.set_dag( &DAG );
   IVP.set_time( tk );
   IVP.set_state( X );
-  IVP.set_parameter( C );
+  IVP.set_constant( P );
+  IVP.set_parameter( U );
   IVP.set_differential( RHS );
   IVP.set_initial( IC );
   IVP.set_function( FCT );
   IVP.setup();
-/*
+
+  mc::FFODE OpODE;
+  std::vector<mc::FFVar> Y(NY*NS);
+  for( unsigned int j=0; j<NY*NS; j++ ) Y[j] = OpODE( j, NU, U.data(), NP, P.data(), &IVP );//, mc::FFODE::SHALLOW );
+  std::cout << DAG;
+
   /////////////////////////////////////////////////////////////////////////
-  // Simulate IVP-ODE
+  // Simulate model
 
-  // Nominal model parameters
-  p1.set( 0.1 );
-  p2.set( 0.1 );
-  p3.set( 0.1 );
-  p4.set( 0.1 );
-  IVP.setup();
+  // Nominal control and model parameters
+  std::vector<double> dU{ 5.000000e-02, 8.915310e+00 };
+  std::vector<double> dP{ 1e-01, 1e-01, 1e-01, 1e-01 };
+  std::vector<double> dY( NY*NS );
+  DAG.eval( NY*NS, Y.data(), dY.data(), NU, U.data(), dU.data(), NP, P.data(), dP.data() );
+  for( unsigned i=0, k=0; i<NS; i++ )
+    for( unsigned j=0; j<NY; j++, k++ )
+      std::cout << "Y[" << i << "][" << j << "] = " << dY[k] << std::endl;
 
-  double dC[NC] = { 5.000000e-02, 8.915310e+00 };
-  IVP.states( dC );
-#if defined( SAVE_RESULTS )
-  std::ofstream direcSTA;
-  direcSTA.open( "test2_STA.dat", std::ios_base::out );
-  IVP.record( direcSTA );
-#endif
-
-  return 0;
-*/
   /////////////////////////////////////////////////////////////////////////
   // Define MBDOE
 
@@ -122,33 +122,36 @@ int main()
   PLB[3] = PUB[3] = 1e-1;
 
   // Experimental control space
-  std::vector<double> CLB( NC ), CUB( NC );
-  CLB[0] = 5e-2;   CUB[0] = 2e-1;
-  CLB[1] = 5e0;    CUB[1] = 35e0;
+  std::vector<double> ULB( NU ), UUB( NU );
+  ULB[0] = 5e-2;   UUB[0] = 2e-1;
+  ULB[1] = 5e0;    UUB[1] = 35e0;
 
   // Output variance
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::DOEBase::DOPT;
-  DOE.options.RISK      = mc::MBDOESLV<>::Options::NEUTRAL;//AVERSE;//
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
   DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
+  DOE.options.MINLPSLV.NLPSLV.OPTIMTOL  = 1e-5;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 0;
-  DOE.set_model( IVP, YVAR );
-  DOE.set_controls( C, CLB, CUB );
+  DOE.options.NLPSLV.OPTIMTOL  = 1e-5;
+  DOE.set_dag( DAG );
+  DOE.set_model( Y, YVAR );
+  DOE.set_controls( U, ULB, UUB );
   DOE.set_parameters( P, DOE.uniform_sample( NSAM, PLB, PUB ) );
   DOE.setup();
   DOE.sample_supports( 100 );
   DOE.combined_solve( 4 );
-  //DOE.effort_solve( 4 );
+//  DOE.effort_solve( 4 );
   //DOE.gradient_solve( DOE.efforts(), true );
   //DOE.effort_solve( 4, DOE.efforts() );
-  //DOE.file_export( "test2" );
+//  DOE.file_export( "test2" );
 
   return 0;
 }

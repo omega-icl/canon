@@ -2,10 +2,10 @@
 // All Rights Reserved.
 // This code is published under the Eclipse Public License.
 
-#ifndef MC__BASE_MBDOE_HPP
-#define MC__BASE_MBDOE_HPP
+#ifndef CANON__BASE_MBDOE_HPP
+#define CANON__BASE_MBDOE_HPP
 
-#undef  MC__DEBUG__BASE_MBDOE
+#undef  CANON__DEBUG__BASE_MBDOE
 
 #include <assert.h>
 
@@ -24,15 +24,11 @@ namespace mc
 //! parameters and outputs participating in model-based design of
 //! experiment (MBDoE) problems
 ////////////////////////////////////////////////////////////////////////
-template <typename... ExtOps>
 class BASE_MBDOE
 {
 protected:
   //! @brief pointer to DAG of equation
-  FFGraph<ExtOps...>* _dag;
-
-  //! @brief pointer to DAG of equation
-  mc::ODESLVS_CVODES<ExtOps...>* _ivpode;
+  FFGraph* _dag;
 
   //! @brief Size of model output
   size_t _ny;
@@ -73,7 +69,7 @@ protected:
 public:
   //! @brief Class constructor
   BASE_MBDOE()
-    : _dag(nullptr), _ivpode(nullptr), _ny(0), _np(0), _nc(0)
+    : _dag(nullptr), _ny(0), _np(0), _nc(0)
     {}
 
   //! @brief Class destructor
@@ -81,13 +77,13 @@ public:
     {}
 
   //! @brief Get pointer to DAG
-  FFGraph<ExtOps...> const& dag()
+  FFGraph const& dag()
     const
     { return *_dag; }
 
   //! @brief Set pointer to DAG
   void set_dag
-    ( FFGraph<ExtOps...>& dag )
+    ( FFGraph& dag )
     { _dag = &dag; }
 
   //! @brief Get number of model outputs
@@ -116,18 +112,6 @@ public:
       _ny = Y.size();
       _vOUT = Y;
       _vOUTVAR = varY;
-      _ivpode = nullptr;
-    }
-
-  //! @brief Set model outputs
-  void set_model
-    ( mc::ODESLVS_CVODES<ExtOps...>& ivpode, std::vector<double> const& varY=std::vector<double>() )
-    {
-      _ivpode = &ivpode;
-      _dag = ivpode.dag();
-      _vOUTVAR = varY;
-      _ny = 0;
-      _vOUT.clear();
     }
 
   //! @brief Set nominal model parameters
@@ -205,32 +189,176 @@ public:
 
   //! @brief Set uniform sample within bounds
   static std::list<std::vector<double>> uniform_sample
-    ( size_t NSAM, std::vector<double> const& LB, std::vector<double> const& UB )
-    {
-      assert( NSAM && LB.size() && LB.size() == UB.size() );
-      size_t NDIM = LB.size();
+    ( size_t NSAM, std::vector<double> const& LB, std::vector<double> const& UB );
 
-      typedef boost::random::sobol_engine< boost::uint_least64_t, 64u > sobol64;
-      typedef boost::variate_generator< sobol64, boost::uniform_01< double > > qrgen;
-      sobol64 eng( NDIM );
-      qrgen gen( eng, boost::uniform_01<double>() );
-      gen.engine().seed( 0 );
+  //! @brief Round fractional experimental efforts to nearest integer
+  static void effort_rounding
+    ( unsigned const n, unsigned const* typ, double* val );
 
-      std::list<std::vector<double>> LSAM;
-      for( size_t s=0; s<NSAM; ++s ){
-        LSAM.push_back( std::vector<double>( NDIM ) );
-        for( size_t k=0; k<NDIM; k++ )
-          LSAM.back()[k] = LB[k] + ( UB[k] - LB[k] ) * gen();
-      }
-      
-      return LSAM;
-   }
+  //! @brief Apportion fractional experimental efforts
+  static void effort_apportion
+    ( unsigned const n, unsigned const* typ, double* val );
 
-protected:
+private:
   //! @brief Private methods to block default compiler methods
-  BASE_MBDOE( BASE_MBDOE<ExtOps...> const& ) = delete;
-  BASE_MBDOE<ExtOps...>& operator=( BASE_MBDOE<ExtOps...> const& ) = delete;
+  BASE_MBDOE( BASE_MBDOE const& ) = delete;
+  BASE_MBDOE& operator=( BASE_MBDOE const& ) = delete;
 };
+
+inline std::list<std::vector<double>>
+BASE_MBDOE::uniform_sample
+( size_t NSAM, std::vector<double> const& LB, std::vector<double> const& UB )
+{
+  assert( NSAM && LB.size() && LB.size() == UB.size() );
+  size_t NDIM = LB.size();
+
+  typedef boost::random::sobol_engine< boost::uint_least64_t, 64u > sobol64;
+  typedef boost::variate_generator< sobol64, boost::uniform_01< double > > qrgen;
+  sobol64 eng( NDIM );
+  qrgen gen( eng, boost::uniform_01<double>() );
+  gen.engine().seed( 0 );
+
+  std::list<std::vector<double>> LSAM;
+  for( size_t s=0; s<NSAM; ++s ){
+    LSAM.push_back( std::vector<double>( NDIM ) );
+    for( size_t k=0; k<NDIM; k++ )
+      LSAM.back()[k] = LB[k] + ( UB[k] - LB[k] ) * gen();
+  }
+
+  return LSAM;
+}
+
+inline void
+BASE_MBDOE::effort_apportion
+( unsigned const n, unsigned const* typ, double* val )
+{
+  double const TOLZERO = 1e-10;
+  //double const TOLINT  = 1e-5;
+
+#ifdef CANON__MBDOE_SHOW_APPORTION
+  std::cout << "Initial efforts:" << std::endl;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    if( val[i] > TOLZERO ) std::cout << "X0[" << i << "]: " << val[i] << std::endl;
+  }
+#endif
+
+  double sum = 0.;
+  unsigned supp = 0;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    sum += val[i];
+    if( val[i] >= TOLZERO ) supp++;
+  }
+  sum = std::round( sum );
+
+  std::vector<double> intval( n );
+  unsigned iround = 0;
+  for( double ratio=1.; ratio>0.1 && iround<100; ++iround ){
+    double intsum = 0.;
+    for( unsigned i=0; i<n; ++i ){
+      if( !typ[i] ) continue;
+      intval[i] = (val[i]<TOLZERO? 0: (supp<=sum? std::ceil( ratio*val[i] ): std::round( ratio*val[i] )));
+      intsum += intval[i];
+    }
+    if( sum < intsum )
+      ratio *= 0.9;
+    else if( sum > intsum )
+      ratio /= 0.95;
+    else
+      break;
+  }
+
+#ifdef CANON__MBDOE_SHOW_APPORTION
+  std::cout << "Apportioned efforts:" << std::endl;
+#endif
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    val[i] = intval[i];
+#ifdef CANON__MBDOE_SHOW_APPORTION
+    if( val[i] > TOLZERO ) std::cout << "X[" << i << "]: " << val[i] << std::endl;
+#endif
+  }
+}
+
+inline void
+BASE_MBDOE::effort_rounding
+( unsigned const n, unsigned const* typ, double* val )
+{
+  double const TOLZERO = 1e-10;
+  //double const TOLINT  = 1e-5;
+
+#ifdef CANON__MBDOE_SHOW_APPORTION
+  std::cout << "Initial efforts:" << std::endl;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    if( val[i] > TOLZERO ) std::cout << "X0[" << i << "]: " << val[i] << std::endl;
+  }
+#endif
+
+  double sum = 0.;
+  unsigned supp = 0;
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    sum += val[i];
+    if( val[i] >= TOLZERO ) supp++;
+  }
+  sum = std::round( sum );
+
+  std::vector<double> intval( n );
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    intval[i] = std::ceil( (1.-supp/(2*sum)) * val[i] );
+  }
+
+  for( ; ; ){
+    //std::cout << "Intermediate efforts:" << std::endl;
+    double intsum = 0.;
+    for( unsigned i=0; i<n; ++i ){
+      if( !typ[i] ) continue;
+      intsum += intval[i];
+      //if( val[i] > TOLZERO ) std::cout << "X1[" << i << "]: " << intval[i] << std::endl;
+    }
+    if( std::fabs( sum - intsum ) < TOLZERO ) break;
+    if( sum > intsum ){
+      int imin = -1;
+      double effmin = 1.;
+      for( unsigned i=0; i<n; ++i ){
+        if( !typ[i] || val[i] < TOLZERO ) continue;
+        if( intval[i]/val[i] < effmin ){
+          imin = i;
+          effmin = intval[i]/val[i];
+        }
+      }
+      assert( imin >= 0 );
+      intval[imin] += 1;
+    }
+    else{
+      int imax = -1;
+      double effmax = 1.;
+      for( unsigned i=0; i<n; ++i ){
+        if( !typ[i] || val[i] < TOLZERO ) continue;
+        if( intval[i]/val[i] > effmax ){
+          imax   = i;
+          effmax = intval[i]/val[i];
+        }
+      }
+      assert( imax >= 0 );
+      intval[imax] -= 1;
+    }
+  }
+  
+#ifdef CANON__MBDOE_SHOW_APPORTION
+  std::cout << "Rounded efforts:" << std::endl;
+#endif
+  for( unsigned i=0; i<n; ++i ){
+    if( !typ[i] ) continue;
+    val[i] = intval[i];
+#ifdef CANON__MBDOE_SHOW_APPORTION
+    if( val[i] > TOLZERO ) std::cout << "X[" << i << "]: " << val[i] << std::endl;
+#endif
+  }
+}
 
 } // end namescape mc
 

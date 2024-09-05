@@ -17,13 +17,12 @@ namespace mc
 //! mc::BASE_NLP is a C++ base class for definition of the variables,
 //! objective and constraints participating in nonlinear programs.
 ////////////////////////////////////////////////////////////////////////
-template <typename... ExtOps>
 class BASE_NLP
 : public virtual BASE_OPT
 {
 protected:
   //! @brief pointer to DAG of equation
-  FFGraph<ExtOps...>*    _dag;
+  FFGraph*               _dag;
 
   //! @brief parameters
   std::vector<FFVar>     _par;
@@ -60,14 +59,14 @@ public:
     {}
 
   //! @brief Get pointer to DAG
-  FFGraph<ExtOps...>* dag
+  FFGraph* dag
     ()
     const
     { return _dag; }
 
   //! @brief Set pointer to DAG
   void set_dag
-    ( FFGraph<ExtOps...>* dag )
+    ( FFGraph* dag )
     { _dag = dag; }
 
   //! @brief Get parameters
@@ -78,39 +77,59 @@ public:
 
   //! @brief Set parameters
   void set_par
-    ( std::vector<FFVar> const& par, std::vector<double> const& val=std::vector<double>() )
-    { _par = par;
-      for( unsigned i=0; i<val.size() && i<_par.size(); i++ ){
-        _par[i].set( val[i] );
-      }
-    }
+    ( std::vector<FFVar> const& par )
+    { _par = par; }
 
   //! @brief Add parameters
   void add_par
-    ( std::vector<FFVar> const& par, std::vector<double> const& val=std::vector<double>() )
-    { _par.insert( _par.end(), par.begin(), par.end() );
-      for( unsigned i=0; i<val.size() && i<par.size(); i++ ){
-        _par[_par.size()-par.size()+i].set( val[i] );
-      }
-    }
+    ( std::vector<FFVar> const& par )
+    { _par.insert( _par.end(), par.begin(), par.end() ); }
 
   //! @brief Set parameters
   void set_par
-    ( unsigned const npar, FFVar const* par, double const* val=nullptr )
-    { _par.assign( par, par+npar );
-      for( unsigned i=0; val && i<_par.size(); i++ ){
-        _par[i].set( val[i] );
-      }
-    }
+    ( unsigned const npar, FFVar const* par )
+    { _par.assign( par, par+npar ); }
 
   //! @brief Add parameters
   void add_par
     ( unsigned const npar, FFVar const* par, double const* val=nullptr )
-    { _par.insert( _par.end(), par, par+npar );
-      for( unsigned i=0; val && i<npar; i++ ){
-        _par[_par.size()-npar+i].set( val[i] );
-      }
-    }
+    { _par.insert( _par.end(), par, par+npar ); }
+
+//  //! @brief Set parameters
+//  void set_par
+//    ( std::vector<FFVar> const& par, std::vector<double> const& val=std::vector<double>() )
+//    { _par = par;
+//      for( unsigned i=0; i<val.size() && i<_par.size(); i++ ){
+//        _par[i].set( val[i] );
+//      }
+//    }
+
+//  //! @brief Add parameters
+//  void add_par
+//    ( std::vector<FFVar> const& par, std::vector<double> const& val=std::vector<double>() )
+//    { _par.insert( _par.end(), par.begin(), par.end() );
+//      for( unsigned i=0; i<val.size() && i<par.size(); i++ ){
+//        _par[_par.size()-par.size()+i].set( val[i] );
+//      }
+//    }
+
+//  //! @brief Set parameters
+//  void set_par
+//    ( unsigned const npar, FFVar const* par, double const* val=nullptr )
+//    { _par.assign( par, par+npar );
+//      for( unsigned i=0; val && i<_par.size(); i++ ){
+//        _par[i].set( val[i] );
+//      }
+//    }
+
+//  //! @brief Add parameters
+//  void add_par
+//    ( unsigned const npar, FFVar const* par, double const* val=nullptr )
+//    { _par.insert( _par.end(), par, par+npar );
+//      for( unsigned i=0; val && i<npar; i++ ){
+//        _par[_par.size()-npar+i].set( val[i] );
+//      }
+//    }
 
   //! @brief Set parameters
   void set_par
@@ -118,12 +137,12 @@ public:
     { _par.assign( &par, &par+1 );
     }
 
-  //! @brief Set parameters
-  void set_par
-    ( FFVar const& par, double const& val )
-    { _par.assign( &par, &par+1 );
-      _par[0].set( val );
-    }
+//  //! @brief Set parameters
+//  void set_par
+//    ( FFVar const& par, double const& val )
+//    { _par.assign( &par, &par+1 );
+//      _par[0].set( val );
+//    }
 
   //! @brief Add parameter
   void add_par
@@ -131,12 +150,12 @@ public:
     { _par.push_back( par );
     }
 
-  //! @brief Add parameter
-  void add_par
-    ( FFVar const& par, double const& val )
-    { _par.push_back( par );
-      _par.back().set( val );
-    }
+//  //! @brief Add parameter
+//  void add_par
+//    ( FFVar const& par, double const& val )
+//    { _par.push_back( par );
+//      _par.back().set( val );
+//    }
 
   //! @brief Reset parameters
   void reset_par
@@ -371,10 +390,12 @@ public:
   void set
     ( BASE_NLP const& nlp )
     { _dag = nlp._dag; //std::cout << "DAG: " << nlp._dag << std::endl;
+      _par = nlp._par;
       _var = nlp._var; _vartyp = nlp._vartyp;
       _varlb = nlp._varlb; _varub = nlp._varub;
       _varlm = nlp._varlm; _varum = nlp._varum;
-      _ctr = nlp._ctr; _obj = nlp._obj; }
+      _ctr = nlp._ctr;
+      _obj = nlp._obj; }
    
   //! @brief Reset mode
   void reset
@@ -409,13 +430,12 @@ protected:
     ( unsigned const* tvar=nullptr, bool const BADIFF=true );
 
   //! @brief Private methods to block default compiler methods
-  BASE_NLP( BASE_NLP<ExtOps...> const& );
-  BASE_NLP<ExtOps...>& operator=( BASE_NLP<ExtOps...> const& );
+  BASE_NLP( BASE_NLP const& ) = delete;
+  BASE_NLP& operator=( BASE_NLP const& ) = delete;
 };
 
-template <typename... ExtOps>
 inline bool
-BASE_NLP<ExtOps...>::set_nco
+BASE_NLP::set_nco
 ( unsigned const* tvar, bool const BADIFF )
 {
   reset_nco();

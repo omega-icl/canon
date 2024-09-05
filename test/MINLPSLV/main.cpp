@@ -37,10 +37,10 @@
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT<> NLP;
+ typedef mc::NLPSLV_SNOPT NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT<> NLP;
+ typedef mc::NLPSLV_IPOPT NLP;
 #endif
 
 #include "minlpslv.hpp"
@@ -102,8 +102,8 @@ int main()
 //  MINLP.read( "doxydoc.gms" );
 //  MINLP.read( "ex1221.gms" );
 //  MINLP.read( "ex1222.gms" );
-  MINLP.read( "ex1252a.gms" );
-//  MINLP.read( "transswitch0009r.gms" );
+//  MINLP.read( "ex1252a.gms" );
+  MINLP.read( "transswitch0009r.gms" );
 
 #else
   mc::FFGraph DAG;
@@ -123,7 +123,7 @@ int main()
   
   MINLP.setup();
   MINLP.optimize();
-  //MINLP.optimize( nullptr, nullptr, nearest );
+  //MINLP.optimize( nullptr, nullptr, nullptr, nearest );
   MINLP.stats.display();
   
   return 0;

@@ -4,7 +4,7 @@
 #   and the compiled binaries and libraries
 # - `make cleaninstall' removes the binaries, libraries, object files, and links
 
-export version = 3.0
+export version = 4.0
 
 export rootpath       = $(shell cd .. ; pwd)
 export srcpath        = $(rootpath)/src

@@ -51,7 +51,7 @@ protected:
   bool _GRBexcpt;
 
   //! @brief Polyhedral image environment
-  PolBase<T>* _POLenv;
+  PolImg<T>* _POLenv;
 
 public:
 
@@ -198,7 +198,7 @@ public:
 
   //! @brief Set variables and cuts in MIP
   void set_cuts
-    ( PolBase<T>* env, bool const reset_=true );
+    ( PolImg<T>* env, bool const reset_=true );
 
 //  //! @brief Set objective in MIP
 //  void set_objective
@@ -424,7 +424,7 @@ MIPSLV_GUROBI<T>::reset
 template <typename T>
 inline void
 MIPSLV_GUROBI<T>::set_cuts
-( PolBase<T>* env, bool const reset_ )
+( PolImg<T>* env, bool const reset_ )
 {
   if( reset_ ) reset();
   _POLenv = env;

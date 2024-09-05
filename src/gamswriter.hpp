@@ -22,8 +22,7 @@ namespace mc
 //! mc::GAMSWRITER is a C++ class for exporting a reformulated CANON
 //! model into GAMS language.
 ////////////////////////////////////////////////////////////////////////
-template< typename T,
-          typename... ExtOps >
+template< typename T >
 class GAMSWRITER
 : public virtual BASE_OPT
 {  
@@ -135,7 +134,7 @@ public:
 
   //! @brief Set DAG function <a>F</a> expressions
   void set_functions
-    ( FFGraph<ExtOps...>* pDAG, GAMSWRITER<T,ExtOps...>::MODELTYPE const type, unsigned const nFun,
+    ( FFGraph* pDAG, GAMSWRITER<T>::MODELTYPE const type, unsigned const nFun,
       FFVar const* Fun, unsigned const nVar, FFVar const* Var );
 
   //! @brief Set constraints corresponding to DAG functions
@@ -182,9 +181,9 @@ protected:
     ( std::stringstream& line, unsigned const maxlen=79900 );
 };
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::reset
+GAMSWRITER<T>::reset
 ()
 {
   _type = LIN;
@@ -199,9 +198,9 @@ GAMSWRITER<T,ExtOps...>::reset
   _VarIni.clear();  _VarIni.str(""); _VarIni << std::setprecision(16);
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-GAMSWRITER<T,ExtOps...>::write
+GAMSWRITER<T>::write
 ( std::string const filename, bool const optfile )
 {
   // Create GAMS file
@@ -252,9 +251,9 @@ GAMSWRITER<T,ExtOps...>::write
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline std::string
-GAMSWRITER<T,ExtOps...>::_split_line
+GAMSWRITER<T>::_split_line
 ( std::stringstream& line, unsigned const maxlen )
 {
   std::stringstream linewithbreaks;
@@ -267,9 +266,9 @@ GAMSWRITER<T,ExtOps...>::_split_line
   return linewithbreaks.str();
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline std::string
-GAMSWRITER<T,ExtOps...>::_break_line
+GAMSWRITER<T>::_break_line
 ( std::stringstream& line, unsigned const maxlen )
 {
   std::stringstream linewithbreaks;
@@ -293,9 +292,9 @@ GAMSWRITER<T,ExtOps...>::_break_line
   return linewithbreaks.str();
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::_add_var
+GAMSWRITER<T>::_add_var
 ( FFVar const* pVar, unsigned type, T const* Bnd, double const* l )
 {
   assert( pVar );
@@ -343,9 +342,9 @@ GAMSWRITER<T,ExtOps...>::_add_var
   }
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::add_variable
+GAMSWRITER<T>::add_variable
 ( FFVar const& Var, unsigned type, T const* Bnd, double const* l )
 {
   auto itv = _GAMSdagvar.find( const_cast<FFVar*>(&Var) );
@@ -356,19 +355,19 @@ GAMSWRITER<T,ExtOps...>::add_variable
   _add_var( &Var, type, Bnd, l );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::add_variables
+GAMSWRITER<T>::add_variables
 ( unsigned const nVar, FFVar const* Var, unsigned const* type, T const* Bnd, double const* l )
 {
   for( unsigned i=0; i<nVar; ++i )
     add_variable( Var[i], type[i], (Bnd? &Bnd[i]: nullptr), (l? &l[i]: nullptr) );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::set_functions
-( FFGraph<ExtOps...>* pDAG, GAMSWRITER<T,ExtOps...>::MODELTYPE const type, unsigned const nFun,
+GAMSWRITER<T>::set_functions
+( FFGraph* pDAG, GAMSWRITER<T>::MODELTYPE const type, unsigned const nFun,
   FFVar const* Fun, unsigned const nVar, FFVar const* Var )
 {
   _type = type;
@@ -386,9 +385,9 @@ GAMSWRITER<T,ExtOps...>::set_functions
 #endif
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::set_constraints
+GAMSWRITER<T>::set_constraints
 ( unsigned const objRow, unsigned const nFun, T const* Fbnd )
 {
   assert( Fbnd );
@@ -422,9 +421,9 @@ GAMSWRITER<T,ExtOps...>::set_constraints
   }
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::set_objective
+GAMSWRITER<T>::set_objective
 ( unsigned const objRow, t_OBJ const& tObj )
 {
   _DirObj = tObj;
@@ -432,9 +431,9 @@ GAMSWRITER<T,ExtOps...>::set_objective
   _EqnDef << "E" << _EqnCnt << " .. " << _VarObj << " =E= " << _GAMSfun[objRow] << ";" << std::endl;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::set_cuts
+GAMSWRITER<T>::set_cuts
 ( PolBase<T>* env, bool const reset_ )
 {
   if( reset_ ) reset();
@@ -457,9 +456,9 @@ GAMSWRITER<T,ExtOps...>::set_cuts
   }
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::_add_var
+GAMSWRITER<T>::_add_var
 ( PolVar<T> const* pVar )
 {
   switch( pVar->id().first ){
@@ -497,9 +496,9 @@ GAMSWRITER<T,ExtOps...>::_add_var
   _GAMSpolvar.insert( pVar );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline std::string
-GAMSWRITER<T,ExtOps...>::_lhs_cut
+GAMSWRITER<T>::_lhs_cut
 ( PolCut<T> const* pCut )
 {
   std::stringstream lhs;
@@ -536,9 +535,9 @@ GAMSWRITER<T,ExtOps...>::_lhs_cut
   return lhs.str();
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::_add_cut
+GAMSWRITER<T>::_add_cut
 ( PolCut<T> const* pCut )
 {
   // Check valid cut
@@ -709,9 +708,9 @@ GAMSWRITER<T,ExtOps...>::_add_cut
   }
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-GAMSWRITER<T,ExtOps...>::set_variable
+GAMSWRITER<T>::set_variable
 ( PolVar<T> const& polVar, double const* l )
 {
   auto itv = _GAMSpolvar.find( const_cast<PolVar<T>*>(&polVar) );
@@ -720,9 +719,9 @@ GAMSWRITER<T,ExtOps...>::set_variable
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-GAMSWRITER<T,ExtOps...>::set_objective
+GAMSWRITER<T>::set_objective
 ( PolVar<T> const& polObj, t_OBJ const& tObj )
 {
   _DirObj = tObj;

@@ -16,8 +16,12 @@ main
 ()
 {
   mc::FFGraph DAG;
-  const unsigned NP = 2; mc::FFVar P[NP];
-  for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
+  size_t const NP = 2;
+  std::vector<mc::FFVar> P(NP);
+  for( auto& Pi : P ) Pi.set( &DAG );
+  const unsigned NC = 1;
+  std::vector<mc::FFVar> C(NC);
+  for( auto& Ci : C ) Ci.set( &DAG );
 /*
   mc::NLPSLV_SNOPT NLP;
   NLP.set_dag( &DAG );
@@ -36,8 +40,10 @@ main
   MINLP.set_dag( &DAG );
   MINLP.add_var( P[0], 1, 20, 0 );
   MINLP.add_var( P[1], 1, 20, 1 );
+  MINLP.add_par( C[0] );
   MINLP.set_obj( mc::BASE_OPT::MIN, -6*P[0]-P[1] );
-  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-C[0],2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+//  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
   MINLP.add_ctr( mc::BASE_OPT::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
   MINLP.add_ctr( mc::BASE_OPT::LE, 2*P[0]-5*P[1]+1 );
 
@@ -57,8 +63,11 @@ main
 
   MINLP.setup();
   //MINLP.optimize();
-  MINLP.optimize( nullptr, nullptr, nearest );
-  //MINLP.stats.display();
-
+  for( double dC=6.; dC<10.; dC+=1. ){
+    MINLP.optimize( nullptr, nullptr, &dC, nearest );
+    std::cout << "MINLP LOCAL SOLUTION:\n" << MINLP.get_incumbent();
+    //MINLP.stats.display();
+  }
+  
   return 0;
 }

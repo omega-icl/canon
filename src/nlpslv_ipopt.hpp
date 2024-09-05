@@ -92,7 +92,7 @@ Regarding options, the output level, maximum number of iterations, tolerance, ma
 #include "base_nlp.hpp"
 #include "gamsio.hpp"
 
-#ifdef MC__USE_SOBOL
+#if defined( MC__USE_SOBOL )
   #include <boost/random/sobol.hpp>
   #include <boost/random/uniform_01.hpp>
   #include <boost/random/variate_generator.hpp>
@@ -104,39 +104,91 @@ Regarding options, the output level, maximum number of iterations, tolerance, ma
 namespace mc
 {
 
-template <typename... ExtOps>
 class NLPSLV_IPOPT;
 
 //! @brief C++ class for calling IPOPT on local threads
 ////////////////////////////////////////////////////////////////////////
 //! mc::WORKER_IPOPT is a C++ class for calling IPOPT on local threads
 ////////////////////////////////////////////////////////////////////////
-template <typename... ExtOps>
 struct WORKER_IPOPT:
   public Ipopt::TNLP
 {
   //! @brief local copy of DAG
-  FFGraph<ExtOps...>  dag;
+  FFGraph  dag;
+
+  //! @brief size of parameters in DAG
+  size_t nP;
   //! @brief vector of parameters in DAG
   std::vector<FFVar>  Pvar;
+  //! @brief vector of parameter values
+  std::vector<double> Pval;
+  //!@brief vector of parameter values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FPval;
+  //!@brief vector of parameter values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BPval;
+  //!@brief vector of parameter values in fadbad::B<fadbad::F<double>> arithmetic
+  std::vector<fadbad::B<fadbad::F<double>>> BFPval;
+
   //! @brief vector of decision variables in DAG
   std::vector<FFVar>  Xvar;
+  //! @brief vector of decision variable values
+  std::vector<double> Xval;
+  //! @brief vector of decision variable lower bounds
+  std::vector<double> Xlow;
+  //! @brief vector of decision variable upper bounds
+  std::vector<double> Xupp;
+  //!@brief vector of variable values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FXval;
+  //!@brief vector of variable values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BXval;
+  //!@brief vector of variable values in fadbad::B<fadbad::F<double>> arithmetic
+  std::vector<fadbad::B<fadbad::F<double>>> BFXval;
+
   //! @brief vector of functions in DAG
   std::vector<FFVar>  Fvar;
   //! @brief vector of function multipliers in DAG
   std::vector<FFVar>  Fmul;
+  //! @brief vector of function values
+  std::vector<double> Fval;
+  //! @brief vector of function lower bounds
+  std::vector<double> Flow;
+  //! @brief vector of function upper bounds
+  std::vector<double> Fupp;
+  //!@brief vector of function values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FFval;
+  //!@brief vector of function values in fadbad::B<double> arithmetic
+  std::vector<fadbad::B<double>> BFval;
+  //!@brief vector of multiplier values in fadbad::F<double> arithmetic
+  std::vector<fadbad::F<double>> FFmul;
+  //!@brief vector of multiplier values in fadbad::B<fadbad::F<double>> arithmetic
+  std::vector<fadbad::B<fadbad::F<double>>> BFFmul;
+
   //! @brief vector of cost gradient in DAG
   std::vector<FFVar>  Cvar;
+  //! @brief vector of cost gradient values
+  std::vector<double> Cval;
+  //! @brief cost multiplier in fadbad::F<double> arithmetic
+  fadbad::F<double>   FCmul;
+  //! @brief cost multiplier in fadbad::B<fadbad::F<double>> arithmetic
+  fadbad::B<fadbad::F<double>> BFCmul;
+  //! @brief cost gradient in fadbad::F<double> arithmetic
+  fadbad::F<double>   FCval;
+  //! @brief cost gradient in fadbad::B<double> arithmetic
+  fadbad::B<double>   BCval;
+
   //! @brief vector of contraint gradients in DAG
   std::vector<FFVar>  Gvar;
-  //! @brief vector of Lagrangian Hessian in DAG
-  std::vector<FFVar>  Lvar;
-
+  //! @brief vector of constraint gradient values
+  std::vector<double> Gval;
   //!@brief row coordinates of nonzero elements in constraint gradients
   std::vector<int>    iGfun;
   //!@brief column coordinates of nonzero elements in constraint gradients
   std::vector<int>    jGvar;
 
+  //! @brief vector of Lagrangian Hessian in DAG
+  std::vector<FFVar>  Lvar;
+  //! @brief Lagrangian value in fadbad::B<fadbad::F<double>> arithmetic
+  fadbad::B<fadbad::F<double>> BFLval;
   //!@brief row coordinates of nonzero elements in Lagrangian Hessian
   std::vector<int>    iLvar;
   //!@brief column coordinates of nonzero elements in Lagrangian Hessian
@@ -161,49 +213,6 @@ struct WORKER_IPOPT:
   //! @brief Storage vector for DAG evaluation in fadbad::B<fadbad::F<double>> arithmetic
   std::vector<fadbad::B<fadbad::F<double>>> BFwk;
 
-  //! @brief vector of decision variable values
-  std::vector<double> Xval;
-  //! @brief vector of decision variable lower bounds
-  std::vector<double> Xlow;
-  //! @brief vector of decision variable upper bounds
-  std::vector<double> Xupp;
-  //!@brief vector of variable values in fadbad::F<double> arithmetic
-  std::vector<fadbad::F<double>> FXval;
-  //!@brief vector of variable values in fadbad::B<double> arithmetic
-  std::vector<fadbad::B<double>> BXval;
-  //!@brief vector of variable values in fadbad::B<fadbad::F<double>> arithmetic
-  std::vector<fadbad::B<fadbad::F<double>>> BFXval;
-
-  //! @brief vector of function values
-  std::vector<double> Fval;
-  //! @brief vector of function lower bounds
-  std::vector<double> Flow;
-  //! @brief vector of function upper bounds
-  std::vector<double> Fupp;
-  //!@brief vector of function values in fadbad::F<double> arithmetic
-  std::vector<fadbad::F<double>> FFval;
-  //!@brief vector of function values in fadbad::B<double> arithmetic
-  std::vector<fadbad::B<double>> BFval;
-  //!@brief vector of multiplier values in fadbad::F<double> arithmetic
-  std::vector<fadbad::F<double>> FFmul;
-  //!@brief vector of multiplier values in fadbad::B<fadbad::F<double>> arithmetic
-  std::vector<fadbad::B<fadbad::F<double>>> BFFmul;
-
-  //! @brief vector of cost gradient values
-  std::vector<double> Cval;
-  //! @brief cost multiplier in fadbad::F<double> arithmetic
-  fadbad::F<double>   FCmul;
-  //! @brief cost multiplier in fadbad::B<fadbad::F<double>> arithmetic
-  fadbad::B<fadbad::F<double>> BFCmul;
-  //! @brief cost gradient in fadbad::F<double> arithmetic
-  fadbad::F<double>   FCval;
-  //! @brief cost gradient in fadbad::B<double> arithmetic
-  fadbad::B<double>   BCval;
-  //! @brief vector of constraint gradient values
-  std::vector<double> Gval;
-  //! @brief Lagrangian value in fadbad::B<fadbad::F<double>> arithmetic
-  fadbad::B<fadbad::F<double>> BFLval;
-
   //! @brief Gradient option
   int                 Gmeth;
 
@@ -215,7 +224,7 @@ struct WORKER_IPOPT:
   //! @brief Function updating NLP bounds and parameters
   void update
     ( int const nX, double const* Xl, double const* Xu, int const nP,
-      double const* Pval );
+      double const* P0 );
 
   //! @brief Function initializing NLP solution
   void initialize
@@ -284,643 +293,16 @@ struct WORKER_IPOPT:
 
   //! @brief Function testing NLP solution feasibility
   bool feasible
-    ( double const CTRTOL, int const nF, int const nX );
+    ( double const CTRTOL, int const nP, int const nX, int const nF );
 
   //! @brief Function testing NLP solution stationarity
   bool stationary
-    ( double const GRADTOL, int const nX, int const nF, int const nG );
+    ( double const GRADTOL, int const nP, int const nX, int const nF, int const nG );
 
   //! @brief Function computing NLP cost correction to compensate for infeasibility
   double correction
-    ( int const nF, int const nX );
+    ( int const nP, int const nX, int const nF );
 };
-
-template <typename... ExtOps>
-inline
-void
-WORKER_IPOPT<ExtOps...>::update
-( int const nX, double const* Xl, double const* Xu, int const nP, double const* Pval )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::update  " << warm << std::endl;
-#endif
-
-  // variable bounds
-  if( Xl ) Xlow.assign( Xl, Xl+nX );
-  if( Xu ) Xupp.assign( Xu, Xu+nX );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  for( int i=0; i<nX; i++ )
-    std::cout << "  Xlow[" << i << "] = " << Xlow[i]
-              << "  Xupp[" << i << "] = " << Xupp[i] << std::endl;
-#endif
-
-  // parameter values
-  for( int i=0; !Pvar.empty() && Pval && i<nP; i++ ){
-    Pvar[i].set( Pval[i] );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "  Pvar[" << i << "] = " << Pvar[i] << std::endl;
-#endif
-  }
-}
-
-template <typename... ExtOps>
-inline
-void
-WORKER_IPOPT<ExtOps...>::initialize
-( int const nX, double const* Xini )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::initialize  " << std::endl;
-#endif
-
-  // initial starting point
-  if( Xini ) Xval.assign( Xini, Xini+nX );
-  else       Xval.assign( nX, 0. );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  for( int i=0; i<nX; i++ )
-    std::cout << "  Xval[" << i << "] = " << Xval[i] << std::endl;
-#endif
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::get_nlp_info
-( Ipopt::Index& n, Ipopt::Index& m, Ipopt::Index& nnz_jac_g,
-  Ipopt::Index& nnz_h_lag, IndexStyleEnum& index_style )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::get_nlp_info\n";
-#endif
-
-  // set size
-  n = Xvar.size();
-  m = Fvar.size()-1;
-  nnz_jac_g = iGfun.size(); //Gvar.size();
-  nnz_h_lag = iLvar.size(); //Lvar.size();
-
-  // use the C style indexing (0-based)
-  index_style = Ipopt::TNLP::C_STYLE;
-
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  std::cout << "n:" << n << std::endl;
-  std::cout << "m:" << m << std::endl;
-  std::cout << "nnz_jac_g:" << nnz_jac_g << std::endl;
-  std::cout << "nnz_h_lag:" << nnz_h_lag << std::endl;
-#endif
-
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::get_bounds_info
-( Ipopt::Index n, Ipopt::Number* x_l, Ipopt::Number* x_u,
-  Ipopt::Index m, Ipopt::Number* g_l, Ipopt::Number* g_u )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::get_bounds_info\n";
-#endif
-
-  // set variable bounds
-  for( Ipopt::Index i=0; i<n; i++ ){   
-    x_l[i] = Xlow[i];
-    x_u[i] = Xupp[i];
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "  x_l[" << i << "] = " << x_l[i]
-              << "  x_u[" << i << "] = " << x_u[i] << std::endl;
-#endif
-  }
-
-  // set constraint bounds
-  for( Ipopt::Index j=0; j<m; j++ ){   
-    g_l[j] = Flow[1+j]; // index 0 is objective
-    g_u[j] = Fupp[1+j];
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "  g_l[" << j << "] = " << g_l[j]
-              << "  g_u[" << j << "] = " << g_u[j] << std::endl;
-#endif
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::get_starting_point
-( Ipopt::Index n, bool init_x, Ipopt::Number* x, bool init_z,
-  Ipopt::Number* z_L, Ipopt::Number* z_U, Ipopt::Index m,
-  bool init_lambda, Ipopt::Number* lambda )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::get_starting_point  "
-              << init_x << init_z << init_lambda << std::endl;
-#endif
-
-  // Here, we assume we only have starting values for x, if you code
-  // your own NLP, you can provide starting values for the dual variables
-  // if you wish
-  if( !init_x || init_z || init_lambda ) return false;
-
-  // initialize to the given starting point
-  for( Ipopt::Index i=0; i<n; i++ ){   
-    x[i] = Xval[i];
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "  x_0[" << i << "] = " << x[i] << std::endl;
-#endif
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::eval_f
-( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Number& f )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT::eval_f  " << new_x << std::endl;
-  for( Ipopt::Index i=0; i<n; i++ )
-    std::cout << "  x[" << i << "] = " << x[i] << std::endl;
-#endif
-
-  // evaluate objective
-  try{
-    dag.eval( op_f, dwk, 1, Fvar.data(), &f, n, Xvar.data(), x );
-  }
-  catch(...){
-    return false;
-  }
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-  std::cout << "  f = " << f << std::endl;
-#endif
-
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::eval_grad_f
-( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Number* df )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT::eval_grad_f  " << new_x << std::endl;
-  for( Ipopt::Index i=0; i<n; i++ )
-    std::cout << "  x[" << i << "] = " << x[i] << std::endl;
-#endif
-
-  // evaluate objective gradient
-  try{
-    switch( Gmeth ){
-      // Compute symbolic derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
-      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
-        dag.eval( op_df, dwk, n, Cvar.data(), df, n, Xvar.data(), x );
-        break;
-
-      // Compute forward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
-        FXval.resize( n );
-        // Initialize participating variables in fadbad::F<double>
-        for( Ipopt::Index i=0; i<n; i++ ){
-          FXval[i] = x[i];
-          FXval[i].diff( i, n );
-        }
-        dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, n, Xvar.data(), FXval.data() );
-        // Gather derivatives
-        for( Ipopt::Index i=0; i<n; i++ )
-          df[i] = FCval.d(i);
-        break;
-
-      // Compute backward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
-        BXval.resize( n );
-        // Initialize participating variables in fadbad::B<double>
-        for( Ipopt::Index i=0; i<n; i++ )
-          BXval[i] = x[i];
-        dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, n, Xvar.data(), BXval.data() );
-        Bwk.clear();
-        BCval.diff( 0, 1 );
-        // Gather derivatives
-        for( Ipopt::Index i=0; i<n; i++ )
-          df[i] = BXval[i].d(0);
-        break;
-
-      // Other derivative method - error
-      default:
-        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
-    }
-
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-        for( Ipopt::Index i=0; i<n; i++ )
-          std::cout << "  df[" << i << "] = " << df[i] << std::endl;
-#endif
-  }
-
-  catch(...){
-    return false;
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::eval_g
-( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Index m,
-  Ipopt::Number* g )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT::eval_g  " << new_x << std::endl;
-  for( Ipopt::Index i=0; i<n; i++ )
-    std::cout << "  x[" << i << "] = " << x[i] << std::endl;
-#endif
-
-  // evaluate constraints
-  try{
-    dag.eval( op_g, dwk, m, Fvar.data()+1, g, n, Xvar.data(), x );
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    for( Ipopt::Index j=0; j<m; j++ )
-      std::cout << "  g[" << j << "] = " << g[j] << std::endl;
-#endif
-  }
-  catch(...){
-    return false;
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::eval_jac_g
-( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Index m,
-  Ipopt::Index nele_jac, Ipopt::Index* iRow, Ipopt::Index *jCol,
-  Ipopt::Number* dg )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT::eval_jac_g  " << new_x << std::endl;
-#endif
- 
-  // return the constraint Jacobian structure
-  if( !dg ){
-    for( Ipopt::Index ie=0; ie<nele_jac; ++ie ){
-      iRow[ie] = iGfun[ie];
-      jCol[ie] = jGvar[ie];
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-      std::cout << "  dg[" << iRow[ie] << ", " << jCol[ie] << "]" << std::endl;
-#endif
-    }
-    return true;
-  }
-
-  // evaluate constraint gradient
-  try{
-    switch( Gmeth ){
-      // Compute symbolic derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
-      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
-        dag.eval( op_dg, dwk, nele_jac, Gvar.data(), dg, n, Xvar.data(), x );
-        break;
-
-      // Compute forward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
-        FXval.resize( n );
-        // Initialize participating variables in fadbad::F<double>
-        for( Ipopt::Index i=0; i<n; i++ ){
-          FXval[i] = x[i];
-          FXval[i].diff( i, n );
-        }
-        FFval.resize( m );
-        dag.eval( op_g, Fwk, m, Fvar.data()+1, FFval.data(), n, Xvar.data(), FXval.data() );
-        // Gather derivatives
-        for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
-          dg[ie] = FFval[ iGfun[ie] ].d( jGvar[ie] );
-        break;
-
-      // Compute backward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
-        BXval.resize( n );
-        // Initialize participating variables in fadbad::B<double>
-        for( Ipopt::Index i=0; i<n; i++ )
-          BXval[i] = x[i];
-        BFval.resize( m );
-        dag.eval( op_g, Bwk, m, Fvar.data()+1, BFval.data(), n, Xvar.data(), BXval.data() );
-        Bwk.clear();
-        for( Ipopt::Index j=0; j<m; j++ )
-          BFval[j].diff( j, m );
-        // Gather derivatives
-        for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
-          dg[ie] = BXval[ jGvar[ie] ].d( iGfun[ie] );
-        break;
-
-      // Other derivative method - error
-      default:
-        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
-    }
-
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
-       std::cout << "  dg[" << iGfun[ie] << ", " << jGvar[ie] << "] = " << dg[ie] << std::endl;
-#endif
-  }
-  
-  catch(...){
-    return false;
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::eval_h
-( Ipopt::Index n, const Ipopt::Number* x, bool new_x,
-  Ipopt::Number obj_factor, Ipopt::Index m, const Ipopt::Number* lambda,
-  bool new_lambda, Ipopt::Index nele_hess, Ipopt::Index* iRow,
-  Ipopt::Index* jCol, Ipopt::Number* d2L )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-  std::cout << "  WORKER_IPOPT::eval_h  " << new_x  << new_lambda << std::endl;
-#endif
-
-  // return the Lagrangian Hessian structure
-  if( !d2L ){
-    for( Ipopt::Index ie=0; ie<nele_hess; ++ie ){
-      iRow[ie] = iLvar[ie];
-      jCol[ie] = jLvar[ie];
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-      std::cout << "  d2L[" << iRow[ie] << ", " << jCol[ie] << "]" << std::endl;
-#endif
-    }
-    return true;
-  }
-
-  // evaluate Lagrangian Hessian
-  try{
-    switch( Gmeth ){
-      // Compute symbolic derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
-      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
-        dag.eval( op_L, dwk, nele_hess, Lvar.data(), d2L, n, Xvar.data(), x,
-                  1, Fmul.data(), &obj_factor, m, Fmul.data()+1, lambda );
-        break;
-
-      // Compute backward/forward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
-      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
-        if( Lvar.empty() ) break;
-        // Initialize participating variables in fadbad::F<double>
-        FXval.resize( n );
-        FFmul.resize( m );
-        for( Ipopt::Index i=0; i<n; i++ ){
-          FXval[i] = x[i];
-          FXval[i].diff( i, n );
-        }
-        FCmul = obj_factor;
-        for( Ipopt::Index j=0; j<m; j++ )
-          FFmul[j] = lambda[j];
-        // Initialize participating variables in fadbad::B<fadbad::F<double>>
-        BFXval.resize( n );
-        BFFmul.resize( m );
-        for( Ipopt::Index i=0; i<n; i++ )
-          BFXval[i] = FXval[i];
-        BFCmul = FCmul;
-        for( Ipopt::Index j=0; j<m; j++ )
-          BFFmul[j] = FFmul[j];
-        dag.eval( op_L, BFwk, 1, Lvar.data(), &BFLval, n, Xvar.data(), BFXval.data(),
-                  1, Fmul.data(), &BFCmul, m, Fmul.data()+1, BFFmul.data() );
-        BFwk.clear();
-        BFLval.diff( 0, 1 );
-        // Gather derivatives
-        for( Ipopt::Index ie=0; ie<nele_hess; ++ie )
-          d2L[ie] = BFXval[ jLvar[ie] ].d( 0 ).d( iLvar[ie] );
-        break;
-
-      // Other derivative method - error
-      default:
-        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
-    }
-
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    for( Ipopt::Index ie=0; ie<nele_hess; ++ie )
-       std::cout << "  d2L[" << iLvar[ie] << ", " << jLvar[ie] << "] = " << d2L[ie] << std::endl;
-#endif
-  }
-
-  catch(...){
-    return false;
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-void
-WORKER_IPOPT<ExtOps...>::finalize_solution
-( Ipopt::SolverReturn status, Ipopt::Index n, const Ipopt::Number* p,
-  const Ipopt::Number* upL, const Ipopt::Number* upU, Ipopt::Index m,
-  const Ipopt::Number* g, const Ipopt::Number* ug, Ipopt::Number f,
-  const Ipopt::IpoptData* ip_data, Ipopt::IpoptCalculatedQuantities* ip_cq )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::finalize_solution\n";
-#endif
-  solution.stat    = status;
-  solution.x.assign( p, p+n );
-  solution.ux.resize( n );
-  for( int i=0; i<n; i++ ) solution.ux[i] = upL[i] - upU[i];  
-  solution.f.assign( 1, f );
-  solution.f.insert( solution.f.end(), g, g+m );
-  solution.uf.assign( 1, -1. );
-  solution.uf.resize( m+1 );
-  for( int j=0; j<m; j++ ) solution.uf[1+j] = - ug[j];
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::intermediate_callback
-( Ipopt::AlgorithmMode mode, Ipopt::Index iter, Ipopt::Number obj_value,
-  Ipopt::Number inf_pr, Ipopt::Number inf_du, Ipopt::Number mu,
-  Ipopt::Number d_norm, Ipopt::Number regularization_size,
-  Ipopt::Number alpha_du, Ipopt::Number alpha_pr, Ipopt::Index ls_trials,
-  const Ipopt::IpoptData* ip_data, Ipopt::IpoptCalculatedQuantities* ip_cq )
-{
-#ifdef MC__NLPSLV_IPOPT_TRACE
-    std::cout << "  WORKER_IPOPT::intermediate_callback\n";
-#endif
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::feasible
-( double const CTRTOL, int const nF, int const nX )
-{
-  double maxinfeas = 0.;
-  for( int i=0; i<nX; i++ ){
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "X[" << i << "]: " << Xlow[i] << " <= " << solution.x[i] << " <= " << Xupp[i] << std::endl;
-#endif
-    maxinfeas = Xlow[i] - solution.x[i];
-    if( maxinfeas > CTRTOL ) return false;
-    maxinfeas = solution.x[i] - Xupp[i];
-    if( maxinfeas > CTRTOL ) return false;
-  }
-
-  try{
-    solution.f.assign( nF, 0. );
-    dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
-    dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
-    //Fval.resize( nF );
-    //dag.eval( op_g, dwk, nF-1, Fvar.data()+1, Fval.data()+1, nX, Xvar.data(), solution.x.data() );
-  }
-  catch(...){
-    return false;
-  }
-  for( int i=1; i<nF; i++ ){
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
-#endif
-    maxinfeas = Flow[i] - solution.f[i];
-    if( maxinfeas > CTRTOL ) return false;
-    maxinfeas = solution.f[i] - Fupp[i];
-    if( maxinfeas > CTRTOL ) return false;
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-bool
-WORKER_IPOPT<ExtOps...>::stationary
-( double const GRADTOL, int const nX, int const nF, int const nG )
-{
-  Cval.resize( nX );
-  Gval.resize( nG );
-  try{
-    switch( Gmeth ){
-      // Compute symbolic derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FSYM:
-      case NLPSLV_IPOPT<ExtOps...>::Options::BSYM:
-        dag.eval( op_df, dwk, nX, Cvar.data(), Cval.data(), nX, Xvar.data(), solution.x.data() );
-        dag.eval( op_dg, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
-        break;
-
-      // Compute forward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::FAD:
-        FXval.resize( nX );
-        // Initialize participating variables in fadbad::F<double>
-        for( int i=0; i<nX; i++ ){
-          FXval[i] = solution.x.data()[i];
-          FXval[i].diff( i, nX );
-        }
-
-        dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, nX, Xvar.data(), FXval.data() );
-        // Gather derivatives
-        for( int i=0; i<nX; i++ )
-          Cval[i] = FCval.d(i);
-
-        FFval.resize( nF-1 );
-        dag.eval( op_g, Fwk, nF-1, Fvar.data()+1, FFval.data(), nX, Xvar.data(), FXval.data() );
-        // Gather derivatives
-        for( int i=0; i<nG; ++i )
-          Gval[i] = FFval[ iGfun[i] ].d( jGvar[i] );
-        break;
-
-      // Compute backward numeric derivative
-      case NLPSLV_IPOPT<ExtOps...>::Options::BAD:
-        BXval.resize( nX );
-        // Initialize participating variables in fadbad::B<double>
-        for( int i=0; i<nX; i++ )
-          BXval[i] = solution.x.data()[i];
-        dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, nX, Xvar.data(), BXval.data() );
-        Bwk.clear();
-        BCval.diff( 0, 1 );
-        // Gather derivatives
-        for( int i=0; i<nX; i++ )
-          Cval[i] = BXval[i].d(0);
-
-        for( int i=0; i<nX; i++ )
-          BXval[i] = solution.x.data()[i];
-        BFval.resize( nF-1 );
-        dag.eval( op_g, Bwk, nF-1, Fvar.data()+1, BFval.data(), nX, Xvar.data(), BXval.data() );
-        Bwk.clear();
-        for( int j=0; j<nF-1; j++ )
-          BFval[j].diff( j, nF-1 );
-        // Gather derivatives
-        for( int i=0; i<nG; ++i )
-          Gval[i] = BXval[ jGvar[i] ].d( iGfun[i] );
-        break;
-
-      // Other derivative method - error
-      default:
-        throw typename NLPSLV_IPOPT<ExtOps...>::Exceptions( NLPSLV_IPOPT<ExtOps...>::Exceptions::INTERN );
-    }
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    for( int i=0; i<nX; ++i )
-      std::cout << "  Cval[" << i << "] = " << Cval[i] << std::endl;
-    for( int ie=0; ie<nG; ++ie )
-      std::cout << "  Gval[" << iGfun[ie] << ", " << jGvar[ie] << "] = " << Gval[ie] << std::endl;
-#endif
-  }
-  catch(...){
-    return false;
-  }
-
-  std::vector<double> gradL = solution.ux;
-  for( int i=0; i<nX; i++ )
-    gradL[i] += Cval[i] * solution.uf[0];
-  for( int ie=0; ie<nG; ie++ )
-    gradL[jGvar[ie]] += Gval[ie] * solution.uf[1+iGfun[ie]];
-  for( int i=0; i<nX; i++ ){
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "  gradL[" << i << "] : " << gradL[i] << " = 0" << std::endl;
-#endif
-    if( std::fabs( gradL[i] ) > GRADTOL ) return false;
-  }
-  return true;
-}
-
-template <typename... ExtOps>
-inline
-double
-WORKER_IPOPT<ExtOps...>::correction
-( int const nF, int const nX )
-{
-  double costcorr = 0.;
-  for( int i=0; i<nX; i++ ){
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "X[" << i << "]: " << Xlow[i] << " <= " << solution.x[i] << " <= " << Xupp[i] << std::endl;
-#endif
-    costcorr += std::max( Xlow[i] - solution.x[i], 0. ) * solution.ux[i];
-    costcorr -= std::max( solution.x[i] - Xupp[i], 0. ) * solution.ux[i];
-  }
-
-  try{
-    solution.f.assign( nF, 0. );
-    dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
-    dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
-    //Fval.resize( nF );
-    //dag.eval( op_g, dwk, nF-1, Fvar.data()+1, Fval.data()+1, nX, Xvar.data(), solution.x.data() );
-  }
-  catch(...){
-    return costcorr;
-  }
-  for( int i=1; i<nF; i++ ){
-#ifdef MC__NLPSLV_IPOPT_DEBUG
-    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
-#endif
-    costcorr += std::max( Flow[i] - solution.f[i], 0. ) * solution.uf[i];
-    costcorr -= std::max( solution.f[i] - Fupp[i], 0. ) * solution.uf[i];
-  }
-
-  return costcorr;
-}
 
 
 //! @brief C++ class for NLP solution using IPOPT and MC++
@@ -928,54 +310,53 @@ WORKER_IPOPT<ExtOps...>::correction
 //! mc::NLPSLV_IPOPT is a C++ class for solving NLP problems
 //! using IPOPT and MC++
 ////////////////////////////////////////////////////////////////////////
-template <typename... ExtOps>
 class NLPSLV_IPOPT
-#if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<ExtOps...>,
-  public virtual BASE_NLP<ExtOps...>
+#if defined( MC__WITH_GAMS )
+: protected virtual GAMSIO,
+  public virtual BASE_NLP
 #else
-: public virtual BASE_NLP<ExtOps...>
+: public virtual BASE_NLP
 #endif
 {
 public:
 
-  using BASE_NLP<ExtOps...>::dag;
-  using BASE_NLP<ExtOps...>::set_dag;
+  using BASE_NLP::dag;
+  using BASE_NLP::set_dag;
 
-  using BASE_NLP<ExtOps...>::par;
-  using BASE_NLP<ExtOps...>::set_par;
-  using BASE_NLP<ExtOps...>::add_par;
-  using BASE_NLP<ExtOps...>::reset_par;
+  using BASE_NLP::par;
+  using BASE_NLP::set_par;
+  using BASE_NLP::add_par;
+  using BASE_NLP::reset_par;
 
-  using BASE_NLP<ExtOps...>::var;
-  using BASE_NLP<ExtOps...>::set_var;
-  using BASE_NLP<ExtOps...>::add_var;
-  using BASE_NLP<ExtOps...>::reset_var;
-  using BASE_NLP<ExtOps...>::update_vartyp;
+  using BASE_NLP::var;
+  using BASE_NLP::set_var;
+  using BASE_NLP::add_var;
+  using BASE_NLP::reset_var;
+  using BASE_NLP::update_vartyp;
 
-  using BASE_NLP<ExtOps...>::set;
-  using BASE_NLP<ExtOps...>::set_obj;
-  using BASE_NLP<ExtOps...>::add_ctr;
+  using BASE_NLP::set;
+  using BASE_NLP::set_obj;
+  using BASE_NLP::add_ctr;
 
-#if defined (MC__WITH_GAMS)
-  using GAMSIO<ExtOps...>::read;
+#if defined( MC__WITH_GAMS )
+  using GAMSIO::read;
 #endif
 
 protected:
 
-  using BASE_NLP<ExtOps...>::_dag;
-  using BASE_NLP<ExtOps...>::_var;
-  using BASE_NLP<ExtOps...>::_vartyp;
-  using BASE_NLP<ExtOps...>::_varlb;
-  using BASE_NLP<ExtOps...>::_varlm;
-  using BASE_NLP<ExtOps...>::_varub;
-  using BASE_NLP<ExtOps...>::_varum;
-  using BASE_NLP<ExtOps...>::_par;
-  using BASE_NLP<ExtOps...>::_obj;
-  using BASE_NLP<ExtOps...>::_ctr;
+  using BASE_NLP::_dag;
+  using BASE_NLP::_var;
+  using BASE_NLP::_vartyp;
+  using BASE_NLP::_varlb;
+  using BASE_NLP::_varlm;
+  using BASE_NLP::_varub;
+  using BASE_NLP::_varum;
+  using BASE_NLP::_par;
+  using BASE_NLP::_obj;
+  using BASE_NLP::_ctr;
 
-#if defined (MC__WITH_GAMS)
-  using GAMSIO<ExtOps...>::_varini;
+#if defined( MC__WITH_GAMS )
+  using GAMSIO::_varini;
 #endif
 
 public:
@@ -993,12 +374,14 @@ public:
 private:
 
   //! @brief vector of IPOPT workers
-  std::vector<Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>>> _worker;
+  std::vector<Ipopt::SmartPtr<WORKER_IPOPT>> _worker;
 
   //! @brief number of parameters in problem
   int                 _nP;
   //! @brief vector of parameters in DAG
   std::vector<FFVar>  _Pvar;
+  //! @brief vector of parameter dependencies
+  std::vector<FFDep>  _Pdep;
 
   //! @brief number of decision variables (independent and dependent) in problem
   int                 _nX;
@@ -1010,7 +393,7 @@ private:
   std::vector<double> _Xlow;
   //! @brief vector of decision variable upper bounds
   std::vector<double> _Xupp;
-  //! @brief vector of decision variable levels (size _nX0)
+  //! @brief vector of decision variable levels
   std::vector<double> _Xini;
 
   //! @brief number of functions (objective and constraints) in problem
@@ -1188,12 +571,13 @@ public:
     unsigned MAXTHREAD;
   } options;
 
-  //! @brief NLP solver exceptions
+  //! @brief NLPSLV exceptions
   class Exceptions
   {
   public:
     //! @brief Enumeration type for NLPSLV exception handling
     enum TYPE{
+      PARAM=-1,	        //!< Undefined parameter values
       INTERN=-33	//!< Internal error
     };
     //! @brief Constructor for error <a>ierr</a>
@@ -1203,6 +587,8 @@ public:
     //! @brief Inline function returning the error description
     std::string what(){
       switch( _ierr ){
+        case PARAM:
+          return "NLPSLV_IPOPT::Exceptions  Undefined parameter values";
         case INTERN:
         default:
           return "NLPSLV_IPOPT::Exceptions  Internal error";
@@ -1230,24 +616,24 @@ public:
   //! @brief Solve NLP model -- return value is IPOPT status
   template <typename T>
   int solve
-    ( double const* Xini, T const* Xbnd, double const* Pval=0 );
+    ( double const* Xini, T const* Xbnd, double const* Pval=nullptr );
 
   //! @brief Solve NLP model -- return value is IPOPT status
   int solve
-    ( double const* Xini=0, double const* Xlow=0, double const* Xupp=0,
-      double const* Pval=0 );
+    ( double const* Xini=nullptr, double const* Xlow=nullptr, double const* Xupp=nullptr,
+      double const* Pval=nullptr );
 
 #ifdef MC__USE_SOBOL
   //! @brief Solve NLP model using multistart search -- return value is IPOPT status
   template <typename T>
   int solve
-    ( unsigned const NSAM, T const* Xbnd, double const* Pval=0,
-      bool const* logscal=0, bool const disp=false );
+    ( unsigned const NSAM, T const* Xbnd, double const* Pval=nullptr,
+      bool const* logscal=nullptr, bool const disp=false );
 
   //! @brief Solve NLP model using multistart search -- return value is IPOPT status
   int solve
-    ( unsigned const NSAM, double const* Xlow=0, double const* Xupp=0,
-      double const* Pval=0, bool const* logscal=0, bool const disp=false );
+    ( unsigned const NSAM, double const* Xlow=nullptr, double const* Xupp=nullptr,
+      double const* Pval=nullptr, bool const* logscal=nullptr, bool const disp=false );
 #endif
 
   //! @brief Test primal feasibility
@@ -1354,7 +740,7 @@ protected:
 
   //! @brief set the worker internal variables
   void _set_worker
-    ( Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>> & th );
+    ( Ipopt::SmartPtr<WORKER_IPOPT> & th );
 
   //! @brief resize the number of workers
   void _resize_workers
@@ -1370,14 +756,715 @@ protected:
 private:
 
   //! @brief Private methods to block default compiler methods
-  NLPSLV_IPOPT(const NLPSLV_IPOPT<ExtOps...>&);
-  NLPSLV_IPOPT<ExtOps...>& operator=(const NLPSLV_IPOPT<ExtOps...>&);
+  NLPSLV_IPOPT(const NLPSLV_IPOPT&);
+  NLPSLV_IPOPT& operator=(const NLPSLV_IPOPT&);
 };
 
-template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<ExtOps...>::_set_options
+WORKER_IPOPT::update
+( int const nX, double const* Xl, double const* Xu, int const nP, double const* P0 )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::update  " << warm << std::endl;
+#endif
+
+  // variable bounds
+  if( Xl ) Xlow.assign( Xl, Xl+nX );
+  if( Xu ) Xupp.assign( Xu, Xu+nX );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  for( int i=0; i<nX; i++ )
+    std::cout << "  Xlow[" << i << "] = " << Xlow[i]
+              << "  Xupp[" << i << "] = " << Xupp[i] << std::endl;
+#endif
+
+  // parameter values
+  this->nP = nP;
+  if( !Pvar.empty() && !P0 ) throw NLPSLV_IPOPT::Exceptions( NLPSLV_IPOPT::Exceptions::PARAM );
+  if( P0 ) Pval.assign( P0, P0+nP );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  for( int i=0; !Pvar.empty() && P0 && i<nP; i++ )
+    std::cout << "  Pval[" << i << "] = " << Pval[i] << std::endl;
+#endif
+}
+
+inline
+void
+WORKER_IPOPT::initialize
+( int const nX, double const* Xini )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::initialize  " << std::endl;
+#endif
+
+  // initial starting point
+  if( Xini ) Xval.assign( Xini, Xini+nX );
+  else       Xval.assign( nX, 0. );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  for( int i=0; i<nX; i++ )
+    std::cout << "  Xval[" << i << "] = " << Xval[i] << std::endl;
+#endif
+}
+
+inline
+bool
+WORKER_IPOPT::get_nlp_info
+( Ipopt::Index& n, Ipopt::Index& m, Ipopt::Index& nnz_jac_g,
+  Ipopt::Index& nnz_h_lag, IndexStyleEnum& index_style )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::get_nlp_info\n";
+#endif
+
+  // set size
+  n = Xvar.size();
+  m = Fvar.size()-1;
+  nnz_jac_g = iGfun.size(); //Gvar.size();
+  nnz_h_lag = iLvar.size(); //Lvar.size();
+
+  // use the C style indexing (0-based)
+  index_style = Ipopt::TNLP::C_STYLE;
+
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  std::cout << "n:" << n << std::endl;
+  std::cout << "m:" << m << std::endl;
+  std::cout << "nnz_jac_g:" << nnz_jac_g << std::endl;
+  std::cout << "nnz_h_lag:" << nnz_h_lag << std::endl;
+#endif
+
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::get_bounds_info
+( Ipopt::Index n, Ipopt::Number* x_l, Ipopt::Number* x_u,
+  Ipopt::Index m, Ipopt::Number* g_l, Ipopt::Number* g_u )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::get_bounds_info\n";
+#endif
+
+  // set variable bounds
+  for( Ipopt::Index i=0; i<n; i++ ){   
+    x_l[i] = Xlow[i];
+    x_u[i] = Xupp[i];
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "  x_l[" << i << "] = " << x_l[i]
+              << "  x_u[" << i << "] = " << x_u[i] << std::endl;
+#endif
+  }
+
+  // set constraint bounds
+  for( Ipopt::Index j=0; j<m; j++ ){   
+    g_l[j] = Flow[1+j]; // index 0 is objective
+    g_u[j] = Fupp[1+j];
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "  g_l[" << j << "] = " << g_l[j]
+              << "  g_u[" << j << "] = " << g_u[j] << std::endl;
+#endif
+  }
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::get_starting_point
+( Ipopt::Index n, bool init_x, Ipopt::Number* x, bool init_z,
+  Ipopt::Number* z_L, Ipopt::Number* z_U, Ipopt::Index m,
+  bool init_lambda, Ipopt::Number* lambda )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::get_starting_point  "
+              << init_x << init_z << init_lambda << std::endl;
+#endif
+
+  // Here, we assume we only have starting values for x, if you code
+  // your own NLP, you can provide starting values for the dual variables
+  // if you wish
+  if( !init_x || init_z || init_lambda ) return false;
+
+  // initialize to the given starting point
+  for( Ipopt::Index i=0; i<n; i++ ){   
+    x[i] = Xval[i];
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "  x_0[" << i << "] = " << x[i] << std::endl;
+#endif
+  }
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::eval_f
+( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Number& f )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+  std::cout << "  WORKER_IPOPT::eval_f  " << new_x << std::endl;
+  for( Ipopt::Index i=0; i<n; i++ )
+    std::cout << "  x[" << i << "] = " << x[i] << std::endl;
+#endif
+
+  // evaluate objective
+  try{
+    if( nP ) dag.eval( op_f, dwk, 1, Fvar.data(), &f, n, Xvar.data(), x, nP, Pvar.data(), Pval.data() );
+    else     dag.eval( op_f, dwk, 1, Fvar.data(), &f, n, Xvar.data(), x );
+  }
+  catch(...){
+    return false;
+  }
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+  std::cout << "  f = " << f << std::endl;
+#endif
+
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::eval_grad_f
+( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Number* df )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+  std::cout << "  WORKER_IPOPT::eval_grad_f  " << new_x << std::endl;
+  for( Ipopt::Index i=0; i<n; i++ )
+    std::cout << "  x[" << i << "] = " << x[i] << std::endl;
+#endif
+
+  // evaluate objective gradient
+  try{
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT::Options::FSYM:
+      case NLPSLV_IPOPT::Options::BSYM:
+        if( nP ) dag.eval( op_df, dwk, n, Cvar.data(), df, n, Xvar.data(), x, nP, Pvar.data(), Pval.data() );
+        else     dag.eval( op_df, dwk, n, Cvar.data(), df, n, Xvar.data(), x );
+        break;
+
+      // Compute forward numeric derivative
+      case NLPSLV_IPOPT::Options::FAD:
+        FXval.resize( n );
+        // Initialize participating variables in fadbad::F<double>
+        for( Ipopt::Index i=0; i<n; i++ ){
+          FXval[i] = x[i];
+          FXval[i].diff( i, n );
+        }
+        if( nP ){
+          FPval.resize( nP );
+          // Initialize parameters in fadbad::F<double>
+          for( size_t iP=0; iP<nP; ++iP ) FPval[iP] = Pval[iP];
+          dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, n, Xvar.data(), FXval.data(), nP, Pvar.data(), FPval.data() );
+        }
+        else{
+          dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, n, Xvar.data(), FXval.data() );
+        }
+        // Gather derivatives
+        for( Ipopt::Index i=0; i<n; i++ )
+          df[i] = FCval.d(i);
+        break;
+
+      // Compute backward numeric derivative
+      case NLPSLV_IPOPT::Options::BAD:
+        BXval.resize( n );
+        // Initialize participating variables in fadbad::B<double>
+        for( Ipopt::Index i=0; i<n; i++ )
+          BXval[i] = x[i];
+        if( nP ){
+          BPval.resize( nP );
+          // Initialize parameters in fadbad::B<double>
+          for( size_t iP=0; iP<nP; ++iP ) BPval[iP] = Pval[iP];
+          dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, n, Xvar.data(), BXval.data(), nP, Pvar.data(), BPval.data() );
+        }
+        else{
+          dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, n, Xvar.data(), BXval.data() );
+        }
+        Bwk.clear();
+        BCval.diff( 0, 1 );
+        // Gather derivatives
+        for( Ipopt::Index i=0; i<n; i++ )
+          df[i] = BXval[i].d(0);
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT::Exceptions( NLPSLV_IPOPT::Exceptions::INTERN );
+    }
+
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+        for( Ipopt::Index i=0; i<n; i++ )
+          std::cout << "  df[" << i << "] = " << df[i] << std::endl;
+#endif
+  }
+
+  catch(...){
+    return false;
+  }
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::eval_g
+( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Index m,
+  Ipopt::Number* g )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+  std::cout << "  WORKER_IPOPT::eval_g  " << new_x << std::endl;
+  for( Ipopt::Index i=0; i<n; i++ )
+    std::cout << "  x[" << i << "] = " << x[i] << std::endl;
+#endif
+
+  // evaluate constraints
+  try{
+    if( nP ) dag.eval( op_g, dwk, m, Fvar.data()+1, g, n, Xvar.data(), x, nP, Pvar.data(), Pval.data() );
+    else     dag.eval( op_g, dwk, m, Fvar.data()+1, g, n, Xvar.data(), x );
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    for( Ipopt::Index j=0; j<m; j++ )
+      std::cout << "  g[" << j << "] = " << g[j] << std::endl;
+#endif
+  }
+  catch(...){
+    return false;
+  }
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::eval_jac_g
+( Ipopt::Index n, const Ipopt::Number* x, bool new_x, Ipopt::Index m,
+  Ipopt::Index nele_jac, Ipopt::Index* iRow, Ipopt::Index *jCol,
+  Ipopt::Number* dg )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+  std::cout << "  WORKER_IPOPT::eval_jac_g  " << new_x << std::endl;
+#endif
+ 
+  // return the constraint Jacobian structure
+  if( !dg ){
+    for( Ipopt::Index ie=0; ie<nele_jac; ++ie ){
+      iRow[ie] = iGfun[ie];
+      jCol[ie] = jGvar[ie];
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+      std::cout << "  dg[" << iRow[ie] << ", " << jCol[ie] << "]" << std::endl;
+#endif
+    }
+    return true;
+  }
+
+  // evaluate constraint gradient
+  try{
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT::Options::FSYM:
+      case NLPSLV_IPOPT::Options::BSYM:
+        if( nP ) dag.eval( op_dg, dwk, nele_jac, Gvar.data(), dg, n, Xvar.data(), x, nP, Pvar.data(), Pval.data() );
+        else     dag.eval( op_dg, dwk, nele_jac, Gvar.data(), dg, n, Xvar.data(), x );
+        break;
+
+      // Compute forward numeric derivative
+      case NLPSLV_IPOPT::Options::FAD:
+        FXval.resize( n );
+        // Initialize participating variables in fadbad::F<double>
+        for( Ipopt::Index i=0; i<n; i++ ){
+          FXval[i] = x[i];
+          FXval[i].diff( i, n );
+        }
+        FFval.resize( m );
+        if( nP ){
+          FPval.resize( nP );
+          // Initialize parameters in fadbad::F<double>
+          for( size_t iP=0; iP<nP; ++iP ) FPval[iP] = Pval[iP];
+          dag.eval( op_g, Fwk, m, Fvar.data()+1, FFval.data(), n, Xvar.data(), FXval.data(), nP, Pvar.data(), FPval.data() );
+        }
+        else{
+          dag.eval( op_g, Fwk, m, Fvar.data()+1, FFval.data(), n, Xvar.data(), FXval.data() );
+        }
+
+        // Gather derivatives
+        for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
+          dg[ie] = FFval[ iGfun[ie] ].d( jGvar[ie] );
+        break;
+
+      // Compute backward numeric derivative
+      case NLPSLV_IPOPT::Options::BAD:
+        BXval.resize( n );
+        // Initialize participating variables in fadbad::B<double>
+        for( Ipopt::Index i=0; i<n; i++ )
+          BXval[i] = x[i];
+        BFval.resize( m );
+        if( nP ){
+          BPval.resize( nP );
+          // Initialize parameters in fadbad::B<double>
+          for( size_t iP=0; iP<nP; ++iP ) BPval[iP] = Pval[iP];
+          dag.eval( op_g, Bwk, m, Fvar.data()+1, BFval.data(), n, Xvar.data(), BXval.data(), nP, Pvar.data(), BPval.data() );
+        }
+        else{
+          dag.eval( op_g, Bwk, m, Fvar.data()+1, BFval.data(), n, Xvar.data(), BXval.data() );
+        }
+
+        Bwk.clear();
+        for( Ipopt::Index j=0; j<m; j++ )
+          BFval[j].diff( j, m );
+        // Gather derivatives
+        for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
+          dg[ie] = BXval[ jGvar[ie] ].d( iGfun[ie] );
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT::Exceptions( NLPSLV_IPOPT::Exceptions::INTERN );
+    }
+
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    for( Ipopt::Index ie=0; ie<nele_jac; ++ie )
+       std::cout << "  dg[" << iGfun[ie] << ", " << jGvar[ie] << "] = " << dg[ie] << std::endl;
+#endif
+  }
+  
+  catch(...){
+    return false;
+  }
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::eval_h
+( Ipopt::Index n, const Ipopt::Number* x, bool new_x,
+  Ipopt::Number obj_factor, Ipopt::Index m, const Ipopt::Number* lambda,
+  bool new_lambda, Ipopt::Index nele_hess, Ipopt::Index* iRow,
+  Ipopt::Index* jCol, Ipopt::Number* d2L )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+  std::cout << "  WORKER_IPOPT::eval_h  " << new_x  << new_lambda << std::endl;
+#endif
+
+  // return the Lagrangian Hessian structure
+  if( !d2L ){
+    for( Ipopt::Index ie=0; ie<nele_hess; ++ie ){
+      iRow[ie] = iLvar[ie];
+      jCol[ie] = jLvar[ie];
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+      std::cout << "  d2L[" << iRow[ie] << ", " << jCol[ie] << "]" << std::endl;
+#endif
+    }
+    return true;
+  }
+
+  // evaluate Lagrangian Hessian
+  try{
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT::Options::FSYM:
+      case NLPSLV_IPOPT::Options::BSYM:
+        if( nP ) dag.eval( op_L, dwk, nele_hess, Lvar.data(), d2L, n, Xvar.data(), x, 1, Fmul.data(), &obj_factor, m, Fmul.data()+1, lambda, nP, Pvar.data(), Pval.data() );
+        else     dag.eval( op_L, dwk, nele_hess, Lvar.data(), d2L, n, Xvar.data(), x, 1, Fmul.data(), &obj_factor, m, Fmul.data()+1, lambda );
+        break;
+
+      // Compute backward/forward numeric derivative
+      case NLPSLV_IPOPT::Options::FAD:
+      case NLPSLV_IPOPT::Options::BAD:
+        if( Lvar.empty() ) break;
+        // Initialize participating variables in fadbad::F<double>
+        FXval.resize( n );
+        FFmul.resize( m );
+        for( Ipopt::Index i=0; i<n; i++ ){
+          FXval[i] = x[i];
+          FXval[i].diff( i, n );
+        }
+        FCmul = obj_factor;
+        for( Ipopt::Index j=0; j<m; j++ )
+          FFmul[j] = lambda[j];
+        // Initialize participating variables in fadbad::B<fadbad::F<double>>
+        BFXval.resize( n );
+        BFFmul.resize( m );
+        for( Ipopt::Index i=0; i<n; i++ )
+          BFXval[i] = FXval[i];
+        BFCmul = FCmul;
+        for( Ipopt::Index j=0; j<m; j++ )
+          BFFmul[j] = FFmul[j];
+        if( nP ){
+          FPval.resize( nP );
+          BFPval.resize( nP );
+          // Initialize parameters in fadbad::B<double>
+          for( size_t iP=0; iP<nP; ++iP ){
+            FPval[iP]  = Pval[iP];
+            BFPval[iP] = FPval[iP];
+          }
+          dag.eval( op_L, BFwk, 1, Lvar.data(), &BFLval, n, Xvar.data(), BFXval.data(), 1, Fmul.data(), &BFCmul, m, Fmul.data()+1, BFFmul.data(), nP, Pvar.data(), BFPval.data() );
+        }
+        else{
+          dag.eval( op_L, BFwk, 1, Lvar.data(), &BFLval, n, Xvar.data(), BFXval.data(), 1, Fmul.data(), &BFCmul, m, Fmul.data()+1, BFFmul.data() );
+        }
+        BFwk.clear();
+        BFLval.diff( 0, 1 );
+        // Gather derivatives
+        for( Ipopt::Index ie=0; ie<nele_hess; ++ie )
+          d2L[ie] = BFXval[ jLvar[ie] ].d( 0 ).d( iLvar[ie] );
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT::Exceptions( NLPSLV_IPOPT::Exceptions::INTERN );
+    }
+
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    for( Ipopt::Index ie=0; ie<nele_hess; ++ie )
+       std::cout << "  d2L[" << iLvar[ie] << ", " << jLvar[ie] << "] = " << d2L[ie] << std::endl;
+#endif
+  }
+
+  catch(...){
+    return false;
+  }
+  return true;
+}
+
+inline
+void
+WORKER_IPOPT::finalize_solution
+( Ipopt::SolverReturn status, Ipopt::Index n, const Ipopt::Number* p,
+  const Ipopt::Number* upL, const Ipopt::Number* upU, Ipopt::Index m,
+  const Ipopt::Number* g, const Ipopt::Number* ug, Ipopt::Number f,
+  const Ipopt::IpoptData* ip_data, Ipopt::IpoptCalculatedQuantities* ip_cq )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::finalize_solution\n";
+#endif
+  solution.stat    = status;
+  solution.p       = Pval;
+  solution.x.assign( p, p+n );
+  solution.ux.resize( n );
+  for( int i=0; i<n; i++ ) solution.ux[i] = upL[i] - upU[i];  
+  solution.f.assign( 1, f );
+  solution.f.insert( solution.f.end(), g, g+m );
+  solution.uf.assign( 1, -1. );
+  solution.uf.resize( m+1 );
+  for( int j=0; j<m; j++ ) solution.uf[1+j] = - ug[j];
+}
+
+inline
+bool
+WORKER_IPOPT::intermediate_callback
+( Ipopt::AlgorithmMode mode, Ipopt::Index iter, Ipopt::Number obj_value,
+  Ipopt::Number inf_pr, Ipopt::Number inf_du, Ipopt::Number mu,
+  Ipopt::Number d_norm, Ipopt::Number regularization_size,
+  Ipopt::Number alpha_du, Ipopt::Number alpha_pr, Ipopt::Index ls_trials,
+  const Ipopt::IpoptData* ip_data, Ipopt::IpoptCalculatedQuantities* ip_cq )
+{
+#ifdef MC__NLPSLV_IPOPT_TRACE
+    std::cout << "  WORKER_IPOPT::intermediate_callback\n";
+#endif
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::feasible
+( double const CTRTOL, int const nP, int const nX, int const nF )
+{
+  double maxinfeas = 0.;
+  for( int i=0; i<nX; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "X[" << i << "]: " << Xlow[i] << " <= " << solution.x[i] << " <= " << Xupp[i] << std::endl;
+#endif
+    maxinfeas = Xlow[i] - solution.x[i];
+    if( maxinfeas > CTRTOL ) return false;
+    maxinfeas = solution.x[i] - Xupp[i];
+    if( maxinfeas > CTRTOL ) return false;
+  }
+
+  try{
+    solution.f.assign( nF, 0. );
+    if( nP ){
+      dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data(), nP, Pvar.data(), solution.p.data() );
+      dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data(), nP, Pvar.data(), solution.p.data() );
+    }
+    else{
+      dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+      dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
+    }
+  }
+  catch(...){
+    return false;
+  }
+  for( int i=1; i<nF; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
+#endif
+    maxinfeas = Flow[i] - solution.f[i];
+    if( maxinfeas > CTRTOL ) return false;
+    maxinfeas = solution.f[i] - Fupp[i];
+    if( maxinfeas > CTRTOL ) return false;
+  }
+  return true;
+}
+
+inline
+bool
+WORKER_IPOPT::stationary
+( double const GRADTOL, int const nP, int const nX, int const nF, int const nG )
+{
+  Cval.resize( nX );
+  Gval.resize( nG );
+  try{
+    switch( Gmeth ){
+      // Compute symbolic derivative
+      case NLPSLV_IPOPT::Options::FSYM:
+      case NLPSLV_IPOPT::Options::BSYM:
+        if( nP ){
+          dag.eval( op_df, dwk, nX, Cvar.data(), Cval.data(), nX, Xvar.data(), solution.x.data(), nP, Pvar.data(), solution.p.data() );
+          dag.eval( op_dg, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data(), nP, Pvar.data(), solution.p.data() );
+        }
+        else{
+          dag.eval( op_df, dwk, nX, Cvar.data(), Cval.data(), nX, Xvar.data(), solution.x.data() );
+          dag.eval( op_dg, dwk, nG, Gvar.data(), Gval.data(), nX, Xvar.data(), solution.x.data() );
+        }
+        break;
+
+      // Compute forward numeric derivative
+      case NLPSLV_IPOPT::Options::FAD:
+        FXval.resize( nX );
+        // Initialize participating variables in fadbad::F<double>
+        for( int i=0; i<nX; i++ ){
+          FXval[i] = solution.x.data()[i];
+          FXval[i].diff( i, nX );
+        }
+
+        if( nP ){
+          FPval.resize( nP );
+          // Initialize parameters in fadbad::F<double>
+          for( int iP=0; iP<nP; ++iP ) FPval[iP] = solution.p[iP];
+          dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, nX, Xvar.data(), FXval.data(), nP, Pvar.data(), FPval.data() );
+        }
+        else{
+          dag.eval( op_f, Fwk, 1, Fvar.data(), &FCval, nX, Xvar.data(), FXval.data() );
+        }
+        // Gather derivatives
+        for( int i=0; i<nX; i++ ) Cval[i] = FCval.d(i);
+
+        FFval.resize( nF-1 );
+        if( nP ){
+          dag.eval( op_g, Fwk, nF-1, Fvar.data()+1, FFval.data(), nX, Xvar.data(), FXval.data(), nP, Pvar.data(), FPval.data() );
+        }
+        else{
+          dag.eval( op_g, Fwk, nF-1, Fvar.data()+1, FFval.data(), nX, Xvar.data(), FXval.data() );
+        }
+        // Gather derivatives
+        for( int i=0; i<nG; ++i )
+          Gval[i] = FFval[ iGfun[i] ].d( jGvar[i] );
+        break;
+
+      // Compute backward numeric derivative
+      case NLPSLV_IPOPT::Options::BAD:
+        BXval.resize( nX );
+        // Initialize participating variables in fadbad::B<double>
+        for( int i=0; i<nX; i++ ) BXval[i] = solution.x.data()[i];
+        if( nP ){
+          BPval.resize( nP );
+          // Initialize parameters in fadbad::B<double>
+          for( int iP=0; iP<nP; ++iP ) BPval[iP] = solution.p[iP];
+          dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, nX, Xvar.data(), BXval.data(), nP, Pvar.data(), BPval.data() );
+        }
+        else{
+          dag.eval( op_f, Bwk, 1, Fvar.data(), &BCval, nX, Xvar.data(), BXval.data() );
+        }
+        Bwk.clear();
+        BCval.diff( 0, 1 );
+        // Gather derivatives
+        for( int i=0; i<nX; i++ ) Cval[i] = BXval[i].d(0);
+
+        for( int i=0; i<nX; i++ ) BXval[i] = solution.x.data()[i];
+        BFval.resize( nF-1 );
+        if( nP ){
+          BPval.resize( nP );
+          // Initialize parameters in fadbad::B<double>
+          for( int iP=0; iP<nP; ++iP ) BPval[iP] = solution.p[iP];
+          dag.eval( op_g, Bwk, nF-1, Fvar.data()+1, BFval.data(), nX, Xvar.data(), BXval.data(), nP, Pvar.data(), BPval.data() );
+        }
+        else{
+          dag.eval( op_g, Bwk, nF-1, Fvar.data()+1, BFval.data(), nX, Xvar.data(), BXval.data() );
+        }
+        Bwk.clear();
+        for( int j=0; j<nF-1; j++ )
+          BFval[j].diff( j, nF-1 );
+        // Gather derivatives
+        for( int i=0; i<nG; ++i )
+          Gval[i] = BXval[ jGvar[i] ].d( iGfun[i] );
+        break;
+
+      // Other derivative method - error
+      default:
+        throw typename NLPSLV_IPOPT::Exceptions( NLPSLV_IPOPT::Exceptions::INTERN );
+    }
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    for( int i=0; i<nX; ++i )
+      std::cout << "  Cval[" << i << "] = " << Cval[i] << std::endl;
+    for( int ie=0; ie<nG; ++ie )
+      std::cout << "  Gval[" << iGfun[ie] << ", " << jGvar[ie] << "] = " << Gval[ie] << std::endl;
+#endif
+  }
+  catch(...){
+    return false;
+  }
+
+  std::vector<double> gradL = solution.ux;
+  for( int i=0; i<nX; i++ )
+    gradL[i] += Cval[i] * solution.uf[0];
+  for( int ie=0; ie<nG; ie++ )
+    gradL[jGvar[ie]] += Gval[ie] * solution.uf[1+iGfun[ie]];
+  for( int i=0; i<nX; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "  gradL[" << i << "] : " << gradL[i] << " = 0" << std::endl;
+#endif
+    if( std::fabs( gradL[i] ) > GRADTOL ) return false;
+  }
+  return true;
+}
+
+inline
+double
+WORKER_IPOPT::correction
+( int const nP, int const nX, int const nF )
+{
+  double costcorr = 0.;
+  for( int i=0; i<nX; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "X[" << i << "]: " << Xlow[i] << " <= " << solution.x[i] << " <= " << Xupp[i] << std::endl;
+#endif
+    costcorr += std::max( Xlow[i] - solution.x[i], 0. ) * solution.ux[i];
+    costcorr -= std::max( solution.x[i] - Xupp[i], 0. ) * solution.ux[i];
+  }
+
+  try{
+    solution.f.assign( nF, 0. );
+    if( nP ){
+      dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data(), nP, Pvar.data(), solution.p.data() );
+      dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data(), nP, Pvar.data(), solution.p.data() );
+    }
+    else{
+      dag.eval( op_f, dwk, 1, Fvar.data(), solution.f.data(), nX, Xvar.data(), solution.x.data() );
+      dag.eval( op_g, dwk, nF-1, Fvar.data()+1, solution.f.data()+1, nX, Xvar.data(), solution.x.data() );
+    }
+  }
+  catch(...){
+    return costcorr;
+  }
+  for( int i=1; i<nF; i++ ){
+#ifdef MC__NLPSLV_IPOPT_DEBUG
+    std::cout << "F[" << i << "]: " << Flow[i] << " <= " << solution.f[i] << " <= " << Fupp[i] << std::endl;
+#endif
+    costcorr += std::max( Flow[i] - solution.f[i], 0. ) * solution.uf[i];
+    costcorr -= std::max( solution.f[i] - Fupp[i], 0. ) * solution.uf[i];
+  }
+
+  return costcorr;
+}
+
+inline
+void
+NLPSLV_IPOPT::_set_options
 ( Ipopt::SmartPtr<Ipopt::IpoptApplication> & IpoptApp )
 {
   IpoptApp->Options()->SetNumericValue( "constr_viol_tol",      options.FEASTOL<0.?  0.: options.FEASTOL );
@@ -1426,15 +1513,17 @@ NLPSLV_IPOPT<ExtOps...>::_set_options
   IpoptApp->Options()->SetIntegerValue( "print_level",    options.DISPLEVEL<0? 0: (options.DISPLEVEL>12? 12: options.DISPLEVEL ) );
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::setup
+NLPSLV_IPOPT::setup
 ()
 {
   // full set of parameters
   _Pvar = _par;
   _nP = _Pvar.size();
+
+  // set dependencies of parameters
+  _Pdep.assign( _nP, 0. );
 
   // full set of decision variables
   _Xvar = _var;
@@ -1444,7 +1533,7 @@ NLPSLV_IPOPT<ExtOps...>::setup
   _Xdep.resize( _nX );
   for( int i=0; i<_nX; ++i )
     _Xdep[i].indep( _Xvar[i].id().second );
-  
+
   // full set of variable initial values from GAMS
 #if defined (MC__WITH_GAMS)
   _Xini = _varini;
@@ -1496,10 +1585,9 @@ NLPSLV_IPOPT<ExtOps...>::setup
   return true;
 }
 
-template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<ExtOps...>::_set_gradient
+NLPSLV_IPOPT::_set_gradient
 ()
 {
   // setup objective and constraint gradient evaluation
@@ -1534,7 +1622,7 @@ NLPSLV_IPOPT<ExtOps...>::_set_gradient
     case Options::BAD:
     case Options::FD:
       _Fdep.resize( _nF-1 );
-      _dag->eval( _nF-1, _Fvar.data()+1, _Fdep.data(), _nX, _Xvar.data(), _Xdep.data() ); 
+      _dag->eval( _nF-1, _Fvar.data()+1, _Fdep.data(), _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
       for( int iF=0; iF<_nF-1; ++iF ){
         for( int iX=0; iX<_nX; ++iX ){
           if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
@@ -1552,10 +1640,9 @@ NLPSLV_IPOPT<ExtOps...>::_set_gradient
   _nG = _Gvar.size();
 }
 
-template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<ExtOps...>::_set_hessian
+NLPSLV_IPOPT::_set_hessian
 ()
 {
   switch( options.HESSMETH ){
@@ -1609,7 +1696,7 @@ NLPSLV_IPOPT<ExtOps...>::_set_hessian
         case Options::FD:
           _Lvar.push_back( _lagr );
           _Mdep.assign( _nF, 0 );
-          _dag->eval( 1, _Lvar.data(), &_Ldep, _nX, _Xvar.data(), _Xdep.data(), _nF, _Fmul.data(), _Mdep.data() ); 
+          _dag->eval( 1, _Lvar.data(), &_Ldep, _nX, _Xvar.data(), _Xdep.data(), _nF, _Fmul.data(), _Mdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
           for( int iX=0; iX<_nX; ++iX ){
             if( _Ldep.dep( _Xvar[iX].id().second ).second == FFDep::TYPE::L ) continue;
             for( int jX=0; jX<=iX; ++jX ){ // gather lower-triangular elements
@@ -1629,10 +1716,9 @@ NLPSLV_IPOPT<ExtOps...>::_set_hessian
   }  
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::_add_gradient
+NLPSLV_IPOPT::_add_gradient
 ( unsigned const ndxF )
 {
   // setup objective and constraint gradient evaluation
@@ -1665,7 +1751,7 @@ NLPSLV_IPOPT<ExtOps...>::_add_gradient
     case Options::BAD:
     case Options::FD:
       if( _Fdep.empty() ) _Fdep.resize( 1 );
-      _dag->eval( 1, &_Fvar[ndxF], _Fdep.data(), _nX, _Xvar.data(), _Xdep.data() ); 
+      _dag->eval( 1, &_Fvar[ndxF], _Fdep.data(), _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
       for( int iX=0; iX<_nX; ++iX ){
         if( !_Fdep[0].dep( _Xvar[iX].id().second ).first ) continue;
         _iGfun.push_back( ndxF-1 ); // subtracting cost function
@@ -1683,10 +1769,9 @@ NLPSLV_IPOPT<ExtOps...>::_add_gradient
   return true;
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::_record_model
+NLPSLV_IPOPT::_record_model
 ()
 {
   if( _rec_model ) return false;
@@ -1714,10 +1799,9 @@ NLPSLV_IPOPT<ExtOps...>::_record_model
   return true;
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::restore_model
+NLPSLV_IPOPT::restore_model
 ()
 {
   if( !_rec_model ) return false;
@@ -1743,10 +1827,9 @@ NLPSLV_IPOPT<ExtOps...>::restore_model
   return true;
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::set_obj_lazy
+NLPSLV_IPOPT::set_obj_lazy
 ( BASE_OPT::t_OBJ const& type, FFVar const& obj )
 {
   // Keep track of original model 
@@ -1777,10 +1860,9 @@ NLPSLV_IPOPT<ExtOps...>::set_obj_lazy
   return true;
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::add_ctr_lazy
+NLPSLV_IPOPT::add_ctr_lazy
 ( BASE_OPT::t_CTR const type, FFVar const& ctr )
 {
   // Keep track of original model 
@@ -1810,11 +1892,10 @@ NLPSLV_IPOPT<ExtOps...>::add_ctr_lazy
   return true;
 }
 
-template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<ExtOps...>::_set_worker
-( Ipopt::SmartPtr<WORKER_IPOPT<ExtOps...>>& th )
+NLPSLV_IPOPT::_set_worker
+( Ipopt::SmartPtr<WORKER_IPOPT>& th )
 {
   th->Pvar.resize( _nP );
   th->Xvar.resize( _nX );
@@ -1847,22 +1928,20 @@ NLPSLV_IPOPT<ExtOps...>::_set_worker
   th->tMAX  = userclock() + options.TIMELIMIT;
 }
 
-template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<ExtOps...>::_resize_workers
+NLPSLV_IPOPT::_resize_workers
 ( int const noth )
 {
   while( (int)_worker.size() < noth ){
-    _worker.push_back( new WORKER_IPOPT<ExtOps...> );
+    _worker.push_back( new WORKER_IPOPT );
   }
 }
 
-template <typename... ExtOps>
 template <typename T>
 inline
 int
-NLPSLV_IPOPT<ExtOps...>::solve
+NLPSLV_IPOPT::solve
 ( double const* Xini, T const* Xbnd, double const* Pval )
 {
   std::vector<double> Xlow(_nX), Xupp(_nX);
@@ -1873,10 +1952,9 @@ NLPSLV_IPOPT<ExtOps...>::solve
   return solve( Xini, Xlow.data(), Xupp.data(), Pval );
 }
 
-template <typename... ExtOps>
 inline
 int
-NLPSLV_IPOPT<ExtOps...>::solve
+NLPSLV_IPOPT::solve
 ( double const* Xini, double const* Xlow, double const* Xupp, double const* Pval )
 {
   // Set worker
@@ -1903,11 +1981,10 @@ NLPSLV_IPOPT<ExtOps...>::solve
 }
 
 #ifdef MC__USE_SOBOL
-template <typename... ExtOps>
 template <typename T>
 inline
 int
-NLPSLV_IPOPT<ExtOps...>::solve
+NLPSLV_IPOPT::solve
 ( unsigned const NSAM, T const* Xbnd, double const* Pval, bool const* logscal,
   bool const DISP )
 {
@@ -1919,10 +1996,9 @@ NLPSLV_IPOPT<ExtOps...>::solve
   return solve( NSAM, Xlow.data(), Xupp.data(), Pval, logscal, DISP );
 }
 
-template <typename... ExtOps>
 inline
 int
-NLPSLV_IPOPT<ExtOps...>::solve
+NLPSLV_IPOPT::solve
 ( unsigned const NSAM, double const* Xlow, double const* Xupp, double const* Pval,
   bool const* logscal, bool const DISP )
 {
@@ -1942,7 +2018,7 @@ NLPSLV_IPOPT<ExtOps...>::solve
 
   // Run NLP solver on auxiliary threads
   for( unsigned th=1; th<NOTHREADS; th++ )
-    vth[th-1] = std::thread( &NLPSLV_IPOPT<ExtOps...>::_mssolve, this, th, NOTHREADS, NSAM, logscal, DISP,
+    vth[th-1] = std::thread( &NLPSLV_IPOPT::_mssolve, this, th, NOTHREADS, NSAM, logscal, DISP,
                              std::ref(feasible[th]), std::ref(solution[th]) );
 
   // Run NLP solver on main thread
@@ -1983,10 +2059,9 @@ NLPSLV_IPOPT<ExtOps...>::solve
   return _solution.stat;
 }
 
-template <typename... ExtOps>
 inline
 void
-NLPSLV_IPOPT<ExtOps...>::_mssolve
+NLPSLV_IPOPT::_mssolve
 ( int const th, unsigned const NOTHREADS, unsigned const NSAM,
   bool const* logscal, bool const DISP, int& feasible, SOLUTION_OPT& solution )
 {
@@ -2036,7 +2111,7 @@ NLPSLV_IPOPT<ExtOps...>::_mssolve
     stat = IpoptApp->OptimizeTNLP( _worker[th] );
 
     // Test for feasibility and improvement
-    if( !_worker[th]->feasible( options.FEASTOL, _nF, _nX ) ){
+    if( !_worker[th]->feasible( options.FEASTOL, _nP, _nX, _nF ) ){
       if( DISP ) std::cout << "·";
     }
     // Solution point is feasible
@@ -2064,10 +2139,9 @@ NLPSLV_IPOPT<ExtOps...>::_mssolve
 }
 #endif
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::is_feasible
+NLPSLV_IPOPT::is_feasible
 ( const double*x, const double CTRTOL )
 {
   if( !x ) return false;
@@ -2077,15 +2151,14 @@ NLPSLV_IPOPT<ExtOps...>::is_feasible
   _resize_workers( noth );
   _set_worker( _worker[th] );
   _worker[th]->solution.x.assign( x, x+_nX );
-  bool feas = _worker[th]->feasible( CTRTOL, _nF, _nX );
+  bool feas = _worker[th]->feasible( CTRTOL, _nP, _nX, _nF );
   _solution = _worker[th]->solution;
   return feas;
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::is_feasible
+NLPSLV_IPOPT::is_feasible
 ( const double CTRTOL )
 {
   if( _solution.x.empty() ) return false;
@@ -2094,15 +2167,14 @@ NLPSLV_IPOPT<ExtOps...>::is_feasible
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _worker[th]->solution = _solution;
-  bool feas = _worker[th]->feasible( CTRTOL, _nF, _nX );
+  bool feas = _worker[th]->feasible( CTRTOL, _nP, _nX, _nF );
   _solution = _worker[th]->solution;
   return feas;
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::is_stationary
+NLPSLV_IPOPT::is_stationary
 ( const double*x, const double*ux, const double*uf, const double GRADTOL )
 {
   // Initialize main thread
@@ -2111,26 +2183,24 @@ NLPSLV_IPOPT<ExtOps...>::is_stationary
   _worker[th]->solution.x.assign( x, x+_nX );
   _worker[th]->solution.ux.assign( ux, ux+_nX );
   _worker[th]->solution.uf.assign( uf, uf+_nX );
-  return _worker[th]->stationary( GRADTOL, _nX, _nF, _iGfun.size() );
+  return _worker[th]->stationary( GRADTOL, _nP, _nX, _nF, _iGfun.size() );
 }
 
-template <typename... ExtOps>
 inline
 bool
-NLPSLV_IPOPT<ExtOps...>::is_stationary
+NLPSLV_IPOPT::is_stationary
 ( const double GRADTOL )
 {
   // Initialize main thread
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _worker[th]->solution = _solution;
-  return _worker[th]->stationary( GRADTOL, _nX, _nF, _iGfun.size() );
+  return _worker[th]->stationary( GRADTOL, _nP, _nX, _nF, _iGfun.size() );
 }
 
-template <typename... ExtOps>
 inline
 double
-NLPSLV_IPOPT<ExtOps...>::cost_correction
+NLPSLV_IPOPT::cost_correction
 ( const double*x, const double*ux, const double*uf )
 {
   // Initialize main thread
@@ -2140,20 +2210,19 @@ NLPSLV_IPOPT<ExtOps...>::cost_correction
   _worker[th]->solution.x.assign( x, x+_nX );
   _worker[th]->solution.ux.assign( ux, ux+_nX );
   _worker[th]->solution.uf.assign( uf, uf+_nF );
-  return _worker[th]->correction( _nF, _nX );
+  return _worker[th]->correction( _nP, _nX, _nF );
 }
 
-template <typename... ExtOps>
 inline
 double
-NLPSLV_IPOPT<ExtOps...>::cost_correction
+NLPSLV_IPOPT::cost_correction
 ()
 {
   // Initialize main thread
   const int th = 0, noth = 1;
   _resize_workers( noth );
   _worker[th]->solution = _solution;
-  return _worker[th]->correction( _nF, _nX );
+  return _worker[th]->correction( _nP, _nX, _nF );
 }
 
 } // end namescape mc

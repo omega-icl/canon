@@ -8,7 +8,7 @@
   #include "nlpslv_ipopt.hpp"
 #endif
 
-#include "odeslvs_cvodes.hpp"
+#include "ffode.hpp"
 
 ////////////////////////////////////////////////////////////////////////
 int main()
@@ -17,7 +17,7 @@ int main()
   /////////////////////////////////////////////////////////////////////////
   // Define IVP-ODE
 
-  mc::FFGraph IVPDAG;  // DAG describing the problem
+  mc::FFGraph DAG;  // DAG describing the problem
 
   const unsigned NS = 10;  // Time stages
   double t0 = 0., tf = 1.;       // Time span
@@ -26,11 +26,11 @@ int main()
 
   const unsigned NP = NS;  // Number of parameters
   std::vector<mc::FFVar> P(NP);   // Parameters
-  for( unsigned int i=0; i<NP; i++ ) P[i].set( &IVPDAG );
+  for( unsigned int i=0; i<NP; i++ ) P[i].set( &DAG );
 
   const unsigned NX = 1;  // Number of states
   std::vector<mc::FFVar> X(NX);   // States
-  for( unsigned int i=0; i<NX; i++ ) X[i].set( &IVPDAG );
+  for( unsigned int i=0; i<NX; i++ ) X[i].set( &DAG );
 
   std::vector<mc::FFVar> IC(NX);  // Initial value function
   IC[0] = 1e0;
@@ -41,7 +41,7 @@ int main()
 
   const unsigned NQ = 1;  // Number of state quadratures
   std::vector<mc::FFVar> Q(NQ);   // State quadratures
-  for( unsigned i=0; i<NQ; i++ ) Q[i].set( &IVPDAG );
+  for( unsigned i=0; i<NQ; i++ ) Q[i].set( &DAG );
 
   std::vector<std::vector<mc::FFVar>> QUAD(NS); // Quadrature function
   for( unsigned k=0; k<NS; k++ )
@@ -67,7 +67,7 @@ int main()
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
   IVP.options.ASACHKPT  = 2000;
 
-  IVP.set_dag( &IVPDAG );
+  IVP.set_dag( &DAG );
   IVP.set_time( TS );
   IVP.set_state( X );
   IVP.set_parameter( P );
@@ -78,52 +78,45 @@ int main()
   IVP.setup();
 
   /////////////////////////////////////////////////////////////////////////
-  // Define DAG
+  // Define DOSEQ
 
-  mc::FFGraph< mc::FFODE<0>, mc::FFGRADODE<0> > DAG;
-
-  std::vector<mc::FFVar> PP(NP);  // Parameters
-  for( unsigned int i=0; i<NP; i++ ) PP[i].set( &DAG );
-
-  mc::FFODE<0> OpODE;
-  mc::ODESLVS_CVODES<>* pIVP = &IVP;
+  mc::FFODE OpODE;
   std::vector<mc::FFVar> F(NF);
-  for( unsigned int j=0; j<NF; j++ )
-    F[j] = OpODE( j, NP, PP.data(), pIVP );
+  for( unsigned int j=0; j<NF; j++ ) F[j] = OpODE( j, NP, P.data(), &IVP, mc::FFODE::COPY );//SHALLOW );
   std::cout << DAG;
 
   //std::vector<double> dP( NP, -1e0 ), dF( NF );
-  //DAG.eval( NF, F, dF.data(), NP, PP, dP.data() ); 
+  //DAG.eval( NF, F, dF.data(), NP, P, dP.data() ); 
 
   // Local optimization
 #ifdef MC__USE_SNOPT
-  mc::NLPSLV_SNOPT< mc::FFODE<0>, mc::FFGRADODE<0> > NLP;
+  mc::NLPSLV_SNOPT NLP;
   NLP.options.DISPLEVEL = 1;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-6;
   NLP.options.OPTIMTOL  = 1e-6;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT< mc::FFODE<0>, mc::FFGRADODE<0> >::Options::FSYM;//AD;//SYM;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;//FAD;//BSYM;
   NLP.options.GRADCHECK = true;
-  NLP.options.MAXTHREAD = 12;
+  NLP.options.MAXTHREAD = 4;
 #else
-  mc::NLPSLV_IPOPT< mc::FFODE<0>, mc::FFGRADODE<0> > NLP;
+  mc::NLPSLV_IPOPT NLP;
   NLP.options.DISPLEVEL = 5;
   NLP.options.MAXITER   = 100;
   NLP.options.FEASTOL   = 1e-6;
   NLP.options.OPTIMTOL  = 1e-6;
-  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT< mc::FFODE<0>, mc::FFGRADODE<0> >::Options::FAD;
+  NLP.options.GRADMETH  = mc::NLPSLV_IPOPT::Options::FAD;
   NLP.options.GRADCHECK = false;
   NLP.options.MAXTHREAD = 8;
 #endif
-  NLP.set_dag( &DAG );                                          // DAG
-  NLP.add_var( PP, -1e1, 1e1 );                             // decision variables
+  NLP.set_dag( &DAG );                      // DAG
+  NLP.add_var( P, -1e1, 1e1 );              // decision variables
   NLP.set_obj( mc::BASE_OPT::MIN, F[0] );   // objective
-  NLP.add_ctr( mc::BASE_OPT::EQ, F[1] );    // constraints
+  NLP.add_ctr( mc::BASE_OPT::EQ,  F[1] );   // constraints
   NLP.setup();
 
   std::vector<double> p0( NP, -1e0 );
-  NLP.solve( p0.data() );
-  //NLP.solve( 1000 );
+  //NLP.solve( p0.data() );
+  NLP.solve( 20 );
   std::cout << "NLP LOCAL SOLUTION:\n" << NLP.solution();
   std::cout << "FEASIBLE:   " << NLP.is_feasible( 1e-6 )   << std::endl;
   std::cout << "STATIONARY: " << NLP.is_stationary( 1e-6 ) << std::endl;

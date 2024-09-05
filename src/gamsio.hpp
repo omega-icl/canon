@@ -37,28 +37,27 @@ namespace mc
 //! Stefan Vigerske for the solver SCIP (C files reader_gmo.h,
 //! reader_gmo.c, reader_gms.h, reader_gms.c; see https://scip.zib.de/doc/html/).
 ////////////////////////////////////////////////////////////////////////
-template <typename... ExtOps>
 class GAMSIO:
-  public virtual BASE_NLP<ExtOps...>
+  public virtual BASE_NLP
 {
 protected:
 
-  using BASE_NLP<ExtOps...>::_var;
-  using BASE_NLP<ExtOps...>::_vartyp;
-  using BASE_NLP<ExtOps...>::_varlb;
-  using BASE_NLP<ExtOps...>::_varub;
-  using BASE_NLP<ExtOps...>::_varlm;
-  using BASE_NLP<ExtOps...>::_varum;
+  using BASE_NLP::_var;
+  using BASE_NLP::_vartyp;
+  using BASE_NLP::_varlb;
+  using BASE_NLP::_varub;
+  using BASE_NLP::_varlm;
+  using BASE_NLP::_varum;
 
-  using BASE_NLP<ExtOps...>::set_obj;
-  using BASE_NLP<ExtOps...>::add_ctr;
+  using BASE_NLP::set_obj;
+  using BASE_NLP::add_ctr;
 
 public:
 
   //! @brief Class constructor
   GAMSIO
     ()
-    : BASE_NLP<ExtOps...>(),
+    : BASE_NLP(),
       _gmo( nullptr ),
       _gev( nullptr ),
       //_pal( nullptr ),
@@ -96,7 +95,7 @@ private:
    //struct palRec*        _pal;
 
   //! @brief DAG environment
-  FFGraph<ExtOps...>* _dag;
+  FFGraph* _dag;
 
   //! @brief setup optimization model from GAMS modelling object
   bool _populate
@@ -124,10 +123,9 @@ protected:
 };
 
 #if defined (MC__WITH_GAMS)
-template <typename... ExtOps>
 inline
 bool
-GAMSIO<ExtOps...>::read
+GAMSIO::read
 ( std::string const& filename, bool const init, bool const disp )
 {
   // reset
@@ -201,10 +199,9 @@ TERMINATE:
   return flag;
 }
 
-template <typename... ExtOps>
 inline
 bool
-GAMSIO<ExtOps...>::read
+GAMSIO::read
 ( struct gmoRec* gmo, bool const init, bool const disp )
 {
    _gmo = gmo;
@@ -246,10 +243,9 @@ GAMSIO<ExtOps...>::read
 }
 #endif
 
-template <typename... ExtOps>
 inline
 std::string
-GAMSIO<ExtOps...>::_format_name
+GAMSIO::_format_name
 ( std::string const& name )
 {
   // remove brackets and commas
@@ -278,10 +274,9 @@ GAMSIO<ExtOps...>::_format_name
   return namecompat;
 }
 
-template <typename... ExtOps>
 inline
 bool
-GAMSIO<ExtOps...>::_populate
+GAMSIO::_populate
 ( bool const init, bool const disp )
 {
   assert( _gmo != nullptr );
@@ -363,7 +358,7 @@ GAMSIO<ExtOps...>::_populate
 
   // reset DAG environment
   if( _dag ) delete _dag;
-  BASE_NLP<ExtOps...>::_dag = _dag = new FFGraph<ExtOps...>;
+  BASE_NLP::_dag = _dag = new FFGraph;
 
   // set DAG variables
   char buffer[255];
@@ -567,10 +562,9 @@ GAMSIO<ExtOps...>::_populate
   return true;
 }
 
-template <typename... ExtOps>
 inline
 std::pair<FFVar,bool>
-GAMSIO<ExtOps...>::_parse
+GAMSIO::_parse
 ( int const codelen, std::vector<int>& opcodes, std::vector<int>& fields,
   double const* constants )
 {

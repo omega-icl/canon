@@ -16,7 +16,7 @@ int main()
   NLP.options.DISPLEVEL = 1;
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT<>::Options::FD;
+  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FD;
 
   NLP.setup();
   double p0[NP] = { 5., 1. };

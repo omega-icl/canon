@@ -1,5 +1,5 @@
-#define MC__MBDOE_SETUP_DEBUG
-#define MC__MBDOE_SHOW_APPORTION
+#define CANON__MBDOE_SETUP_DEBUG
+#define CANON__MBDOE_SHOW_APPORTION
 #define MC__FFDOECRIT_CHECK
 #define MC__FFGRADDOECRIT_CHECK
 #define MC__FFDOEEFF_CHECK
@@ -14,9 +14,9 @@ int main()
 ////////////////////////////////////////////////////////////////////////
 {
   /////////////////////////////////////////////////////////////////////////
-  // Define IVP-ODE
+  // Define model
 
-  mc::FFGraph DAG;  // DAG describing the IVP-ODE
+  mc::FFGraph DAG;  // DAG describing the model
 
   const unsigned NX = 1;       // Number of experimental controls
   std::vector<mc::FFVar> X(NX);  // Controls
@@ -26,7 +26,7 @@ int main()
   std::vector<mc::FFVar> P(NP);  // Parameters
   for( unsigned int i=0; i<NP; i++ ) P[i].set( &DAG );
 
-  const unsigned NY = 1;       // Number of outputs
+  const unsigned NY = 1;       // Number of measured outputs
   std::vector<mc::FFVar> Y(NY);  // Outputs
   Y[0] = P[0] * exp( P[1] * X[0] );
 
@@ -48,8 +48,8 @@ int main()
   std::vector<double> YVAR( { 1e-1 } );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::DOEBase::BROPT;//DOPT;//
-  DOE.options.RISK      = mc::MBDOESLV<>::Options::AVERSE;//NEUTRAL;//
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
+  DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 1;
@@ -72,15 +72,19 @@ int main()
   DOE.file_export( "test0" );
 
   auto campaign = DOE.campaign();
-  DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
-  DOE.options.RISK      = mc::MBDOESLV<>::Options::NEUTRAL;//AVERSE;//
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
   DOE.evaluate_design( campaign );
  
-  DOE.options.CRITERION = mc::DOEBase::DOPT;//BROPT;//
-  DOE.options.RISK      = mc::MBDOESLV<>::Options::AVERSE;//NEUTRAL;//
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;
   DOE.setup();
   DOE.evaluate_design( campaign );
  
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
+  DOE.setup();
+  DOE.evaluate_design( campaign );
+
   return 0;
 }
