@@ -13,6 +13,7 @@ int main()
   // Define model
 
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
+  DAG.options.MAXTHREAD = 0;
 
   const size_t NS = 5;  // Time stages
   std::vector<double> tk( NS+1 );
@@ -117,17 +118,21 @@ int main()
   size_t const NEXP = 5;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NPSAM = 500;
+  size_t const NPSAM = 1000;
   std::vector<double> PLB( NP ), PUB( NP );
 //  PLB[0] =  PUB[0] = 0.31;
 //  PLB[1] =  PUB[1] = 0.18;
 //  PLB[2] =  PUB[2] = 0.55;
 //  PLB[3] =  PUB[3] = 0.05;
-  PLB[0] = 1e-1;  PUB[0] = 1e0;
-  PLB[1] = 5e-2;  PUB[1] = 1e0;
-  PLB[2] = 1e-1;  PUB[2] = 1e0;
-  PLB[3] = 1e-2;  PUB[3] = 2e-1;
+//  PLB[0] = 1e-1;  PUB[0] = 1e0;
+//  PLB[1] = 5e-2;  PUB[1] = 1e0;
+//  PLB[2] = 1e-1;  PUB[2] = 1e0;
+//  PLB[3] = 1e-2;  PUB[3] = 2e-1;
   dP.assign( { 0.31, 0.18, 0.55, 0.05 } );
+  PLB[0] = dP[0]*6e-1;  PUB[0] = dP[0]*14e-1;
+  PLB[1] = dP[1]*6e-1;  PUB[1] = dP[1]*14e-1;
+  PLB[2] = dP[2]*6e-1;  PUB[2] = dP[2]*14e-1;
+  PLB[3] = dP[3]*6e-1;  PUB[3] = dP[3]*14e-1;
 
   // Experimental control space
   size_t const NCSAM = 100;
@@ -140,8 +145,10 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
+  DOE.options.UNCREDUC  = 20;
+  DOE.options.MAXTHREAD = 1;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.MAXITER = 100;
@@ -149,7 +156,7 @@ int main()
   DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
   DOE.options.NLPSLV.OPTIMTOL  = 1e-5;
-  DOE.options.NLPSLV.MAXITER   = 100;
+  DOE.options.NLPSLV.MAXITER   = 250;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 0;
   DOE.set_dag( DAG );
@@ -174,11 +181,24 @@ int main()
     campaign.insert( std::make_pair( 1, c ) );
 */
 /*
-  PLB[0] = 1e-1;  PUB[0] = 1e0;
-  PLB[1] = 5e-2;  PUB[1] = 1e0;
-  PLB[2] = 1e-1;  PUB[2] = 2e0;
-  PLB[3] = 1e-2;  PUB[3] = 2e-1;
-  DOE.set_parameters( P, DOE.uniform_sample( 100, PLB, PUB ) );
+  // Factorial fractional campaign
+  std::multimap<double,std::vector<double>> campaign
+  {
+    { 1, { CLB[0], CLB[1], CLB[2] } },
+    { 1, { CLB[0], CUB[1], CUB[2] } },
+    { 1, { CUB[0], CLB[1], CUB[2] } },
+    { 1, { CUB[0], CUB[1], CLB[2] } },
+    { 1, { (CLB[0]+CUB[0])/2., (CLB[1]+CUB[1])/2., (CLB[2]+CUB[2])/2. } },
+  };
+
+//  PLB[0] = 1e-1;  PUB[0] = 1e0;
+//  PLB[1] = 5e-2;  PUB[1] = 1e0;
+//  PLB[2] = 1e-1;  PUB[2] = 2e0;
+//  PLB[3] = 1e-2;  PUB[3] = 2e-1;
+  PLB[0] = dP[0]*6e-1;  PUB[0] = dP[0]*14e-1;
+  PLB[1] = dP[1]*6e-1;  PUB[1] = dP[1]*14e-1;
+  PLB[2] = dP[2]*6e-1;  PUB[2] = dP[2]*14e-1;
+  PLB[3] = dP[3]*6e-1;  PUB[3] = dP[3]*14e-1;
 */
 /*
   // DOPT-NEUTRAL DESIGN PERFORMANCE (500 SCENARIOS): 4.10510e+01
@@ -284,8 +304,13 @@ int main()
   size_t const NELE = std::get<0>(D2FMLE);
   std::vector<double> dD2FMLE( NELE );
   
+  auto&& vPSAM = DOE.uniform_sample( NPSAM+1000, PLB, PUB );
+  auto itPSAMlast = vPSAM.begin();
+  std::advance(itPSAMlast, NPSAM);
+  vPSAM.erase( vPSAM.begin(), itPSAMlast ); // consider only new samples
+
   unsigned isam=0;
-  for( auto const& dP : DOE.uniform_sample( 1000, PLB, PUB ) ){
+  for( auto const& dP : vPSAM ){
 
     dYMMLE.clear();
     for( auto const& c : campaign ){

@@ -89,6 +89,7 @@ Regarding options, the output level, maximum number of iterations, tolerance, ma
 #include "coin-or/IpIpoptApplication.hpp"
 
 #include "mctime.hpp"
+#include "ffdep.hpp"
 #include "base_nlp.hpp"
 #include "gamsio.hpp"
 

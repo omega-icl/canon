@@ -48,9 +48,10 @@ int main()
   std::vector<double> YVAR( { 1e-1 } );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//DOPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//
   DOE.options.DISPLEVEL = 1;
+  DOE.options.MAXTHREAD = 4;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 1;
   DOE.options.MINLPSLV.NLPSLV.OPTIMTOL  = 1e-7;
@@ -59,32 +60,43 @@ int main()
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 1;
   //DOE.options.NLPSLV.GRADMETH = DOE.options.NLPSLV.FSYM;//FAD;
+
   DOE.set_dag( DAG );
   DOE.set_model( Y, YVAR );
   DOE.set_controls( X, XLB, XUB );
   DOE.set_parameters( P, DOE.uniform_sample( NSAM, PLB, PUB ), PSCA );
+
   DOE.setup();
   DOE.sample_supports( 50 );
   DOE.combined_solve( 5 );
   //DOE.effort_solve( 5 );
   //DOE.gradient_solve( DOE.efforts(), true );
   //DOE.effort_solve( 5, DOE.efforts() );
-  DOE.file_export( "test0" );
-
+  //DOE.file_export( "test0" );
   auto campaign = DOE.campaign();
+
+/*
+  std::multimap<double,std::vector<double>> campaign // ** EFFORT-BASED EXACT DESIGN: 2.58167e+01
+  {
+    //SUPPORT #19: 2 x [ 2.34375e-01 ]
+    { 2, { 2.34375e-01 } },
+    //SUPPORT #30: 3 x [ 1.56250e-02 ]
+    { 3, { 1.56250e-02 } }
+  };
+*/
   DOE.options.CRITERION = mc::FFDOEBase::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
-  DOE.evaluate_design( campaign );
+  DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
  
   DOE.options.CRITERION = mc::FFDOEBase::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;
   DOE.setup();
-  DOE.evaluate_design( campaign );
+  DOE.evaluate_design( campaign, "DOPT-AVERSE" );
  
   DOE.options.CRITERION = mc::FFDOEBase::BROPT;
   DOE.setup();
-  DOE.evaluate_design( campaign );
-
+  DOE.evaluate_design( campaign, "BROPT" );
+  
   return 0;
 }

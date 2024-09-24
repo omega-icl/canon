@@ -16,6 +16,7 @@
 
 #include <fstream>
 #include <iomanip>
+#include <algorithm>
 
 #if defined( MC__USE_PROFIL )
  #include "mcprofil.hpp"
@@ -45,6 +46,7 @@
 #include "fflin.hpp"
 #include "ffdoe.hpp"
 #include "ffode.hpp"
+#include "ffvect.hpp"
 
 #define CANON__MBDOE_USE_OPFIM
 
@@ -117,8 +119,8 @@ private:
   //! @brief work array for output evaluations
   std::vector<double> _wkOUT;
 
-  //! @brief FIM values
-  std::vector<double> _dOUT;
+  //! @brief output values
+  std::vector<std::vector<double>> _dOUT;
   
   // Vector of response vectors
   std::vector< std::vector< arma::vec > > _vOUTSAM;
@@ -130,7 +132,7 @@ private:
   std::vector<double> _wkFIM;
 
   //! @brief FIM values
-  std::vector<double> _dFIM;
+  std::vector<std::vector<double>> _dFIM;
   
   // Vector of atom matrices
   std::vector< std::vector< arma::mat > > _vFIMSAM;
@@ -179,8 +181,8 @@ public:
   {
     //! @brief Constructor
     Options():
-      CRITERION(FFDOEBase::DOPT), RISK(NEUTRAL), CVARTHRES(0.2), INISAMP(100), MINDIST(1e-6), 
-      MAXITER(4), TOLITER(1e-5), DISPLEVEL(0), MAXTHREAD(0), 
+      CRITERION(FFDOEBase::DOPT), RISK(NEUTRAL), UNCREDUC(0), CVARTHRES(0.2),
+      INISAMP(100), MINDIST(1e-6), MAXITER(4), TOLITER(1e-5), DISPLEVEL(0), MAXTHREAD(1), 
       MINLPSLV(), NLPSLV()
       {
 #ifdef MC__USE_SNOPT
@@ -229,6 +231,7 @@ public:
     Options& operator= ( Options const& options ){
         CRITERION   = options.CRITERION;
         RISK        = options.RISK;
+        UNCREDUC    = options.UNCREDUC;
         CVARTHRES   = options.CVARTHRES;
         INISAMP     = options.INISAMP;
         MINDIST     = options.MINDIST;
@@ -249,7 +252,9 @@ public:
     FFDOEBase::TYPE          CRITERION;
     //! @brief Selected risk attitude
     RISK_TYPE                RISK;
-    //! @brief Percentile threshold for CVaR calcualtion
+    //! @brief Uncertainty scenario reduction to k nearest neighboors (0: no reduction)
+    size_t                   UNCREDUC;
+    //! @brief Percentile threshold for CVaR calculation
     double                   CVARTHRES;
     //! @brief Initial sampling size of experimental control space
     unsigned                 INISAMP;
@@ -261,8 +266,8 @@ public:
     double                   TOLITER;
     //! @brief Verbosity level
     int                      DISPLEVEL;
-    //! @brief Maximum number of threads for control space sampling
-    unsigned                 MAXTHREAD;
+    //! @brief Maximum number of threads for output/FIM evaluation
+    size_t                   MAXTHREAD;
     
     //! @brief MINLP effort-based solver options
     typename MINLP::Options  MINLPSLV;
@@ -358,6 +363,9 @@ public:
 
 protected:
 
+  //! @brief map of current optimal efforts
+  std::set<std::pair<unsigned,unsigned>> _sPARSEL;
+
   //! @brief current optimal criterion
   double _VOpt;
 
@@ -382,19 +390,37 @@ protected:
   bool _sample_out
     ( unsigned const NSAM, std::ostream& os=std::cout );
 
+#ifdef MC__USE_THREAD
+  //! @brief Append output under given control scenario for all uncertainty scenarios
+  bool _append_out
+    ( std::vector<double> const& Control, std::vector<std::vector<double>> const& Parameter,
+      std::vector<std::vector<double>>& Output, std::vector<std::vector<arma::vec>>& Response,
+      std::ostream& os=std::cout );
+#else
   //! @brief Append output under given control and uncertainty scenario
   bool _append_out
-    ( double const* Control, double const* Parameter, std::vector<arma::vec>& Response,
+    ( std::vector<double> const& Control, std::vector<double> const& Parameter,
+      std::vector<double>& Output, std::vector<arma::vec>& Response,
       std::ostream& os=std::cout );
+#endif
 
   //! @brief Generate FIM samples for <a>NSAM</a> initial supports
   bool _sample_fim
     ( unsigned const NSAM, std::ostream& os=std::cout );
 
+#ifdef MC__USE_THREAD
+  //! @brief Append FIM (columnwise, lower-triangular) under given control scenario for all uncertainty scenarios
+  bool _append_fim
+    ( std::vector<double> const& Control, std::vector<std::vector<double>> const& Parameter,
+      std::vector<std::vector<double>>& FIM, std::vector<std::vector<arma::mat>>& Response,
+      std::ostream& os=std::cout );
+#else
   //! @brief Append FIM (columnwise, lower-triangular) under given control and uncertainty scenario
   bool _append_fim
-    ( double const* Control, double const* Parameter, std::vector<arma::mat>& Response,
+    ( std::vector<double> const& Control, std::vector<double> const& Parameter,
+      std::vector<double>& FIM, std::vector<arma::mat>& Response,
       std::ostream& os=std::cout );
+#endif
 
   //! @brief Evaluate Bayesian risk of experimental campaign
   std::pair<double,bool> _evaluate_design_br
@@ -423,9 +449,15 @@ protected:
     ( std::map<unsigned,double> const& EOpt, bool const update=true, std::ostream& os=std::cout );
 
   //! @brief Build Bayesian risk for gradient-based search
+#ifdef MC__USE_THREAD
+  void _build_br
+    ( std::vector<std::vector<FFVar>>& BROUT, std::vector<FFVar>& CTOT, std::vector<FFVar>& PTOT,
+      std::map<unsigned,double> const& EOpt, std::ostream& os );
+#else
   void _build_br
     ( std::vector<FFVar>& BROUT, std::vector<FFVar>& CTOT, std::vector<FFVar>& PTOT,
       std::map<unsigned,double> const& EOpt, std::ostream& os );
+#endif
 
   //! @brief Build FIM for gradient-based search
   void _build_fim
@@ -490,6 +522,7 @@ MBDOESLV::_setup_out
     throw Exceptions( Exceptions::BADSIZE );
 
   delete _dag; _dag = new DAG;
+  _dag->options = BASE_MBDOE::_dag->options;
 
   _vCON.resize( _nc );
   _dag->insert( BASE_MBDOE::_dag, _nc, BASE_MBDOE::_vCON.data(), _vCON.data() );
@@ -497,8 +530,8 @@ MBDOESLV::_setup_out
   _dag->insert( BASE_MBDOE::_dag, _np, BASE_MBDOE::_vPAR.data(), _vPAR.data() );
   _vOUT.resize( _ny );
   _dag->insert( BASE_MBDOE::_dag, _ny, BASE_MBDOE::_vOUT.data(), _vOUT.data() );
-  _dOUT.resize( _ny );
-  
+//  _dOUT.resize( _ny );
+
 #ifdef CANON__MBDOE_SETUP_DEBUG
   _sgOUT = _dag->subgraph( _ny, _vOUT.data() );
   std::vector<FFExpr> exOUT = FFExpr::subgraph( _dag, _sgOUT ); 
@@ -516,6 +549,7 @@ MBDOESLV::_setup_fim
     throw Exceptions( Exceptions::BADSIZE );
 
   delete _dag; _dag = new DAG;
+  _dag->options = BASE_MBDOE::_dag->options;
 
   _vCON.resize( _nc );
   _dag->insert( BASE_MBDOE::_dag, _nc, BASE_MBDOE::_vCON.data(), _vCON.data() );
@@ -595,6 +629,7 @@ MBDOESLV::sample_supports
   }
 }
 
+#ifdef MC__USE_THREAD
 inline
 bool
 MBDOESLV::_sample_out
@@ -602,16 +637,94 @@ MBDOESLV::_sample_out
 {
   // Compute responses at every control samples and uncertainty scenarios
   _vOUTSAM.clear();
-  _vOUTSAM.reserve( _vPARVAL.size() );
-  for( unsigned k=0; k<_vPARVAL.size(); ++k ){
-    _vOUTSAM.push_back( std::vector< arma::vec >() );
-    for( unsigned s=0; s<NSAM; ++s ){
-      if( !_append_out( _vCONSAM[s].data(), _vPARVAL[k].data(), _vOUTSAM[k], os ) )
+  _vOUTSAM.resize( _vPARVAL.size() );
+  _dOUT.resize( _vPARVAL.size() );
+
+  for( unsigned s=0; s<NSAM; ++s ){
+    if( !_append_out( _vCONSAM[s], _vPARVAL, _dOUT, _vOUTSAM, os ) )
         return false;
-#ifdef CANON__MBDOE_SAMPLE_DEBUG
-      std::cout << "OUT[" << k << "][" << _vOUTSAM[k].size() << "]:" << std::endl << arma::trans(_vOUTSAM[k].back());
-#endif
+    if( options.DISPLEVEL > 1 )
+      os << "." << std::flush;
+  }
+  if( options.DISPLEVEL > 1 )
+    os << std::endl;
+
+  if( !options.UNCREDUC ) return true;
+  if( options.DISPLEVEL )
+    os << "** REDUCING UNCERTAINTY SCENARIO PAIRS" << std::endl;
+
+  FFDOEBase BRCrit;
+  FFDOEBase::set_noise( _vOUTVAR );
+  std::vector<double> E0( NSAM, 1./(double)NSAM );
+
+  _sPARSEL.clear();
+  for( unsigned j=0; j<_vOUTSAM.size(); ++j ){
+    std::multimap<double,unsigned> BRrank;
+    for( unsigned k=0; k<_vOUTSAM.size(); ++k ){
+      if( j == k ) continue;
+      double const BRval = BRCrit.atom_BR( _vOUTSAM.at(j), _vOUTSAM.at(k), E0 );
+      if( BRrank.size() < options.UNCREDUC || BRval >= BRrank.begin()->first )
+        BRrank.insert( { BRval, k } );
+      if( BRrank.size() > options.UNCREDUC )
+        BRrank.erase( BRrank.cbegin() );
     }
+    for( auto const& [val,k] : BRrank )
+      _sPARSEL.insert( j<k? std::make_pair(j,k): std::make_pair(k,j) );
+  }
+
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+  std::cout << "PARSEL[" << _sPARSEL.size() << "]: ";
+  for( auto const& [j,k] : _sPARSEL )
+    std::cout << " (" << j << "," << k << ")";
+  std::cout << std::endl;
+#endif
+
+  return true;
+}
+
+inline
+bool
+MBDOESLV::_append_out
+( std::vector<double> const& Control, std::vector<std::vector<double>> const& Parameter,
+  std::vector<std::vector<double>>& Output, std::vector<std::vector<arma::vec>>& Response,
+  std::ostream& os )
+{
+  if( !_ny ) 
+    throw Exceptions( Exceptions::NOMODEL );
+
+  try{
+    _dag->veval( _sgOUT, _wkOUT, _vOUT, Output, _vPAR, Parameter, _vCON, Control );
+  }
+  catch(...){
+    return false;
+  }
+
+  for( unsigned k=0; k<Output.size(); ++k ){
+    arma::vec vOut( Output[k] );
+    if( Response[k].size() && arma::size( Response[k].back() ) != arma::size( vOut ) )
+      throw Exceptions( Exceptions::BADSIZE );
+    Response[k].push_back( vOut );
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+    std::cout << "OUT[" << k << "][" << Response[k].size() << "]:" << std::endl << arma::trans(vOut);
+#endif
+  }
+
+  return true;
+}
+
+inline
+bool
+MBDOESLV::_sample_fim
+( unsigned const NSAM, std::ostream& os )
+{
+  // Compute FIMs at every control samples and uncertainty scenarios
+  _vFIMSAM.clear();
+  _vFIMSAM.resize( _vPARVAL.size() );
+  _dFIM.resize( _vPARVAL.size() );
+  
+  for( unsigned s=0; s<NSAM; ++s ){
+    if( !_append_fim( _vCONSAM[s], _vPARVAL, _dFIM, _vFIMSAM, os ) )
+      return false;
     if( options.DISPLEVEL > 1 )
       os << "." << std::flush;
   }
@@ -623,21 +736,111 @@ MBDOESLV::_sample_out
 
 inline
 bool
-MBDOESLV::_append_out
-( double const* Control, double const* Parameter, std::vector<arma::vec>& Response, std::ostream& os )
+MBDOESLV::_append_fim
+( std::vector<double> const& Control, std::vector<std::vector<double>> const& Parameter,
+  std::vector<std::vector<double>>& FIM, std::vector<std::vector<arma::mat>>& Response,
+  std::ostream& os )
 {
   if( !_ny ) 
     throw Exceptions( Exceptions::NOMODEL );
 
   try{
-    _dag->eval( _sgOUT, _wkOUT, _ny, _vOUT.data(), _dOUT.data(),
-                _nc, _vCON.data(), Control, _np, _vPAR.data(), Parameter );
+    _dag->veval( _sgFIM, _wkFIM, _vFIM, FIM, _vPAR, Parameter, _vCON, Control );
   }
   catch(...){
     return false;
   }
 
-  arma::vec OUT( _dOUT );
+  for( unsigned k=0; k<FIM.size(); ++k ){
+    arma::mat mFIM( _np, _np, arma::fill::none );
+    for( unsigned i=0, l=0; i<_np; ++i )
+      for( unsigned j=i; j<_np; ++j, ++l )
+        if( i == j ) mFIM(i,i) = FIM[k][l]; 
+        else         mFIM(i,j) = mFIM(j,i) = FIM[k][l];
+    if( Response[k].size() && arma::size( Response[k].back() ) != arma::size( mFIM ) )
+      throw Exceptions( Exceptions::BADSIZE );
+    Response[k].push_back( mFIM );
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+    std::cout << "FIM[" << k << "][" << Response[k].size() << "]:" << std::endl << mFIM;
+#endif
+  }
+
+  return true;
+}
+
+#else
+inline
+bool
+MBDOESLV::_sample_out
+( unsigned const NSAM, std::ostream& os )
+{
+  // Compute responses at every control samples and uncertainty scenarios
+  _vOUTSAM.clear();
+  _vOUTSAM.reserve( _vPARVAL.size() );
+  _dOUT.resize( _vPARVAL.size() );
+  for( unsigned k=0; k<_vPARVAL.size(); ++k ){
+    _vOUTSAM.push_back( std::vector< arma::vec >() );
+    for( unsigned s=0; s<NSAM; ++s ){
+      if( !_append_out( _vCONSAM[s], _vPARVAL[k], _dOUT[k], _vOUTSAM[k], os ) )
+        return false;
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+      std::cout << "OUT[" << k << "][" << _vOUTSAM[k].size() << "]:" << std::endl << arma::trans(_vOUTSAM[k].back());
+#endif
+    }
+    if( options.DISPLEVEL > 1 )
+      os << "." << std::flush;
+  }
+  if( options.DISPLEVEL > 1 )
+    os << std::endl;
+
+  if( !options.UNCREDUC ) return true;
+  FFDOEBase BRCrit;
+  FFDOEBase::set_noise( _vOUTVAR );
+  std::vector<double> E0( NSAM, 1./(double)NSAM );
+
+  _sPARSEL.clear();
+  for( unsigned j=0; j<_vOUTSAM.size(); ++j ){
+    std::multimap<double,unsigned> BRrank;
+    for( unsigned k=0; k<_vOUTSAM.size(); ++k ){
+      if( j == k ) continue;
+      double const BRval = BRCrit.atom_BR( _vOUTSAM.at(j), _vOUTSAM.at(k), E0 );
+      if( BRrank.size() < options.UNCREDUC || BRval >= BRrank.begin()->first )
+        BRrank.insert( { BRval, k } );
+      if( BRrank.size() > options.UNCREDUC )
+        BRrank.erase( BRrank.cbegin() );
+    }
+    for( auto const& [val,k] : BRrank )
+      _sPARSEL.insert( j<k? std::make_pair(j,k): std::make_pair(k,j) );
+  }
+
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+  std::cout << "PARSEL[" << _sPARSEL.size() << "]: ";
+  for( auto const& [j,k] : _sPARSEL )
+    std::cout << " (" << j << "," << k << ")";
+  std::cout << std::endl;
+#endif
+
+  return true;
+}
+
+inline
+bool
+MBDOESLV::_append_out
+( std::vector<double> const& Control, std::vector<double> const& Parameter,
+  std::vector<double>& Output, std::vector<arma::vec>& Response,
+  std::ostream& os )
+{
+  if( !_ny ) 
+    throw Exceptions( Exceptions::NOMODEL );
+
+  try{
+    _dag->eval( _sgOUT, _wkOUT, _vOUT, Output, _vCON, Control, _vPAR, Parameter );
+  }
+  catch(...){
+    return false;
+  }
+
+  arma::vec OUT( Output );
   if( Response.size() && arma::size( Response.back() ) != arma::size( OUT ) )
     throw Exceptions( Exceptions::BADSIZE );
   Response.push_back( OUT );
@@ -656,7 +859,7 @@ MBDOESLV::_sample_fim
   for( unsigned k=0; k<_vPARVAL.size(); ++k ){
     _vFIMSAM.push_back( std::vector< arma::mat >() );
     for( unsigned s=0; s<NSAM; ++s ){
-      if( !_append_fim( _vCONSAM[s].data(), _vPARVAL[k].data(), _vFIMSAM[k], os ) )
+      if( !_append_fim( _vCONSAM[s], _vPARVAL[k], _dFIM[k], _vFIMSAM[k], os ) )
         return false;
 #ifdef CANON__MBDOE_SAMPLE_DEBUG
       std::cout << "FIM[" << k << "][" << _vFIMSAM[k].size() << "]:" << std::endl << _vFIMSAM[k].back();
@@ -674,30 +877,32 @@ MBDOESLV::_sample_fim
 inline
 bool
 MBDOESLV::_append_fim
-( double const* Control, double const* Parameter, std::vector<arma::mat>& Response, std::ostream& os )
+( std::vector<double> const& Control, std::vector<double> const& Parameter,
+  std::vector<double>& FIM, std::vector<arma::mat>& Response,
+  std::ostream& os )
 {
   if( !_ny ) 
     throw Exceptions( Exceptions::NOMODEL );
 
   try{
-    _dag->eval( _sgFIM, _wkFIM, _vFIM.size(), _vFIM.data(), _dFIM.data(),
-                _nc, _vCON.data(), Control, _np, _vPAR.data(), Parameter );
+    _dag->eval( _sgFIM, _wkFIM, _vFIM, FIM, _vCON, Control, _vPAR, Parameter );
   }
   catch(...){
     return false;
   }
 
-  arma::mat FIM( _np, _np, arma::fill::none );
+  arma::mat mFIM( _np, _np, arma::fill::none );
   for( unsigned i=0, l=0; i<_np; ++i )
     for( unsigned j=i; j<_np; ++j, ++l )
-      if( i == j ) FIM(i,i) = _dFIM[l]; 
-      else         FIM(i,j) = FIM(j,i) = _dFIM[l];
-  if( Response.size() && arma::size( Response.back() ) != arma::size( FIM ) )
+      if( i == j ) mFIM(i,i) = FIM[l]; 
+      else         mFIM(i,j) = mFIM(j,i) = FIM[l];
+  if( Response.size() && arma::size( Response.back() ) != arma::size( mFIM ) )
     throw Exceptions( Exceptions::BADSIZE );
-  Response.push_back( FIM );
+  Response.push_back( mFIM );
 
   return true;
 }
+#endif
 
 inline
 unsigned
@@ -773,13 +978,38 @@ MBDOESLV::_update_supports
     }
   }
 
+#ifdef MC__USE_THREAD
+  // Add samples for refined controls
+  for( unsigned s=posSupp; s<posSupp+newSupp; ++s ){
+
+    switch( options.CRITERION ){
+      case FFDOEBase::BROPT:
+        if( !_append_out( _vCONSAM[s], _vPARVAL, _dOUT, _vOUTSAM, os ) )
+          return false;
+        break;
+      
+      case FFDOEBase::AOPT:
+      case FFDOEBase::DOPT:
+      case FFDOEBase::EOPT:
+      default:
+        if( !_append_fim( _vCONSAM[s], _vPARVAL, _dFIM, _vFIMSAM, os ) )
+          return false;
+        break;
+    }
+    if( options.DISPLEVEL > 1 )
+      os << "." << std::flush;
+  }
+  if( options.DISPLEVEL > 1 )
+    os << std::endl;
+
+#else
   // Add samples for refined controls
   for( unsigned k=0; k<_vPARVAL.size(); ++k ){
     for( unsigned s=posSupp; s<posSupp+newSupp; ++s ){
 
       switch( options.CRITERION ){
         case FFDOEBase::BROPT:
-          if( !_append_out( _vCONSAM[s].data(), _vPARVAL[k].data(), _vOUTSAM[k], os ) )
+          if( !_append_out( _vCONSAM[s], _vPARVAL[k], _dOUT[k], _vOUTSAM[k], os ) )
             return false;
 #ifdef CANON__MBDOE_SAMPLE_DEBUG
           std::cout << "OUT[" << k << "][" << _vOUTSAM[k].size() << "]:" << std::endl << arma::trans(_vOUTSAM[k].back());
@@ -790,7 +1020,7 @@ MBDOESLV::_update_supports
         case FFDOEBase::DOPT:
         case FFDOEBase::EOPT:
         default:
-          if( !_append_fim( _vCONSAM[s].data(), _vPARVAL[k].data(), _vFIMSAM[k], os ) )
+          if( !_append_fim( _vCONSAM[s], _vPARVAL[k], _dFIM[k], _vFIMSAM[k], os ) )
             return false;
 #ifdef CANON__MBDOE_SAMPLE_DEBUG
           std::cout << "FIM[" << k << "][" << _vFIMSAM[k].size() << "]:" << std::endl << _vFIMSAM[k].back();
@@ -803,6 +1033,7 @@ MBDOESLV::_update_supports
   }
   if( options.DISPLEVEL > 1 )
     os << std::endl;
+#endif
 
   return true;
 }
@@ -921,6 +1152,7 @@ MBDOESLV::_effort_minimize_br
   FFDOEBase::set_weighting( _vPARWEI );
   FFDOEBase::set_scaling( _vPARSCA );
   FFDOEBase::set_noise( _vOUTVAR );
+  FFDOEBase::parsubset = &_sPARSEL;
   FFDOEBase::type = options.CRITERION;
   doe.options   = options.MINLPSLV;
   doe.set_dag( _dagdoe );
@@ -1042,14 +1274,67 @@ MBDOESLV::_effort_maximize_fim
     _display_design( "EFFORT-BASED EXACT DESIGN", _VOpt, _EOpt, _SOpt, os ); 
 }
 
+#ifdef MC__USE_THREAD
+inline
+void
+MBDOESLV::_build_br
+( std::vector<std::vector<FFVar>>& BROUT, std::vector<FFVar>& CTOT, std::vector<FFVar>& PTOT,
+  std::map<unsigned,double> const& EOpt, std::ostream& os )
+{
+  if( !_ny ) 
+    throw Exceptions( Exceptions::NOMODEL );
+
+  // Copy DAG variables and dependents
+  std::vector<FFVar> vPref( _np ), vCref( _nc ), vYref( _ny );
+  _dagdoe->insert( _dag, _np, _vPAR.data(), vPref.data() );
+  _dagdoe->insert( _dag, _nc, _vCON.data(), vCref.data() );
+  _dagdoe->insert( _dag, _ny, _vOUT.data(), vYref.data() );
+
+  // Define outputs in each scenario and each support
+  size_t const NSUP = EOpt.size();
+  size_t const NUNC = _vPARVAL.size();
+  size_t const NTH  = std::min( NUNC, options.MAXTHREAD>0? options.MAXTHREAD: std::thread::hardware_concurrency() ); // no more subvectors than threads
+  BROUT.clear();
+  BROUT.resize( NTH );
+  for( size_t th=0; th<NTH; ++th )
+    BROUT[th].reserve( NUNC/NTH+1 );
+
+  std::set<size_t> POSTH;
+  size_t NBATCH = NUNC/NTH, NREM = NUNC-NBATCH*NTH;
+  for( size_t i=0, pos=0; i<NTH; ++i ){
+    POSTH.insert( pos += ( i<NREM? NBATCH+1: NBATCH ) );
+//    std::cout << "pos #" << i << ": " << pos << std::endl;
+  }
+
+  FFVar* Pndx = PTOT.data();
+  size_t s = 0, th = 0;
+  for( auto const& undx : POSTH ){
+    for( ; s < undx; ++s, Pndx+=_np ){
+      FFVar* Cndx = CTOT.data();
+      for( size_t k=0; k<NSUP; ++k, Cndx+=_nc ){
+        FFVar* vYcomp = _dagdoe->compose( _ny, vYref.data(), _nc, vCref.data(), Cndx, _np, vPref.data(), Pndx );
+        BROUT[th].insert( BROUT[th].end(), vYcomp, vYcomp+_ny );
+        delete[] vYcomp;
+#ifdef CANON__MBDOE_BUILDBR_DEBUG
+        for( size_t i=0; i<_ny; ++i )
+          std::cout << "BROUT[" << th << "][" << BROUT[th].size()-_ny+i << "] -> "
+                    << BROUT[th][BROUT[th].size()-_ny+i] << std::endl;
+#endif
+      }
+    }
+    ++th;
+  }
+}
+
+#else
 inline
 void
 MBDOESLV::_build_br
 ( std::vector<FFVar>& BROUT, std::vector<FFVar>& CTOT, std::vector<FFVar>& PTOT,
   std::map<unsigned,double> const& EOpt, std::ostream& os )
 {
-  unsigned const NSUP = EOpt.size();
-  unsigned const NUNC = _vPARVAL.size();
+  size_t const NSUP = EOpt.size();
+  size_t const NUNC = _vPARVAL.size();
   BROUT.clear();
   BROUT.reserve( NUNC*NSUP*_ny );
 
@@ -1064,17 +1349,20 @@ MBDOESLV::_build_br
 
   // Define outputs in each scenario and each support
   FFVar* Pndx = PTOT.data();
-  for( unsigned s=0; s<NUNC; ++s, Pndx+=_np ){
+  for( size_t s=0; s<NUNC; ++s, Pndx+=_np ){
     FFVar* Cndx = CTOT.data();
-    for( unsigned k=0; k<NSUP; ++k, Cndx+=_nc ){
+    for( size_t k=0; k<NSUP; ++k, Cndx+=_nc ){
       FFVar* vYcomp = _dagdoe->compose( _ny, vYref.data(), _nc, vCref.data(), Cndx, _np, vPref.data(), Pndx );
       BROUT.insert( BROUT.end(), vYcomp, vYcomp+_ny );
       delete[] vYcomp;
-//      for( unsigned i=0; i<_ny; ++i )
-//        std::cout << "BROUT[" << s << "][" << k << "][" << i << "] -> " << BROUT[BROUT.size()-_ny+i] << std::endl;
+#ifdef CANON__MBDOE_BUILDBR_DEBUG
+      for( size_t i=0; i<_ny; ++i )
+        std::cout << "BROUT[" << s << "][" << k << "][" << i << "] -> " << BROUT[BROUT.size()-_ny+i] << std::endl;
+#endif
     }
   }
 }
+#endif
 
 inline
 void
@@ -1163,7 +1451,7 @@ MBDOESLV::_evaluate_design_br
   for( unsigned i=0; i<NPTOT; i++ )
     PTOT[i].set( _dagdoe );
 
-  std::vector<double> PTOT0;//(NPTOT); 
+  std::vector<double> PTOT0;
   PTOT0.reserve(NPTOT);
   for( unsigned s=0; s<NUNC; ++s )
     PTOT0.insert( PTOT0.end(), _vPARVAL[s].cbegin(), _vPARVAL[s].cend() );
@@ -1174,7 +1462,7 @@ MBDOESLV::_evaluate_design_br
   for( unsigned i=0; i<NCTOT; i++ )
     CTOT[i].set( _dagdoe );
 
-  std::vector<double> CTOT0;//(NCTOT); 
+  std::vector<double> CTOT0;
   CTOT0.reserve(NCTOT);
   std::map<unsigned,double> EOpt;
   unsigned ieff = 0;
@@ -1183,14 +1471,29 @@ MBDOESLV::_evaluate_design_br
     CTOT0.insert( CTOT0.end(), supp.cbegin(), supp.cend() );
   }
 
-  // Define cost function
-  std::vector<FFVar> BROUT;
-  _build_br( BROUT, CTOT, PTOT, EOpt, os );
-  
   // Evaluate cost function
   FFDOEBase::set_weighting( _vPARWEI );
-  FFVar& FBR = OpBRCrit( BROUT.size(), BROUT.data(), &EOpt, NUNC, _ny );
-  double DBR;
+  FFDOEBase::type  = options.CRITERION;
+#ifdef MC__USE_THREAD
+  std::vector<std::vector<FFVar>> BROUT;
+  _build_br( BROUT, CTOT, PTOT, EOpt, os );
+  FFVar FBR;
+  if( BROUT.size() > 1 ){
+    FFVect<I> OpVect;
+    Vect vBROUT( _dagdoe, CTOT, PTOT, BROUT );
+    FFVar** ppBROUT = OpVect( &vBROUT );
+    FBR = OpBRCrit( _ny*NSUP*NUNC, ppBROUT, &EOpt, NUNC, _ny );
+  }
+  else
+    FBR = OpBRCrit( _ny*NSUP*NUNC, BROUT[0].data(), &EOpt, NUNC, _ny );
+  //_dagdoe->output( _dagdoe->subgraph( 1, &FBR ) );
+#else
+  std::vector<FFVar> BROUT;
+  _build_br( BROUT, CTOT, PTOT, EOpt, os );
+  FFVar& FBR = OpBRCrit( _ny*NSUP*NUNC, BROUT.data(), &EOpt, NUNC, _ny );
+#endif
+
+  double DBR = 0./0.;
   std::string header( type.empty()? "DESIGN PERFORMANCE": type + " DESIGN PERFORMANCE" );
   try{
     _dagdoe->eval( 1, &FBR, &DBR, NCTOT, CTOT.data(), CTOT0.data(), NPTOT, PTOT.data(), PTOT0.data() );
@@ -1198,9 +1501,24 @@ MBDOESLV::_evaluate_design_br
   catch(...){
     if( options.DISPLEVEL )
       _display_design( header, DBR, std::multimap<double,std::vector<double>>(), os ); 
-    return std::make_pair( 0./0., false ); // NaN
+    return std::make_pair( DBR, false ); // NaN
   }
+/*
+  FFGraph dagdoe_copy;
+  std::vector<FFVar> CTOT_copy(NCTOT);
+  dagdoe_copy.insert( _dagdoe, NCTOT, CTOT.data(), CTOT_copy.data() );
+  std::vector<FFVar> PTOT_copy(NPTOT);
+  dagdoe_copy.insert( _dagdoe, NPTOT, PTOT.data(), PTOT_copy.data() );
 
+  std::vector<FFVar> vOpVect, vOpVect_copy(_ny*NSUP*NUNC);
+//  FFVar** ppBROUT = OpVect( &vBROUT );
+//  for( size_t i=0; i<_ny*NSUP*NUNC ; ++i ) vOpVect.push_back( *(ppBROUT[i]) );
+//  dagdoe_copy.insert( _dagdoe, 1, vOpVect.data(), vOpVect_copy.data() );
+//  dagdoe_copy.insert( _dagdoe, _ny*NSUP*NUNC, vOpVect.data(), vOpVect_copy.data() );
+  FFVar FBR_copy;
+  dagdoe_copy.insert( _dagdoe, 1, &FBR, &FBR_copy );
+  dagdoe_copy.eval( 1, &FBR_copy, &DBR, NCTOT, CTOT_copy.data(), CTOT0.data(), NPTOT, PTOT_copy.data(), PTOT0.data() );
+*/
   if( options.DISPLEVEL )
     _display_design( header, DBR, Campaign, os ); 
   return std::make_pair( DBR, true );
@@ -1362,11 +1680,6 @@ MBDOESLV::_gradient_minimize_br
     CTOTUB.insert( CTOTUB.end(), _vCONUB.cbegin(), _vCONUB.cend() );
   }
 
-  // Define cost function
-  std::vector<FFVar> BROUT;
-  _build_br( BROUT, CTOT, PTOT, EOpt, os );
-  FFVar& FBR = OpBRCrit( BROUT.size(), BROUT.data(), const_cast<std::map<unsigned,double>*>(&EOpt), NUNC, _ny );
-
   // Local NLP optimization
   NLP doeref;
   FFDOEBase::set_weighting( _vPARWEI );
@@ -1376,7 +1689,32 @@ MBDOESLV::_gradient_minimize_br
   doeref.set_dag( _dagdoe ); // DAG
   doeref.add_par( NPTOT, PTOT.data() ); // parameters
   doeref.add_var( NCTOT, CTOT.data(), CTOTLB.data(), CTOTUB.data() ); // decision variables
+
+#ifdef MC__USE_THREAD
+  std::vector<std::vector<FFVar>> BROUT;
+  _build_br( BROUT, CTOT, PTOT, EOpt, os );
+  FFVar FBR;
+  if( BROUT.size() > 1 ){
+    FFVect<I> OpVect;
+    Vect vBROUT( _dagdoe, CTOT, PTOT, BROUT );
+    FBR = OpBRCrit( _ny*NSUP*NUNC, OpVect( &vBROUT ), const_cast<std::map<unsigned,double>*>(&EOpt), NUNC, _ny );
+  }
+  else{
+//    std::cout << _ny*NSUP*NUNC << "=?" << BROUT[0].size() << std::endl;
+    FBR = OpBRCrit( _ny*NSUP*NUNC, BROUT[0].data(), const_cast<std::map<unsigned,double>*>(&EOpt), NUNC, _ny );
+  }
+#else
+  std::vector<FFVar> BROUT;
+  _build_br( BROUT, CTOT, PTOT, EOpt, os );
+  FFVar& FBR = OpBRCrit( BROUT.size(), BROUT.data(), const_cast<std::map<unsigned,double>*>(&EOpt), NUNC, _ny );
+#endif
   doeref.set_obj( BASE_OPT::MIN, FBR ); // minimize Bayesian risk
+
+//  double DFBR;
+//  _dagdoe->eval( 1, &FBR, &DFBR, NCTOT, CTOT.data(), CTOT0.data(), NPTOT, PTOT.data(), PTOT0.data() );
+//  std::cout << "BROPT = " << DFBR << std::endl;
+//  { int dum; std::cout << "Paused"; std::cin >> dum; }
+
   doeref.setup();
   doeref.solve( CTOT0.data(), nullptr, nullptr, PTOT0.data() );
 

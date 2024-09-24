@@ -5,8 +5,7 @@ include $(srcpath)/makeoptions.mk
 
 #####
 
-#libobjs = nlpslv.o main.o
-libobjs   = nlpslv.o doslv.o main.o
+libobjs   = nlpslv.o main.o gmomcc.o gevmcc.o optcc.o palmcc.o
 libname   = canon.so
 libdep    = pymc.so cronos.so
 
@@ -34,6 +33,12 @@ $(libname): $(libobjs)
 
 %.o : %.cpp
 	$(CPP) $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $(INC_PYBIND11) -c $< -o $@
+
+%.o : %.c
+	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
+
+%.c : $(PATH_GAMS)/apifiles/C/api/%.c
+	cp $< $@
 
 dispBuild:
 	@echo

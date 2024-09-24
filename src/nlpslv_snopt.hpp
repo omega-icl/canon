@@ -89,8 +89,11 @@ producing the following display:
 #include "snoptProblem.hpp"
 
 #include "mctime.hpp"
+#include "ffdep.hpp"
 #include "base_nlp.hpp"
-#include "gamsio.hpp"
+#if defined( MC__WITH_GAMS )
+  #include "gamsio.hpp"
+#endif
 
 #if defined( MC__USE_SOBOL )
   #include <boost/random/sobol.hpp>
@@ -354,8 +357,8 @@ struct WORKER_SNOPT
 ////////////////////////////////////////////////////////////////////////
 class NLPSLV_SNOPT
 #if defined( MC__WITH_GAMS )
-: protected virtual GAMSIO,
-  public virtual BASE_NLP
+: public virtual BASE_NLP,
+  protected virtual GAMSIO
 #else
 : public virtual BASE_NLP
 #endif
@@ -1349,7 +1352,9 @@ NLPSLV_SNOPT::setup
   _nP = _Pvar.size();
 
   // set dependencies of parameters
-  _Pdep.assign( _nP, 0. );
+  // std::cout << "nP:" << _nP << std::endl;
+  if( _nP ) _Pdep.assign( _nP, 0. );
+  else      _Pdep.clear();
 
   // full set of decision variables
   _Xvar = _var;

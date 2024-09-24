@@ -73,6 +73,22 @@ struct FFDOEBase
       //std::cout << weighting;
     }
 
+  // Selected parameter weights
+  static std::set<std::pair<unsigned,unsigned>>* parsubset;
+
+  // Compute atomic Bayes Risk
+  static double atom_BR
+    ( std::vector< arma::vec > const& yj, std::vector< arma::vec > const& yk,
+      std::vector<double> const& eff )
+    {
+      arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      for( unsigned i=0; i<eff.size(); ++i ){
+        arma::vec const& Ejk  = yj.at(i) - yk.at(i);
+        if( !sigmayinv.empty() ) Et_Vinv_E += eff[i] * Ejk.t() * sigmayinv * Ejk;
+        else                     Et_Vinv_E += eff[i] * Ejk.t() * Ejk;
+      }
+      return std::exp( -0.125 * Et_Vinv_E(0,0) );
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -81,6 +97,7 @@ inline FFDOEBase::TYPE FFDOEBase::type = FFDOEBase::DOPT;
 inline arma::mat FFDOEBase::scaling;
 inline arma::vec FFDOEBase::weighting;
 inline arma::mat FFDOEBase::sigmayinv;
+inline std::set<std::pair<unsigned,unsigned>>* FFDOEBase::parsubset = nullptr;
 
 class FFDOECrit
 : public FFOp,
@@ -100,6 +117,13 @@ public:
     const
     {
       return **insert_external_operation( *this, 1, nVar, pVar );
+    }
+
+  FFVar& operator()
+    ( unsigned const nVar, FFVar const*const* ppVar )
+    const
+    {
+      return **insert_external_operation( *this, 1, nVar, ppVar );
     }
 
   // Evaluation overloads
@@ -205,6 +229,7 @@ public:
     {
       return *(insert_external_operation( *this, nVar, nVar, pVar )[idep]);
     }
+
   FFVar** operator()
     ( unsigned const nVar, FFVar const* pVar )
     const
@@ -1147,6 +1172,24 @@ public:
       return **insert_external_operation( *this, 1, nVar, pVar );
     }
 
+  FFVar& operator()
+    ( unsigned const nVar, FFVar const*const* ppVar, std::map<unsigned,double>* mEFF,
+      unsigned int nUNC, unsigned int nOUT )
+    const
+    {
+#ifdef MC__FFBRCRIT_CHECK
+      assert( mEFF );
+#endif
+      data = mEFF; // no local copy - make sure mEFF isn't going out of scope!
+      owndata = false;
+      this->nUNC = nUNC;
+      this->nOUT = nOUT;
+#ifdef MC__FFBRCRIT_CHECK
+      assert( nVar == mEFF->size()*nUNC*nOUT );
+#endif
+      return **insert_external_operation( *this, 1, nVar, ppVar );
+    }
+
   // Evaluation overloads
   virtual void feval
     ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
@@ -1395,14 +1438,12 @@ const
 #ifdef MC__FFBRCRIT_CHECK
   assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
 #endif
-
-  vRes[0] = 0.;
   size_t const inc = mEFF->size()*nOUT;
-  size_t pj = 0;
-  for( unsigned j=0; j<nUNC; ++j, pj+=inc ){
-    size_t pk = pj + inc;
-    for( unsigned k=j+1; k<nUNC; ++k, pk+=inc ){
+
+  auto BRval = [&]( unsigned j, unsigned k, double& res ){
       arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      size_t pj = j*inc;
+      size_t pk = k*inc;
       size_t pi = 0;
       for( auto const& [Id,Eff] : *mEFF ){
 //        std::cout << "y[" << j << "][" << pi << "] = " << arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false );
@@ -1418,10 +1459,23 @@ const
       double BRjk = std::exp( -0.125 * Et_Vinv_E(0,0) );
 //      std::cout << "BR[" << j << "," << k << "] = " << BRjk << std::endl; 
       if( !weighting.empty() ) BRjk *= std::sqrt( weighting(j)*weighting(k) );
-      vRes[0] += BRjk;
-//      std::cout << "vRes[" << j << "," << k << "] = " << vRes[0] << std::endl; 
-    }
-  }
+      res += BRjk;
+//      std::cout << "res[" << j << "," << k << "] = " << res << std::endl; 
+  };
+
+  vRes[0] = 0.;
+
+  // Use subset of uncertainty scenarios
+  if( parsubset && !parsubset->empty() )
+    for( auto const& [j,k] : *parsubset )
+      BRval( j, k, vRes[0] );
+ 
+  // Use full set of uncertainty scenarios
+  else
+    for( unsigned j=0; j<nUNC-1; ++j )
+      for( unsigned k=j+1; k<nUNC; ++k )
+        BRval( j, k, vRes[0] );
+
 #ifdef MC__FFBRCRIT_LOG
   vRes[0] = std::log( vRes[0] );
 #endif
@@ -1444,19 +1498,16 @@ const
 #ifdef MC__FFBRCRIT_CHECK
   assert( mEFF && !mEFF->empty() && nVar == mEFF->size()*nOUT*nUNC && nRes == 1 );
 #endif
+  size_t const inc = mEFF->size()*nOUT;
 
 #ifdef MC__FFBRCRIT_LOG
-  double BRCrit = 0.;
+  auto BRder = [&]( unsigned j, unsigned k, double& crit, arma::vec& grad, arma::vec& tmp ){
+#else
+  auto BRder = [&]( unsigned j, unsigned k, arma::vec& grad, arma::vec& tmp ){
 #endif
-  size_t const inc = mEFF->size()*nOUT;
-  arma::vec GradBR( vRes, nRes, false );
-  GradBR.zeros();
-  arma::vec GradBRjk( inc, arma::fill::none );
-  size_t pj = 0;
-  for( unsigned j=0; j<nUNC; ++j, pj+=inc ){
-    size_t pk = pj + inc;
-    for( unsigned k=j+1; k<nUNC; ++k, pk+=inc ){
       arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      size_t pj = j*inc;
+      size_t pk = k*inc;
       size_t pi = 0;
       for( auto const& [Id,Eff] : *mEFF ){
 //        std::cout << "y[" << j << "][" << pi << "] = " << arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false );
@@ -1464,26 +1515,51 @@ const
         arma::vec const& Eijk = arma::vec( const_cast<double*>(vVar+pj+pi), nOUT, false )
                               - arma::vec( const_cast<double*>(vVar+pk+pi), nOUT, false );
         if( !sigmayinv.empty() ){
-//          arma::vec& SEijk = GradBRjk.subvec(pi,pi+nOUT-1);
-          GradBRjk.subvec(pi,pi+nOUT-1) = sigmayinv * Eijk;
-          Et_Vinv_E += Eff * Eijk.t() * GradBRjk.subvec(pi,pi+nOUT-1);
-          GradBRjk.subvec(pi,pi+nOUT-1) *= Eff/4;
+          tmp.subvec(pi,pi+nOUT-1) = sigmayinv * Eijk;
+          Et_Vinv_E += Eff * Eijk.t() * tmp.subvec(pi,pi+nOUT-1);
+          tmp.subvec(pi,pi+nOUT-1) *= Eff/4;
         }
         else{
           Et_Vinv_E += Eff * Eijk.t() * Eijk;
-          GradBRjk.subvec(pi,pi+nOUT-1) = (Eff/4) * Eijk;
+          tmp.subvec(pi,pi+nOUT-1) = (Eff/4) * Eijk;
         }
         pi += nOUT;
       }
       double BRjk = std::exp( -0.125 * Et_Vinv_E(0,0) );
       if( !weighting.empty() ) BRjk *= std::sqrt( weighting(j)*weighting(k) );
 #ifdef MC__FFBRCRIT_LOG
-      BRCrit += BRjk;
+      crit += BRjk;
 #endif
-      GradBR.subvec(pj,pj+inc-1) -= GradBRjk * BRjk;
-      GradBR.subvec(pk,pk+inc-1) += GradBRjk * BRjk;
-    }
-  }
+      grad.subvec(pj,pj+inc-1) -= tmp * BRjk;
+      grad.subvec(pk,pk+inc-1) += tmp * BRjk;
+  };
+
+#ifdef MC__FFBRCRIT_LOG
+  double BRCrit = 0.;
+#endif
+  arma::vec GradBR( vRes, nRes, false );
+  GradBR.zeros();
+  arma::vec GradBRjk( inc, arma::fill::none );
+
+  // Use subset of uncertainty scenarios
+  if( parsubset && !parsubset->empty() )
+    for( auto const& [j,k] : *parsubset )
+#ifdef MC__FFBRCRIT_LOG
+      BRder( j, k, BRCrit, GradBR, GradBRjk );
+#else
+      BRder( j, k, GradBR, GradBRjk );
+#endif
+ 
+  // Use full set of uncertainty scenarios
+  else
+    for( unsigned j=0; j<nUNC-1; ++j )
+      for( unsigned k=j+1; k<nUNC; ++k )
+#ifdef MC__FFBRCRIT_LOG
+        BRder( j, k, BRCrit, GradBR, GradBRjk );
+#else
+        BRder( j, k, GradBR, GradBRjk );
+#endif
+
 #ifdef MC__FFBRCRIT_LOG
   GradBR /= BRCrit;
 #endif
@@ -1833,19 +1909,31 @@ const
   assert( vOUT && !vOUT->empty() && nRes == 1 && nVar == vOUT->back().size() );
 #endif
 
-  vRes[0] = 0.;
-  for( unsigned j=0; j<vOUT->size(); ++j ){
-    for( unsigned k=j+1; k<vOUT->size(); ++k ){
+  auto BRval = [&]( unsigned j, unsigned k, double& res ){
       arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
       for( unsigned i=0; i<nVar; ++i ){
+        if( vVar[i] == 0. ) continue;
         arma::vec const& Ejk  = vOUT->at(j).at(i) - vOUT->at(k).at(i);
         if( !sigmayinv.empty() ) Et_Vinv_E += vVar[i] * Ejk.t() * sigmayinv * Ejk;
         else                     Et_Vinv_E += vVar[i] * Ejk.t() * Ejk;
       }
-      if( !weighting.empty() ) vRes[0] += std::sqrt( weighting(j)*weighting(k) ) * std::exp( -0.125 * Et_Vinv_E(0,0) );
-      else                     vRes[0] += std::exp( -0.125 * Et_Vinv_E(0,0) );
-    }
-  }
+      if( !weighting.empty() ) res += std::sqrt( weighting(j)*weighting(k) ) * std::exp( -0.125 * Et_Vinv_E(0,0) );
+      else                     res += std::exp( -0.125 * Et_Vinv_E(0,0) );
+  };
+
+  vRes[0] = 0.;
+
+  // Use subset of uncertainty scenarios
+  if( parsubset && !parsubset->empty() )
+    for( auto const& [j,k] : *parsubset )
+      BRval( j, k, vRes[0] );
+ 
+  // Use full set of uncertainty scenarios
+  else
+    for( unsigned j=0; j<vOUT->size()-1; ++j )
+      for( unsigned k=j+1; k<vOUT->size(); ++k )
+        BRval( j, k, vRes[0] );
+
 #ifdef MC__FFBRCRIT_LOG
   vRes[0] = std::log( vRes[0] );
 #endif
@@ -1856,6 +1944,81 @@ const
 #endif
 }
 
+inline void
+FFGradBREff::eval
+( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFGRADBREFF_TRACE
+  std::cout << "FFGradBREff::eval: double\n";
+#endif
+  std::vector< std::vector< arma::vec > >* vOUT = static_cast<std::vector< std::vector< arma::vec > >*>( data );
+#ifdef MC__FFGRADBREFF_CHECK
+  assert( vOUT && !vOUT->empty() && nRes == nVar && nVar == vOUT->back().size() );
+#endif
+
+#ifdef MC__FFBRCRIT_LOG
+  auto BRder = [&]( unsigned j, unsigned k, double& crit, arma::vec& grad, arma::vec& tmp ){
+#else
+  auto BRder = [&]( unsigned j, unsigned k, arma::vec& grad, arma::vec& tmp ){
+#endif
+      arma::mat Et_Vinv_E(1,1,arma::fill::zeros);
+      for( unsigned i=0; i<nVar; ++i ){
+        arma::vec const& Ejk   = vOUT->at(j).at(i) - vOUT->at(k).at(i);
+        if( !sigmayinv.empty() ){
+          tmp.subvec(i,i) = -0.125 * Ejk.t() * sigmayinv * Ejk;
+          Et_Vinv_E += vVar[i] * tmp(i);
+        }
+        else{
+          tmp.subvec(i,i) = -0.125 * Ejk.t() * Ejk;
+          Et_Vinv_E += vVar[i] * tmp(i);
+        }
+      }
+      double BRjk = std::exp( Et_Vinv_E(0,0) );
+      if( !weighting.empty() ) BRjk *= std::sqrt( weighting(j)*weighting(k) );
+#ifdef MC__FFBRCRIT_LOG
+      crit += BRjk;
+#endif
+      grad += tmp * BRjk;
+  };
+
+#ifdef MC__FFBRCRIT_LOG
+  double BRCrit = 0.;
+#endif
+  arma::vec GradBR( vRes, nRes, false );
+  GradBR.zeros();
+  arma::vec GradBRjk( nVar, arma::fill::none );
+
+  // Use subset of uncertainty scenarios
+  if( parsubset && !parsubset->empty() )
+    for( auto const& [j,k] : *parsubset )
+#ifdef MC__FFBRCRIT_LOG
+      BRder( j, k, BRCrit, GradBR, GradBRjk );
+#else
+      BRder( j, k, GradBR, GradBRjk );
+#endif
+ 
+  // Use full set of uncertainty scenarios
+  else
+    for( unsigned j=0; j<vOUT->size()-1; ++j )
+      for( unsigned k=j+1; k<vOUT->size(); ++k )
+#ifdef MC__FFBRCRIT_LOG
+        BRder( j, k, BRCrit, GradBR, GradBRjk );
+#else
+        BRder( j, k, GradBR, GradBRjk );
+#endif
+
+#ifdef MC__FFBRCRIT_LOG
+  GradBR /= BRCrit;
+#endif
+
+#ifdef MC__FFBREFF_DEBUG
+  for( unsigned i=0; i<nVar; ++i )
+    std::cout << name() << " [" << i << "]: " << vRes[i] << std::endl;
+  { int dum; std::cout << "Press 1"; std::cin >> dum; }
+#endif
+}
+/*
 inline void
 FFGradBREff::eval
 ( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
@@ -1907,7 +2070,7 @@ const
   { int dum; std::cout << "Press 1"; std::cin >> dum; }
 #endif
 }
-
+*/
 inline void
 FFBREff::eval
 ( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,

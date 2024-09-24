@@ -1,7 +1,6 @@
 import pymc
 import cronos
 import canon
-import numpy as np
 
 def nlp_test():
 
@@ -9,13 +8,15 @@ def nlp_test():
   DAG = pymc.FFGraph()
   X1 = pymc.FFVar(DAG,"X1")
   X2 = pymc.FFVar(DAG,"X2")
+  C  = pymc.FFVar(DAG,"C")
 
   # Define NLP
   NLP = canon.NLPSLV()
   NLP.set_dag( DAG )
+  NLP.add_parameter( [C] )
   NLP.add_variable( [X1,X2], [0.,0.], [6.,4.] )
   NLP.set_objective( NLP.MAX, X1+X2 )
-  NLP.add_constraint( NLP.LE, X1*X2-4. )
+  NLP.add_constraint( NLP.LE, X1*X2-C )
 
   NLP.options.FEASTOL   = 1e-8;
   NLP.options.OPTIMTOL  = 1e-8;
@@ -23,15 +24,15 @@ def nlp_test():
 
   NLP.setup()
   NLP.options.DISPLEVEL = 1;
-  NLP.solve( [0.,0.] )
+  NLP.solve( [0.,0.], [3.] )
 
   print( "status:", NLP.status )
   print( "solution point:", NLP.solution.x )
   print( "solution value:", NLP.solution.f[0] )
 #  print( NLP.solution )
 
-  NLP.options.DISPLEVEL = 0;
-  NLP.solve( 8 )
+  NLP.options.DISPLEVEL = 1;
+  NLP.solve( 8, [3.] )
 
   print( "status:", NLP.status )
   print( "solution point:", NLP.solution.x )
@@ -39,7 +40,27 @@ def nlp_test():
 #  print( NLP.solution )
 
 
-def ode_define( NS ):
+def gams_test():
+
+  # Define NLP
+  NLP = canon.NLPSLV()
+  NLP.read( "ex6_1_4.gms", False )
+  NLP.options.FEASTOL   = 1e-8;
+  NLP.options.OPTIMTOL  = 1e-8;
+  NLP.options.GRADMETH  = NLP.options.BSYM;
+
+  NLP.setup()
+  NLP.options.DISPLEVEL = 1;
+  NLP.solve()
+
+  print( "status:", NLP.status )
+  print( "solution point:", NLP.solution.x )
+  print( "solution value:", NLP.solution.f[0] )  
+
+
+def do_test( NS ):
+
+  import numpy as np
 
   # Define DAG
   DAG = pymc.FFGraph()
@@ -79,18 +100,8 @@ def ode_define( NS ):
 #  ODE.options.DISPLEVEL = 1
 #  stat = ODE.solve_state( [-1e0]*NS )
 
-  return ODE
-
-
-def do_test( ODE ):
-
   OpODE = cronos.FFODE()
-  DAG = cronos.FFGraphExt()
-  NU = len( ODE.var_parameter )
-  U = []
-  for i in range( NU ):
-    U.append( pymc.FFVar(DAG,"U"+str(i)) )
-  F = OpODE( U, ODE );
+#  F = OpODE( U, ODE );
 
 #  print( "F @(-1): ", DAG.eval( F, U, [-1e0]*NU ) )
 #  SGF = DAG.subgraph( F )
@@ -98,11 +109,11 @@ def do_test( ODE ):
 #  DAG.dot_script( F, "F.dot" )
 
   # Define NLP
-  NLP = canon.DOSLV()
+  NLP = canon.NLPSLV()
   NLP.set_dag( DAG )
   NLP.add_variable( U, -1e1, 1e1 )
-  NLP.set_objective( NLP.MIN, F[0] )
-  NLP.add_constraint( NLP.EQ, F[1] )
+  NLP.set_objective( NLP.MIN, OpODE( 0, U, ODE ) ) #F[0] )
+  NLP.add_constraint( NLP.EQ, OpODE( 1, U, ODE ) ) #F[1] )
 
   NLP.options.FEASTOL   = 1e-6;
   NLP.options.OPTIMTOL  = 1e-6;
@@ -112,7 +123,7 @@ def do_test( ODE ):
 
   NLP.setup()
   NLP.options.DISPLEVEL = 1;
-  NLP.solve( [-1e0]*NU )
+  NLP.solve( [-1e0]*NS )
 
   print( "status:", NLP.status )
   print( "solution point:", NLP.solution.x )
@@ -126,6 +137,7 @@ def do_test( ODE ):
 
 nlp_test()
 
-ODE = ode_define( 20 )
-do_test( ODE )
+#gams_test()
+
+#do_test( 20 )
 

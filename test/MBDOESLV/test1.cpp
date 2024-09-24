@@ -137,8 +137,9 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
+  DOE.options.MAXTHREAD = 1;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
@@ -151,7 +152,7 @@ int main()
   DOE.set_model( Y, YVAR );
   DOE.set_controls( C, CLB, CUB );
   DOE.set_parameters( K, DOE.uniform_sample( NKSAM, KLB, KUB ) );
-/*
+
   // Solve MBDOE
   DOE.setup();
   DOE.sample_supports( NCSAM );
@@ -161,7 +162,7 @@ int main()
   //DOE.effort_solve( NEXP, DOE.efforts() );
   //DOE.file_export( "test1" );
   auto campaign = DOE.campaign();
-*/
+
 /*
   // Sobol samples campaign
   std::multimap<double,std::vector<double>> campaign;
@@ -175,7 +176,7 @@ int main()
   KLB[3] = 0.454;  KUB[3] = 4.388;   // K1 
   DOE.set_parameters( K, DOE.uniform_sample( 200, KLB, KUB ) );
 */
-
+/*
   std::multimap<double,std::vector<double>> campaign // ** EFFORT-BASED EXACT DESIGN: 2.58167e+01
   {
     //SUPPORT #100: 2 x [ 1.00000e-01 7.31311e-02 0.00000e+00 0.00000e+00 3.23150e+02 ]
@@ -187,13 +188,11 @@ int main()
     // SUPPORT #84: 3 x [ 9.92188e-02 9.92188e-02 5.39063e-02 1.17188e-02 2.75884e+02 ]
     //{ 3, { 9.92188e-02, 9.92188e-02, 5.39063e-02, 1.17188e-02, 2.75884e+02 } }
   };
-/*
+*/
   DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
- 
-// return 0;
  
   DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//
@@ -204,14 +203,14 @@ int main()
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.setup();
   DOE.evaluate_design( campaign, "BROPT" );
-*/
+
 
   /////////////////////////////////////////////////////////////////////////
   // Simulate experimental campaign
 
   // Nominal model parameters
   std::vector<double> dK{ 0.5, 1.0, -3.1, 2.4 };
-  
+
   // Nomimal model predictions
   std::vector<std::vector<double>> simulated_campaign; 
   //std::vector<double> dY( NY*NS );

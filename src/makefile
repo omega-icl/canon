@@ -15,7 +15,7 @@ export libpath        = $(rootpath)/lib
 
 #####
 
-install: dirs_create canon_install interface_install
+install: dirs_create interface_install canon_install
 
 dirs_create :
 	@if test ! -e $(incpath)/; then \

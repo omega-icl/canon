@@ -13,11 +13,11 @@ namespace py = pybind11;
 
 void mc_nlpslv( py::module_ &m )
 {
-typedef mc::FFGraph<> FFGraph;
+typedef mc::FFGraph FFGraph;
 #ifdef MC__USE_SNOPT
-  typedef mc::NLPSLV_SNOPT<> NLPSLV;
+  typedef mc::NLPSLV_SNOPT NLPSLV;
 #elif  MC__USE_IPOPT
-  typedef mc::NLPSLV_IPOPT<> NLPSLV;
+  typedef mc::NLPSLV_IPOPT NLPSLV;
 #endif
 
 py::class_<NLPSLV> pyNLPSLV( m, "NLPSLV" );
@@ -34,6 +34,17 @@ pyNLPSLV
    "options",
    &NLPSLV::options
  )
+#if defined( MC__WITH_GAMS )
+ .def(
+   "read",
+   []( NLPSLV& self, std::string const& filename, bool const init, bool const disp )
+     { return self.read( filename, init, disp ); },
+   py::arg("file"),
+   py::arg("init")=true,
+   py::arg("disp")=false,
+   "read optimization model from GAMS file"
+ )   
+#endif
  .def( 
    "set",
    []( NLPSLV& self,  NLPSLV& nlp ){ self.set( nlp ); },
@@ -64,16 +75,14 @@ pyNLPSLV
  )
  .def(
    "set_parameter",
-   []( NLPSLV& self, std::vector<mc::FFVar> const& par, std::vector<double> const& val ){ self.set_par( par, val ); },
+   []( NLPSLV& self, std::vector<mc::FFVar> const& par ){ self.set_par( par ); },
    py::arg("par"),
-   py::arg("val")=std::vector<double>(),
    "set parameters"
  )
  .def(
    "add_parameter",
-   []( NLPSLV& self, std::vector<mc::FFVar> const& par, std::vector<double> const& val ){ self.add_par( par, val ); },
+   []( NLPSLV& self, std::vector<mc::FFVar> const& par ){ self.add_par( par ); },
    py::arg("par"),
-   py::arg("val")=std::vector<double>(),
    "add parameters"
  )
  .def(
@@ -195,14 +204,19 @@ pyNLPSLV
  )
  .def(
    "solve",
-   []( NLPSLV& self, size_t const& NSAM ){ return self.solve( NSAM ); },
-   "solve optimization model using local search"
+   []( NLPSLV& self, size_t const& NSAM, std::vector<double> const& pval )
+     { return self.solve( NSAM, nullptr, nullptr, pval.data() ); },
+   py::arg("nsam"),
+   py::arg("par")=std::vector<double>(),
+   "solve optimization model using multistart local search"
  )
  .def(
    "solve",
-   []( NLPSLV& self, std::vector<double> const& xini ){ return self.solve( xini.data() ); },
+   []( NLPSLV& self, std::vector<double> const& xini, std::vector<double> const& pval )
+     { return self.solve( xini.data(), nullptr, nullptr, pval.data() ); },
    py::arg("ini")=std::vector<double>(),
-   "solve optimization model using multistart local search"
+   py::arg("par")=std::vector<double>(),
+   "solve optimization model using local search"
  )
  .def_property_readonly(
    "solution",
