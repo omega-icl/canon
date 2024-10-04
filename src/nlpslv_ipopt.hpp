@@ -992,8 +992,9 @@ WORKER_IPOPT::eval_grad_f
     }
 
 #ifdef MC__NLPSLV_IPOPT_DEBUG
-        for( Ipopt::Index i=0; i<n; i++ )
-          std::cout << "  df[" << i << "] = " << df[i] << std::endl;
+    for( Ipopt::Index i=0; i<n; i++ )
+      std::cout << "  df[" << i << "] = " << df[i] << std::endl;
+    { int dum; std::cout << "Press 1"; std::cin >> dum; }
 #endif
   }
 

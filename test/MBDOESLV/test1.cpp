@@ -12,10 +12,11 @@ int main()
   // Define model
 
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
+  DAG.options.MAXTHREAD = 0;
 
-  size_t const NS = 8;       // Time stages
+  size_t const NS = 12;       // Time stages
   size_t const NK = 4;       // Number of estimated parameters
-  size_t const NC = NS/2+1;//NS+1;  // Number of experimental controls
+  size_t const NC = NS+1;//NS/2+1;  // Number of experimental controls
   size_t const NX = 3;       // Number of states
   size_t const NY = 2;       // Number of outputs
 
@@ -25,7 +26,7 @@ int main()
 
   std::vector<mc::FFVar> C( NC );  // Controls
   for( size_t i=0; i<NC; i++ ) C[i].set( &DAG );
-  mc::FFVar& T     = C[NS/2];//C[NS];
+  mc::FFVar& T     = C[NS];//C[NS/2];
 
   std::vector<mc::FFVar> K( NK );  // Parameters
   for( size_t i=0; i<NK; i++ ) K[i].set( &DAG );
@@ -46,7 +47,7 @@ int main()
 
   std::vector<std::vector<mc::FFVar>> RHS( NS, std::vector<mc::FFVar>(NX) );  // Right-hand side function
   for( size_t i=0; i<NS; i++ ){
-    mc::FFVar& Qin = C[i/2];//C[i]; // [L/min]
+    mc::FFVar& Qin = C[i];//C[i/2]; // [L/min]
     mc::FFVar R = exp( K0 + K1 * ( 1 - T / Tref ) ) * ( pow( CA + eps, alpha ) - pow( eps, alpha ) );
     RHS[i][0]   = Qin / V * ( CAin - CA ) - R;
     RHS[i][1] = - Qin / V * CB + nu * R;
@@ -71,8 +72,8 @@ int main()
   IVP.options.FSACORR   = mc::BASE_CVODES::Options::STAGGERED;//STAGGERED1;//SIMULTANEOUS;
   IVP.options.NMAX      = 2000;
   IVP.options.DISPLAY   = 0;
-  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-8;
-  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-8;
+  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-9;
+  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-9;
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
   IVP.options.ASACHKPT  = 2000;
 #if defined( SAVE_RESULTS )
@@ -124,7 +125,7 @@ int main()
   KLB[3] = 0.454;  KUB[3] = 4.388;   // K1 
 
   // Experimental control space
-  size_t const NCSAM = 100;
+  size_t const NCSAM = 200;
   std::vector<double> CLB(NC), CUB(NC);
   for( size_t i=0; i<NC-1; ++i ){
     CLB[i] = 0e0;
@@ -137,9 +138,8 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//DOPT;
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
-  DOE.options.MAXTHREAD = 1;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;

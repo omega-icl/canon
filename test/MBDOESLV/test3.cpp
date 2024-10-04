@@ -1,4 +1,4 @@
-#define SAVE_RESULTS		// <- Whether to save bounds to file
+#undef SAVE_RESULTS		// <- Whether to save bounds to file
 #define MC__MBDOE_SHOW_APPORTION
 //#define MC__MBDOE_SETUP_DEBUG
 //#define MC__MBDOE_SAMPLE_DEBUG
@@ -75,7 +75,7 @@ int main()
   IVP.options.FSACORR   = mc::BASE_CVODES::Options::STAGGERED;//STAGGERED1;//SIMULTANEOUS;
   IVP.options.NMAX      = 2000;
   IVP.options.DISPLAY   = 0;
-  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-11;
+  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-10;
   IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-10;
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
   IVP.options.ASACHKPT  = 2000;
@@ -118,7 +118,7 @@ int main()
   size_t const NEXP = 5;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NPSAM = 1000;
+  size_t const NPSAM = 500;
   std::vector<double> PLB( NP ), PUB( NP );
 //  PLB[0] =  PUB[0] = 0.31;
 //  PLB[1] =  PUB[1] = 0.18;
@@ -145,10 +145,9 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//BROPT;
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.options.UNCREDUC  = 20;
-  DOE.options.MAXTHREAD = 1;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.MAXITER = 100;
@@ -159,6 +158,7 @@ int main()
   DOE.options.NLPSLV.MAXITER   = 250;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 0;
+  DOE.options.NLPSLV.GRADMETH = DOE.options.NLPSLV.FSYM;//FAD;
   DOE.set_dag( DAG );
   DOE.set_model( Y, YVAR );
   DOE.set_controls( C, CLB, CUB );
@@ -170,7 +170,8 @@ int main()
   DOE.combined_solve( NEXP );
   //DOE.effort_solve( NEXP );
   //DOE.gradient_solve( DOE.efforts(), true );
-  //DOE.effort_solve( NEXP, DOE.efforts() );
+  //DOE.effort_solve( NEXP );//, DOE.efforts() );
+  //DOE.gradient_solve( DOE.efforts(), false );//true );
   //DOE.file_export( "test2" );
   auto campaign = DOE.campaign();
 
@@ -215,7 +216,7 @@ int main()
     // SUPPORT #4: 1 x [ 7.91125e-02 3.50000e+01 1.00000e+01 ]
     { 1, { 7.91125e-02, 3.50000e+01, 1.00000e+01 } },
   };
-  
+
   // DOPT-AVERSE DESIGN PERFORMANCE (500 SCENARIOS): 3.65305e+01
   std::multimap<double,std::vector<double>> campaign
   {
@@ -242,18 +243,18 @@ int main()
 */
 
   DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
-  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
 
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
-  DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//
+  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-AVERSE" );
 
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//DOPT;//
-  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
   DOE.evaluate_design( campaign, "BROPT" );
 

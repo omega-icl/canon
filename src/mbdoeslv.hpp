@@ -182,7 +182,7 @@ public:
     //! @brief Constructor
     Options():
       CRITERION(FFDOEBase::DOPT), RISK(NEUTRAL), UNCREDUC(0), CVARTHRES(0.2),
-      INISAMP(100), MINDIST(1e-6), MAXITER(4), TOLITER(1e-5), DISPLEVEL(0), MAXTHREAD(1), 
+      MINDIST(1e-6), MAXITER(4), TOLITER(1e-5), DISPLEVEL(0),
       MINLPSLV(), NLPSLV()
       {
 #ifdef MC__USE_SNOPT
@@ -233,12 +233,10 @@ public:
         RISK        = options.RISK;
         UNCREDUC    = options.UNCREDUC;
         CVARTHRES   = options.CVARTHRES;
-        INISAMP     = options.INISAMP;
         MINDIST     = options.MINDIST;
         MAXITER     = options.MAXITER;
         TOLITER     = options.TOLITER;
         DISPLEVEL   = options.DISPLEVEL;
-        MAXTHREAD   = options.MAXTHREAD;
         MINLPSLV    = options.MINLPSLV;
         NLPSLV      = options.NLPSLV;
         return *this;
@@ -256,8 +254,6 @@ public:
     size_t                   UNCREDUC;
     //! @brief Percentile threshold for CVaR calculation
     double                   CVARTHRES;
-    //! @brief Initial sampling size of experimental control space
-    unsigned                 INISAMP;
     //! @brief Minimal relative mean-absolute distance between support points after refinement
     double                   MINDIST;
    //! @brief Maximal iteration of effort-based and gradient-based solves
@@ -266,8 +262,6 @@ public:
     double                   TOLITER;
     //! @brief Verbosity level
     int                      DISPLEVEL;
-    //! @brief Maximum number of threads for output/FIM evaluation
-    size_t                   MAXTHREAD;
     
     //! @brief MINLP effort-based solver options
     typename MINLP::Options  MINLPSLV;
@@ -458,11 +452,6 @@ protected:
     ( std::vector<FFVar>& BROUT, std::vector<FFVar>& CTOT, std::vector<FFVar>& PTOT,
       std::map<unsigned,double> const& EOpt, std::ostream& os );
 #endif
-
-  //! @brief Build FIM for gradient-based search
-  void _build_fim
-    ( std::vector<FFVar>& vFIM, std::vector<FFVar>& CTOT, FFVar const* PREF,
-      std::map<unsigned,double> const& EOpt, std::ostream& os=std::cout );
 
   //! @brief Generate samples for refined supports
   bool _update_supports
@@ -1149,7 +1138,7 @@ MBDOESLV::_effort_minimize_br
   
   // Convex MINLP optimization
   MINLP doe;
-  FFDOEBase::set_weighting( _vPARWEI );
+  FFDOEBase::set_weighting( _vPARWEI ); // NEED TO UPDATE WEIGTHS WITH SCENARIO REDUCTION!!!
   FFDOEBase::set_scaling( _vPARSCA );
   FFDOEBase::set_noise( _vOUTVAR );
   FFDOEBase::parsubset = &_sPARSEL;
@@ -1293,7 +1282,7 @@ MBDOESLV::_build_br
   // Define outputs in each scenario and each support
   size_t const NSUP = EOpt.size();
   size_t const NUNC = _vPARVAL.size();
-  size_t const NTH  = std::min( NUNC, options.MAXTHREAD>0? options.MAXTHREAD: std::thread::hardware_concurrency() ); // no more subvectors than threads
+  size_t const NTH  = std::min( NUNC, _dag->options.MAXTHREAD>0? _dag->options.MAXTHREAD: std::thread::hardware_concurrency() ); // no more subvectors than threads
   BROUT.clear();
   BROUT.resize( NTH );
   for( size_t th=0; th<NTH; ++th )
@@ -1333,11 +1322,6 @@ MBDOESLV::_build_br
 ( std::vector<FFVar>& BROUT, std::vector<FFVar>& CTOT, std::vector<FFVar>& PTOT,
   std::map<unsigned,double> const& EOpt, std::ostream& os )
 {
-  size_t const NSUP = EOpt.size();
-  size_t const NUNC = _vPARVAL.size();
-  BROUT.clear();
-  BROUT.reserve( NUNC*NSUP*_ny );
-
   if( !_ny ) 
     throw Exceptions( Exceptions::NOMODEL );
 
@@ -1348,6 +1332,11 @@ MBDOESLV::_build_br
   _dagdoe->insert( _dag, _ny, _vOUT.data(), vYref.data() );
 
   // Define outputs in each scenario and each support
+  size_t const NSUP = EOpt.size();
+  size_t const NUNC = _vPARVAL.size();
+  BROUT.clear();
+  BROUT.reserve( NUNC*NSUP*_ny );
+
   FFVar* Pndx = PTOT.data();
   for( size_t s=0; s<NUNC; ++s, Pndx+=_np ){
     FFVar* Cndx = CTOT.data();
@@ -1363,43 +1352,6 @@ MBDOESLV::_build_br
   }
 }
 #endif
-
-inline
-void
-MBDOESLV::_build_fim
-( std::vector<FFVar>& vFIM, std::vector<FFVar>& CTOT, FFVar const* PREF,
-  std::map<unsigned,double> const& EOpt, std::ostream& os )
-{
-  unsigned const NELE = _np*(_np+1)/2;
-  vFIM.assign( NELE, 0. );
-
-  if( !_ny ) 
-    throw Exceptions( Exceptions::NOMODEL );
-
-  // Copy DAG variables and dependents
-  std::vector<FFVar> vPref( _np ), vCref( _nc ), vFIMref( NELE );
-  _dagdoe->insert( _dag, _np, _vPAR.data(), vPref.data() );
-  _dagdoe->insert( _dag, _nc, _vCON.data(), vCref.data() );
-  _dagdoe->insert( _dag, NELE, _vFIM.data(), vFIMref.data() );
-
-  // Define atom matrices in current scenario for each support
-  FFVar* Cndx = CTOT.data();
-  for( auto const& [ndx,eff] : EOpt ){
-    FFVar* pFIMndx = _dagdoe->compose( NELE, vFIMref.data(), _nc, vCref.data(), Cndx, _np, vPref.data(), PREF );
-    for( unsigned int ij=0; ij<NELE; ++ij )
-      vFIM[ij] += eff * pFIMndx[ij];
-#ifdef CANON__MBDOE_SOLVE_DEBUG
-    _dagdoe->output( _dagdoe->subgraph( NELE, pFIMndx ), " A["+std::to_string(ndx)+"]" );
-    //{ int dum; std::cout << "Paused"; std::cin >> dum; }
-#endif
-    Cndx += _nc;
-    delete[] pFIMndx;
-  }
-#ifdef CANON__MBDOE_SOLVE_DEBUG
-  _dagdoe->output( _dagdoe->subgraph( NELE, vFIM.data() ), " FIM" );
-  //{ int dum; std::cout << "Paused"; std::cin >> dum; }
-#endif
-}
 
 inline
 std::multimap<double,std::vector<double>>
@@ -1531,22 +1483,11 @@ MBDOESLV::_evaluate_design_fim
 {
   delete _dagdoe; _dagdoe = new DAG;
   FFDOEBase::type = options.CRITERION;
-  FFDOECrit OpDOECrit;
+  FFFIMCrit OpFIMCrit;
   FFLin<I>  Sum;
 
   size_t const NSUP = Campaign.size();
   size_t const NUNC = _vPARVAL.size();
-
-  // Concatenate uncertainty scenatios
-  size_t const NPTOT = _np * NUNC;
-  std::vector<FFVar> PTOT(NPTOT);  // Parameter scenarios
-  for( unsigned i=0; i<NPTOT; i++ )
-    PTOT[i].set( _dagdoe );
-
-  std::vector<double> PTOT0;//(NPTOT); 
-  PTOT0.reserve(NPTOT);
-  for( unsigned s=0; s<NUNC; ++s )
-    PTOT0.insert( PTOT0.end(), _vPARVAL[s].cbegin(), _vPARVAL[s].cend() );
 
   // Concatenate experimental controls
   size_t const NCTOT = _nc * NSUP;
@@ -1554,7 +1495,7 @@ MBDOESLV::_evaluate_design_fim
   for( unsigned i=0; i<NCTOT; i++ )
     CTOT[i].set( _dagdoe );
 
-  std::vector<double> CTOT0;//(NCTOT); 
+  std::vector<double> CTOT0;
   CTOT0.reserve(NCTOT);
   std::map<unsigned,double> EOpt;
   unsigned ieff = 0;
@@ -1563,39 +1504,38 @@ MBDOESLV::_evaluate_design_fim
     CTOT0.insert( CTOT0.end(), supp.cbegin(), supp.cend() );
   }
 
-  // Define cost function
-  std::vector<FFVar> DOECRIT( NUNC );
-  std::vector<FFVar> FIMREF;
-  FFVar const* PREF = PTOT.data();
-  for( unsigned s=0; s<NUNC; ++s, PREF+=_np ){
-    // Define FIM and DOE criterion in current scenario
-    _build_fim( FIMREF, CTOT, PREF, EOpt, os );
-    DOECRIT[s] = OpDOECrit( FIMREF.size(), FIMREF.data() );
+  // Define FIM criteria
+  FFVar const*const* ppFIMCrit = OpFIMCrit( CTOT.data(), _dag, &_vPAR, &_vCON, &_vFIM, &EOpt, &_vPARVAL );
 #ifdef CANON__MBDOE_SOLVE_DEBUG
-    //_dagdoe->output( _dagdoe->subgraph( FIMREF.size(), FIMREF.data() ), " FIM" );
-    _dagdoe->output( _dagdoe->subgraph( 1, &DOECRIT[s] ), " J["+std::to_string(s)+"]" );
-    { int dum; std::cout << "Paused"; std::cin >> dum; }
+  _dagdoe->output( _dagdoe->subgraph( 1, ppFIMCrit[0] ), " DOECrit" );
 #endif
-  }
 
   // Evaluate cost function
-  FFVar FFIM;
   double DFIM;
   std::string header = ( type.empty()? "DESIGN PERFORMANCE": type + " DESIGN PERFORMANCE" );
   try{
     switch( options.RISK){
       case Options::NEUTRAL:
-        FFIM = Sum( NUNC, DOECRIT.data(), _vPARWEI.data() );
-        _dagdoe->eval( 1, &FFIM, &DFIM, NCTOT, CTOT.data(), CTOT0.data(), NPTOT, PTOT.data(), PTOT0.data() );
+      {
+        FFVar FFIM = Sum( NUNC, ppFIMCrit, _vPARWEI.data() );
+        _dagdoe->eval( 1, &FFIM, &DFIM, NCTOT, CTOT.data(), CTOT0.data() );
+#ifdef CANON__MBDOE_SOLVE_DEBUG
+        auto&& FGRADFIM  = _dagdoe->FAD( std::vector<FFVar>({FFIM}), CTOT );
+        std::vector<double> DGRADFIM;
+        _dagdoe->eval( FGRADFIM, DGRADFIM, CTOT, CTOT0 );
+#endif
         break;
-
+      }
       case Options::AVERSE:
       {
-        std::vector<double> DA( NUNC );
-        _dagdoe->eval( NUNC, DOECRIT.data(), DA.data(), NCTOT, CTOT.data(), CTOT0.data(), NPTOT, PTOT.data(), PTOT0.data() );
+        std::vector<double> DFIMCrit( NUNC );
+        std::vector<FFVar> FFIMCrit( NUNC );
+        for( unsigned s=0; s<NUNC; ++s )
+          FFIMCrit[s] = *ppFIMCrit[s];
+        _dagdoe->eval( NUNC, FFIMCrit.data(), DFIMCrit.data(), NCTOT, CTOT.data(), CTOT0.data() );
         std::map<double,double> SA;
         for( unsigned s=0; s<NUNC; ++s )
-          SA[DA[s]] = _vPARWEI[s];
+          SA[DFIMCrit[s]] = _vPARWEI[s];
         double prsum = 0., VaR = 0.;
         for( auto const& [crit,pr] : SA ){
           VaR = crit;
@@ -1727,7 +1667,9 @@ MBDOESLV::_gradient_minimize_br
     _SOpt.clear();
     _VOpt = 0./0.;//BASE_OPT::BASE_OPT::INF;
  
-    if( doeref.get_status() == NLP::SUCCESSFUL || doeref.get_status() == NLP::FAILURE ){
+    if( doeref.get_status() == NLP::SUCCESSFUL
+     || doeref.get_status() == NLP::FAILURE
+     || doeref.get_status() == NLP::INTERRUPTED ){
       unsigned isupp = 0;
       for( auto const& [ndx,eff] : EOpt ){
         double const* dC = doeref.solution().x.data() + isupp*_nc;
@@ -1749,29 +1691,11 @@ MBDOESLV::_gradient_maximize_fim
 ( std::map<unsigned,double> const& EOpt, bool const update, std::ostream& os )
 {
   delete _dagdoe; _dagdoe = new DAG;
-  FFDOECrit OpDOECrit;
+  FFFIMCrit OpFIMCrit;
   FFLin<I>  Sum;
 
   size_t const NSUP = EOpt.size();
   size_t const NUNC = _vPARVAL.size();
-
-  // Concatenate uncertainty scenarios
-  size_t const NPTOT = _np * NUNC;
-  std::vector<FFVar> PTOT(NPTOT);  // Parameter scenarios
-  for( unsigned i=0; i<NPTOT; i++ )
-    PTOT[i].set( _dagdoe );
-
-  std::vector<double> PTOT0;
-  PTOT0.reserve(NPTOT);
-  for( unsigned s=0; s<NUNC; ++s ){
-    PTOT0.insert( PTOT0.end(), _vPARVAL[s].cbegin(), _vPARVAL[s].cend() );
-#ifdef CANON__MBDOE_SOLVE_DEBUG
-    std::cout << "P[" << s << "] = ";
-    for( unsigned i=0; i<_np; i++ )
-      std::cout << _vPARVAL[s][i] << "  ";
-    std::cout << std::endl;
-#endif
-  }
   
   // Concatenate experimental controls
   size_t const NCTOT = _nc * NSUP;
@@ -1795,38 +1719,29 @@ MBDOESLV::_gradient_maximize_fim
     CTOTUB.insert( CTOTUB.end(), _vCONUB.cbegin(), _vCONUB.cend() );
   }
 
-  // Define cost function
-  std::vector<FFVar> DOECRIT( NUNC );
-  std::vector<FFVar> FIMREF;
-  FFVar const* PREF = PTOT.data();
-  for( unsigned s=0; s<NUNC; ++s, PREF+=_np ){
-    // Define FIM and DOE criterion in current scenario
-    _build_fim( FIMREF, CTOT, PREF, EOpt, os );
-    DOECRIT[s] = OpDOECrit( FIMREF.size(), FIMREF.data() );
+  // Define FIM criteria
+  FFVar const*const* ppFIMCrit = OpFIMCrit( CTOT.data(), _dag, &_vPAR, &_vCON, &_vFIM, &EOpt, &_vPARVAL );
 #ifdef CANON__MBDOE_SOLVE_DEBUG
-    _dagdoe->output( _dagdoe->subgraph( 1, &DOECRIT[s] ), " J["+std::to_string(s)+"]" );
-    { int dum; std::cout << "Paused"; std::cin >> dum; }
+  _dagdoe->output( _dagdoe->subgraph( NUNC, &FIMCrit[0] ), " DOECrit" );
 #endif
-  }
 
   // Local NLP optimization
   NLP doeref;
-  FFDOEBase::type  = options.CRITERION;
+  FFDOEBase::type = options.CRITERION;
   FFDOEBase::set_scaling( _vPARSCA );
   doeref.options = options.NLPSLV;
   doeref.set_dag( _dagdoe ); // DAG
-  doeref.add_par( NPTOT, PTOT.data() ); // parameters
   doeref.add_var( NCTOT, CTOT.data(), CTOTLB.data(), CTOTUB.data() ); // decision variables
  
   switch( options.RISK){
     case Options::NEUTRAL:
     {
-      //FFVar FFIM = Sum( NUNC, DOECRIT.data(), _vPARWEI.data() );
+      //FFVar FFIM = Sum( NUNC, ppFIMCrit.data(), _vPARWEI.data() );
       //double DFIM;
-      //_dagdoe->eval( 1, &FFIM, &DFIM, NCTOT, CTOT.data(), CTOT0.data(), NPTOT, PTOT.data(), PTOT0.data() );
+      //_dagdoe->eval( 1, &FFIM, &DFIM, NCTOT, CTOT.data(), CTOT0.data() );
       //std::cout << "DOPT = " << DFIM << std::endl;
       //{ int dum; std::cout << "Paused"; std::cin >> dum; }
-      doeref.set_obj( BASE_OPT::MAX, Sum( NUNC, DOECRIT.data(), _vPARWEI.data() ) ); // objective
+      doeref.set_obj( BASE_OPT::MAX, Sum( NUNC, ppFIMCrit, _vPARWEI.data() ) ); // objective
       break;
     }
     case Options::AVERSE:
@@ -1843,13 +1758,13 @@ MBDOESLV::_gradient_maximize_fim
       doeref.add_var( VaR );//, -1e2, 1e2 );
       doeref.set_obj( BASE_OPT::MAX, VaR - Sum( NUNC, DELTA.data(), _vPARWEI.data() ) / options.CVARTHRES );
       for( unsigned s=0; s<NUNC; s++ )
-        doeref.add_ctr( BASE_OPT::LE, VaR - DELTA[s] - DOECRIT[s] );
+        doeref.add_ctr( BASE_OPT::LE, VaR - DELTA[s] - *ppFIMCrit[s] );
       break;
     }
   }
 
   doeref.setup();
-  doeref.solve( CTOT0.data(), nullptr, nullptr, PTOT0.data() );
+  doeref.solve( CTOT0.data() );
 
   if( options.DISPLEVEL > 1 )
     os << "#  FEASIBLE:   " << doeref.is_feasible( 1e-6 )   << std::endl
@@ -1860,7 +1775,9 @@ MBDOESLV::_gradient_maximize_fim
     _SOpt.clear();
     _VOpt = 0./0.;
  
-    if( doeref.get_status() == NLP::SUCCESSFUL || doeref.get_status() == NLP::FAILURE ){
+    if( doeref.get_status() == NLP::SUCCESSFUL
+     || doeref.get_status() == NLP::FAILURE
+     || doeref.get_status() == NLP::INTERRUPTED ){
       double const* dC = doeref.solution().x.data();
       for( auto const& [ndx,eff] : EOpt ){
         _SOpt[ndx] = std::vector<double>( dC, dC+_nc );
