@@ -5,7 +5,7 @@ include $(PATH_CANON)/src/makeoptions.mk
 
 #####
 
-all : test0 test1 test2 test3
+all : test0 test1 test2 test3 test4
 
 test% : test%.o
 	$(CPP) $< $(LIB_CANON) -o $@

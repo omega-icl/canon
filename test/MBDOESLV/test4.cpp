@@ -15,20 +15,18 @@ int main()
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
   DAG.options.MAXTHREAD = 0;
 
-  const size_t NS = 5;  // Time stages
+  const size_t NS = 10;  // Time stages
   std::vector<double> tk( NS+1 );
   tk[0] = 0.;
-  for( size_t k=0; k<NS; k++ ) tk[k+1] = tk[k] + 2e0; // [hour]
+  for( size_t k=0; k<NS; k++ ) tk[k+1] = tk[k] + 1e0; // [hour]
 
-  const size_t NC = 3;  // Number of experimental controls
+  const size_t NC = NS+2;  // Number of experimental controls
   std::vector<mc::FFVar> C( NC );  // Controls
   for( size_t i=0; i<NC; i++ ) C[i].set( &DAG );
-  C[0].set("u1");
-  C[1].set("u2");
-  C[2].set("y10");
-  mc::FFVar& u1  = C[0];
-  mc::FFVar& u2  = C[1];
-  mc::FFVar& y10 = C[2];
+  C[NS].set("y2in");
+  C[NS+1].set("y10");
+  mc::FFVar& y2in = C[NS];
+  mc::FFVar& y10  = C[NS+1];
 
   const size_t NP = 4;  // Number of estimated parameters
   std::vector<mc::FFVar> P( NP );  // Parameters
@@ -50,17 +48,13 @@ int main()
   mc::FFVar& y1  = X[0]; // biomass
   mc::FFVar& y2  = X[1]; // substrate
 
-  std::vector<mc::FFVar> RHS( NX );  // Right-hand side function
-  mc::FFVar r = p1 * y2 / ( p2 + y2 );
-  RHS[0]   = ( r - u1 - p4 ) * y1;
-  RHS[1] = -r * y1 / p3 + u1 * ( u2 - y2 );
-
-//  std::vector<mc::FFVar> RHS( NX*NS );  // Right-hand side function
-//  for( size_t i=0; i<NS; i++ ){
-//    mc::FFVar r = p1 * y2 / ( p2 + y2 );
-//    RHS[NX*i]   = ( r - u1 - p4 ) * y1;
-//    RHS[NX*i+1] = -r * y1 / p3 + u1 * ( u2 - y2 );
-//  }
+  std::vector<std::vector<mc::FFVar>> RHS( NS, std::vector<mc::FFVar>(NX) );  // Right-hand side function
+  for( size_t i=0; i<NS; i++ ){
+    mc::FFVar& d = C[i]; C[i].set("d");
+    mc::FFVar r = p1 * y2 / ( p2 + y2 );
+    RHS[i][0]   = ( r - d - p4 ) * y1;
+    RHS[i][1] = -r * y1 / p3 + d * ( y2in - y2 );
+  }
   
   std::vector<mc::FFVar> IC( NX );   // Initial value function
   IC[0] = y10; //7e0;
@@ -69,6 +63,8 @@ int main()
   const size_t NY = 2;  // Number of outputs
   std::vector<std::vector<mc::FFVar>> FCT( NS, std::vector<mc::FFVar>( NY*NS, 0. ) );  // State functions
   for( size_t i=0; i<NS; i++ ){
+    if( !(i%2) ) continue; // measurement at the end of every other time stage
+    std::cout << "Measurement at t=" << tk[i+1] << std::endl;
     FCT[i][NY*i]   = y1;
     FCT[i][NY*i+1] = y2;
   }
@@ -123,7 +119,7 @@ int main()
   size_t const NEXP = 5;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NPSAM = 512;
+  size_t const NPSAM = 512; // 512
   std::vector<double> PLB( NP ), PUB( NP );
 //  PLB[0] =  PUB[0] = 0.31;
 //  PLB[1] =  PUB[1] = 0.18;
@@ -140,17 +136,16 @@ int main()
   PLB[3] = dP[3]*6e-1;  PUB[3] = dP[3]*14e-1;
 
   // Experimental control space
-  size_t const NCSAM = 128;
-  std::vector<double> CLB( NC ), CUB( NC );
-  CLB[0] = 5e-2;   CUB[0] = 2e-1;
-  CLB[1] = 5e0;    CUB[1] = 35e0;
-  CLB[2] = 1e0;    CUB[2] = 1e1;
+  size_t const NCSAM = 256; // 512
+  std::vector<double> CLB( NC, 5e-2 ), CUB( NC, 2e-1 );
+  CLB[NS] = 5e0;      CUB[NS] = 35e0;
+  CLB[NS+1] = 1e0;    CUB[NS+1] = 1e1;
 
   // Output variance
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.options.CVARTHRES = 0.25;
   DOE.options.UNCREDUC  = 10;
@@ -158,9 +153,8 @@ int main()
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.MAXITER = 100;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
-  DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
+  DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
-  DOE.options.MINLPSLV.NLPSLV.GRADMETH = DOE.options.MINLPSLV.NLPSLV.FAD;
   DOE.options.NLPSLV.OPTIMTOL  = 1e-5;
   DOE.options.NLPSLV.MAXITER   = 250;
   DOE.options.NLPSLV.DISPLEVEL = 1;
@@ -168,18 +162,8 @@ int main()
   DOE.options.NLPSLV.GRADMETH = DOE.options.NLPSLV.FSYM;//FAD;
   DOE.set_dag( DAG );
   DOE.set_model( Y, YVAR );
-  DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
   DOE.set_controls( C, CLB, CUB );
-
-  std::list<std::pair<double,std::vector<double>>> prior_campaign
-  {
-    //{ 1, { CLB[0], CLB[1], CLB[2] } },
-    //{ 1, { CLB[0], CUB[1], CUB[2] } },
-    //{ 1, { CUB[0], CLB[1], CUB[2] } },
-    //{ 1, { CUB[0], CUB[1], CLB[2] } },
-    { 1, { (CLB[0]+CUB[0])/2., (CLB[1]+CUB[1])/2., (CLB[2]+CUB[2])/2. } }
-  };
-  DOE.add_prior_campaign( prior_campaign );
+  DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
 
   // Solve MBDOE
   DOE.setup();
@@ -192,79 +176,7 @@ int main()
   //DOE.file_export( "test2" );
   auto campaign = DOE.campaign();
 
-/*
-  // Sobol samples campaign
-  std::list<std::pair<double,std::vector<double>>> campaign;
-  for( auto const& c : DOE.uniform_sample( NEXP, CLB, CUB ) )
-    campaign.insert( std::make_pair( 1, c ) );
-*/
-/*
-  // Factorial fractional campaign
-  std::list<std::pair<double,std::vector<double>>> campaign
-  {
-    { 1, { CLB[0], CLB[1], CLB[2] } },
-    { 1, { CLB[0], CUB[1], CUB[2] } },
-    { 1, { CUB[0], CLB[1], CUB[2] } },
-    { 1, { CUB[0], CUB[1], CLB[2] } },
-    { 1, { (CLB[0]+CUB[0])/2., (CLB[1]+CUB[1])/2., (CLB[2]+CUB[2])/2. } }
-  };
-
-//  PLB[0] = 1e-1;  PUB[0] = 1e0;
-//  PLB[1] = 5e-2;  PUB[1] = 1e0;
-//  PLB[2] = 1e-1;  PUB[2] = 2e0;
-//  PLB[3] = 1e-2;  PUB[3] = 2e-1;
-  PLB[0] = dP[0]*6e-1;  PUB[0] = dP[0]*14e-1;
-  PLB[1] = dP[1]*6e-1;  PUB[1] = dP[1]*14e-1;
-  PLB[2] = dP[2]*6e-1;  PUB[2] = dP[2]*14e-1;
-  PLB[3] = dP[3]*6e-1;  PUB[3] = dP[3]*14e-1;
-*/
-/*
-  // DOPT-NEUTRAL DESIGN PERFORMANCE (500 SCENARIOS): 4.10510e+01
-  std::list<std::pair<double,std::vector<double>>> campaign
-  {
-    // SUPPORT #0: 1 x [ 2.00000e-01 3.50000e+01 1.00000e+00 ]
-    { 1, { 2.00000e-01, 3.50000e+01, 1.00000e+00 } },
-    // SUPPORT #1: 1 x [ 2.00000e-01 3.50000e+01 1.00000e+01 ]
-    { 1, { 2.00000e-01, 3.50000e+01, 1.00000e+01 } },
-    // SUPPORT #2: 1 x [ 5.00000e-02 5.00000e+00 1.00000e+01 ]
-    { 1, { 5.00000e-02, 5.00000e+00, 1.00000e+01 } },
-    // SUPPORT #3: 1 x [ 2.00000e-01 3.50000e+01 3.40299e+00 ]
-    { 1, { 2.00000e-01, 3.50000e+01, 3.40299e+00 } },
-    // SUPPORT #4: 1 x [ 7.91125e-02 3.50000e+01 1.00000e+01 ]
-    { 1, { 7.91125e-02, 3.50000e+01, 1.00000e+01 } },
-  };
-
-  // DOPT-AVERSE DESIGN PERFORMANCE (500 SCENARIOS): 3.65305e+01
-  std::list<std::pair<double,std::vector<double>>> campaign
-  {
-    // SUPPORT #0: 1 x [ 1.57195e-01 3.50000e+01 1.00000e+01 ]
-    { 1, { 1.57195e-01, 3.50000e+01, 1.00000e+01 } },
-    // SUPPORT #1: 1 x [ 5.26641e-02 3.50000e+01 1.00000e+01 ]
-    { 1, { 5.26641e-02, 3.50000e+01, 1.00000e+01 } },
-    // SUPPORT #2: 1 x [ 5.00000e-02 5.00000e+00 1.00000e+01 ]
-    { 1, { 5.00000e-02, 5.00000e+00, 1.00000e+01 } },
-    // SUPPORT #3: 2 x [ 2.00000e-01 3.50000e+01 1.00000e+00 ]
-    { 2, { 2.00000e-01, 3.50000e+01, 1.00000e+00 } },
-  };
-
-  // DOPT-LOCAL DESIGN PERFORMANCE: 4.79623e+01
-  std::list<std::pair<double,std::vector<double>>> campaign
-  {
-    // SUPPORT #0: 1 x [ 5.00000e-02 5.00000e+00 1.00000e+01 ]
-    { 1, { 5.00000e-02, 5.00000e+00, 1.00000e+01 } },
-    // SUPPORT #1: 2 x [ 2.00000e-01 3.27941e+01 1.00000e+01 ]
-    { 2, { 2.00000e-01, 3.27941e+01, 1.00000e+01 } },
-    // SUPPORT #2: 2 x [ 2.00000e-01 3.50000e+01 7.34141e+00 ]
-    { 2, { 2.00000e-01, 3.50000e+01, 7.34141e+00 } },
-  };
-*/
-
   DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
-  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
-  DOE.setup();
-  DOE.evaluate_design( campaign, "BROPT" );
-  
   DOE.options.CRITERION = mc::FFDOEBase::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
@@ -275,8 +187,13 @@ int main()
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-AVERSE" );
 
-  //return 0;
-  
+  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
+  DOE.setup();
+  DOE.evaluate_design( campaign, "BROPT" );
+
+  return 0;
+
   /////////////////////////////////////////////////////////////////////////
   // Confidence analysis
 

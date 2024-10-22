@@ -1209,6 +1209,10 @@ void
 NLPSLV_SNOPT::_set_gradient
 ()
 {
+#ifdef MC__NLPSLV_SNOPT_TRACE
+  std::cout << "entering: _set_gradient" << std::endl;
+#endif
+
   // sparse linear function gradients
   _iAfun.clear(); _jAvar.clear(); _Avar.clear(); 
   for( auto const& iF : _Andx ){
@@ -1270,6 +1274,16 @@ NLPSLV_SNOPT::_set_gradient
   }
   _nG = _jGvar.size();
   _cleanup_gradient();
+
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+  std::cout << "_dag = " << _dag << std::endl;
+  std::cout << "_nG = " << _nG << std::endl;
+  _dag->output( _dag->subgraph( _Gvar ) );
+  { int dum; std::cout << "ENTER <1> TO CONTINUE"; std::cin >> dum; }
+#endif
+#ifdef MC__NLPSLV_SNOPT_TRACE
+  std::cout << "exiting: _set_gradient" << std::endl;
+#endif
 }
 
 inline

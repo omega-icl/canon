@@ -39,6 +39,9 @@ protected:
   //! @brief Size of experimental control
   size_t _nc;
 
+  //! @brief Size of prior experiments
+  size_t _ne0;
+
   //! @brief vector of model outputs
   std::vector<FFVar> _vOUT;
 
@@ -66,10 +69,16 @@ protected:
   //! @brief vector of experimental control upper bounds
   std::vector<double> _vCONUB;
 
+  //! @brief vector of prior experimental control values
+  std::vector<std::vector<double>> _vCONAP;
+
+  //! @brief vector of prior experimental effort values
+  std::vector<double> _vEFFAP;
+
 public:
   //! @brief Class constructor
   BASE_MBDOE()
-    : _dag(nullptr), _ny(0), _np(0), _nc(0)
+    : _dag(nullptr), _ny(0), _np(0), _nc(0), _ne0(0)
     {}
 
   //! @brief Class destructor
@@ -185,6 +194,48 @@ public:
       _vCON   = C;
       _vCONLB = CLB;
       _vCONUB = CUB;
+    }
+
+  //! @brief Set prior experimental campaign
+  void add_prior_campaign
+    ( std::list<std::pair<double,std::vector<double>>> const& C )
+    {
+      for( auto const& [E0,C0] : C ){
+        _vCONAP.push_back( C0 );
+        _vEFFAP.push_back( E0 );
+      }
+      _ne0 = _vCONAP.size();
+    }
+
+  //! @brief Set prior experimental campaign
+  void set_prior_campaign
+    ( std::list<std::pair<double,std::vector<double>>> const& C )
+    {
+      reset_prior_campaign();
+      add_prior_campaign( C );
+    }
+
+  //! @brief Set prior experimental campaign
+  void reset_prior_campaign
+    ()
+    {
+      _vCONAP.clear();
+      _vEFFAP.clear();
+      _ne0 = 0;
+
+    }
+
+  //! @brief Set prior experimental campaign
+  std::list<std::pair<double,std::vector<double>>> prior_campaign
+    ()
+    {
+      assert( _vCONAP.size() == _vEFFAP.size() );
+      std::list<std::pair<double,std::vector<double>>> C;
+      auto iteff = _vEFFAP.cbegin();
+      auto itsup = _vCONAP.cbegin();
+      for( ; iteff != _vEFFAP.cend(); ++iteff, ++itsup )
+        C.push_back( { *iteff, *itsup } );
+      return C;
     }
 
   //! @brief Set uniform sample within bounds

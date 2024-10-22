@@ -946,6 +946,7 @@ MINLPSLV<T,NLP,MIP>::setup
   std::cout << "_dag = " << _dag << std::endl;
   std::cout << "_nF = " << _nF << std::endl;
   _dag->output( _dag->subgraph( _nF, _Fvar.data() ) );
+  { int dum; std::cout << "ENTER <1> TO CONTINUE"; std::cin >> dum; }
 #endif
 
   // linear and nonlinear functions

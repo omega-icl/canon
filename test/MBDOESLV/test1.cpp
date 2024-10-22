@@ -165,7 +165,7 @@ int main()
 
 /*
   // Sobol samples campaign
-  std::multimap<double,std::vector<double>> campaign;
+  std::list<std::pair<double,std::vector<double>>> campaign;
   for( auto const& c : DOE.uniform_sample( NEXP, CLB, CUB ) )
     campaign.insert( std::make_pair( 1, c ) );
 */
@@ -177,7 +177,7 @@ int main()
   DOE.set_parameters( K, DOE.uniform_sample( 200, KLB, KUB ) );
 */
 /*
-  std::multimap<double,std::vector<double>> campaign // ** EFFORT-BASED EXACT DESIGN: 2.58167e+01
+  std::list<std::pair<double,std::vector<double>>> campaign // ** EFFORT-BASED EXACT DESIGN: 2.58167e+01
   {
     //SUPPORT #100: 2 x [ 1.00000e-01 7.31311e-02 0.00000e+00 0.00000e+00 3.23150e+02 ]
     { 2, { 1.00000e-01, 7.31311e-02, 0.00000e+00, 0.00000e+00, 3.23150e+02 } },
