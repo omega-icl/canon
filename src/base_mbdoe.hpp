@@ -12,6 +12,7 @@
 #include <boost/random/sobol.hpp>
 #include <boost/random/uniform_01.hpp>
 #include <boost/random/variate_generator.hpp>
+#include <armadillo>
 
 #include "ffunc.hpp"
 #include "odeslvs_cvodes.hpp"
@@ -27,6 +28,7 @@ namespace mc
 class BASE_MBDOE
 {
 protected:
+
   //! @brief pointer to DAG of equation
   FFGraph* _dag;
 
@@ -57,8 +59,8 @@ protected:
   //! @brief list of model parameter weights
   std::vector<double> _vPARWEI;
 
-  //! @brief vector fo model parameter scaling factors
-  std::vector<double> _vPARSCA;
+  //! @brief matrix of model parameter scaling factors
+  arma::mat _mPARSCA;
 
   //! @brief vector of experimental controls
   std::vector<FFVar> _vCON;
@@ -76,6 +78,15 @@ protected:
   std::vector<double> _vEFFAP;
 
 public:
+
+  // Criterion type
+  enum TYPE{
+    AOPT=0,
+    DOPT,
+    EOPT,
+    BROPT
+  };
+
   //! @brief Class constructor
   BASE_MBDOE()
     : _dag(nullptr), _ny(0), _np(0), _nc(0), _ne0(0)
@@ -123,6 +134,15 @@ public:
       _vOUTVAR = varY;
     }
 
+  //! @brief Set nominal model parameters and parameter scaling
+  void set_parameters
+    ( std::vector<FFVar> const& P, std::vector<double> const& valP,
+      arma::mat const& scaP )
+    {
+      set_parameters( P, valP );
+      _mPARSCA = scaP;
+    }
+
   //! @brief Set nominal model parameters
   void set_parameters
     ( std::vector<FFVar> const& P, std::vector<double> const& valP,
@@ -136,7 +156,19 @@ public:
       _vPARWEI.assign( 1, 1. );
 
       assert( scaP.empty() || scaP.size() == _np );
-      _vPARSCA = scaP;
+      _mPARSCA.reset();
+      if( !scaP.empty() )
+        _mPARSCA = arma::diagmat( arma::vec( scaP ) );
+        //_mPARSCA = arma::inv( arma::diagmat( arma::vec( scaP ) ) );
+    }
+
+  //! @brief Set list of model parameters and parameter scaling
+  void set_parameters
+    ( std::vector<FFVar> const& P, std::list<std::vector<double>> const& l_valP,
+      arma::mat const& scaP )
+    {
+      set_parameters( P, l_valP );
+      _mPARSCA = scaP;
     }
 
   //! @brief Set list of model parameters
@@ -155,7 +187,19 @@ public:
       _vPARWEI.assign( _vPARVAL.size(), 1/(double)l_valP.size() ); // equal frequencies
 
       assert( scaP.empty() || scaP.size() == _np );
-      _vPARSCA = scaP;
+      _mPARSCA.reset();
+      if( !scaP.empty() )
+        _mPARSCA = arma::diagmat( arma::vec( scaP ) );
+        //_mPARSCA = arma::inv( arma::diagmat( arma::vec( scaP ) ) );
+    }
+
+  //! @brief Set list of model parameters and parameter scaling
+  void set_parameters
+    ( std::vector<FFVar> const& P, std::list<std::pair<std::vector<double>,double>> const& l_valP,
+      arma::mat const& scaP )
+    {
+      set_parameters( P, l_valP );
+      _mPARSCA = scaP;
     }
 
   //! @brief Set list of model parameters
@@ -182,7 +226,18 @@ public:
       }
 
       assert( scaP.empty() || scaP.size() == _np );
-      _vPARSCA = scaP;
+      _mPARSCA.reset();
+      if( !scaP.empty() )
+        _mPARSCA = arma::diagmat( arma::vec( scaP ) );
+        //_mPARSCA = arma::inv( arma::diagmat( arma::vec( scaP ) ) );
+    }
+
+  //! @brief Retreive parameter scaling
+  arma::mat parameter_scaling
+    ()
+    const
+    { 
+      return _mPARSCA;
     }
 
   //! @brief Set experimental controls
@@ -225,9 +280,10 @@ public:
 
     }
 
-  //! @brief Set prior experimental campaign
+  //! @brief Retreive prior experimental campaign
   std::list<std::pair<double,std::vector<double>>> prior_campaign
     ()
+    const
     {
       assert( _vCONAP.size() == _vEFFAP.size() );
       std::list<std::pair<double,std::vector<double>>> C;
@@ -251,6 +307,7 @@ public:
     ( unsigned const n, unsigned const* typ, double* val );
 
 private:
+
   //! @brief Private methods to block default compiler methods
   BASE_MBDOE( BASE_MBDOE const& ) = delete;
   BASE_MBDOE& operator=( BASE_MBDOE const& ) = delete;

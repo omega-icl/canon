@@ -48,7 +48,7 @@ int main()
   std::vector<double> YVAR( { 1e-1 } );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//BROPT;//
+  DOE.options.CRITERION = mc::MBDOESLV::BROPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
@@ -89,17 +89,17 @@ int main()
     { 3, { 1.56250e-02 } }
   };
 */
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
 
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-AVERSE" );
 
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
+  DOE.options.CRITERION = mc::MBDOESLV::BROPT;
   DOE.setup();
   DOE.evaluate_design( campaign, "BROPT" );
   

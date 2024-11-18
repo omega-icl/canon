@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <armadillo>
 
+#include "base_mbdoe.hpp"
+
 #define MC__FFBRCRIT_LOG
 #undef  MC__FFDCRIT_EIG
 #define MC__FFFIMCrit_CHECK
@@ -21,16 +23,8 @@ namespace mc
 ////////////////////////////////////////////////////////////////////////
 struct FFDOEBase
 {
-  // Criterion type
-  enum TYPE{
-    AOPT=0,
-    DOPT,
-    EOPT,
-    BROPT
-  };
-
   // Selected DOE criterion
-  static TYPE type;
+  static BASE_MBDOE::TYPE type;
 
   // Selected parameter scaling
   static arma::mat scaling;
@@ -43,6 +37,14 @@ struct FFDOEBase
         scaling = arma::inv( arma::diagmat( arma::vec( vscaling ) ) );
       else
         scaling.reset();
+      //std::cout << scaling;
+    }
+
+  // Set input scaling
+  static void set_scaling
+    ( arma::mat const& mscaling )
+    {
+      scaling = mscaling;
       //std::cout << scaling;
     }
 
@@ -92,7 +94,7 @@ struct FFDOEBase
     }
 };
 
-inline FFDOEBase::TYPE FFDOEBase::type = FFDOEBase::DOPT;
+inline BASE_MBDOE::TYPE FFDOEBase::type = BASE_MBDOE::DOPT;
 inline arma::mat FFDOEBase::scaling;
 inline arma::vec FFDOEBase::weighting;
 inline arma::mat FFDOEBase::sigmayinv;
@@ -228,9 +230,9 @@ public:
     const
     { 
       switch( FFDOEBase::type ){
-        case AOPT: return "-tr Inv";
-        case DOPT: return "log Det";
-        case EOPT: return "min Eig";
+        case BASE_MBDOE::AOPT: return "-tr Inv";
+        case BASE_MBDOE::DOPT: return "log Det";
+        case BASE_MBDOE::EOPT: return "min Eig";
         default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -358,9 +360,9 @@ public:
     const
     {
       switch( FFDOEBase::type ){
-        case AOPT: return "-Grad tr Inv";
-        case DOPT: return "Grad log Det";
-        case EOPT: return "Grad min Eig";
+        case BASE_MBDOE::AOPT: return "-Grad tr Inv";
+        case BASE_MBDOE::DOPT: return "Grad log Det";
+        case BASE_MBDOE::EOPT: return "Grad min Eig";
         default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -420,14 +422,14 @@ const
     for( size_t i=0; i<nVar; ++i ) // Atomic FIM of new experiment
       if( !e ) FIM  = vVar[0] * _vFIM->at(s).at(e++);
       else     FIM += vVar[i] * _vFIM->at(s).at(e++);
-    if( scaling.n_elem ) FIM = scaling * FIM * scaling;
+    if( scaling.n_elem ) FIM = arma::trans(scaling) * FIM * scaling;
 #ifdef MC__FFDOEEFF_DEBUG
     std::cout << "FIM: " << FIM;
     std::cout << "rank: " << arma::rank( FIM ) << std::endl;
 #endif
 
     switch( FFDOEBase::type ){
-      case AOPT:
+      case BASE_MBDOE::AOPT:
       {
         arma::vec FIMEIGVAL;
         if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIM ) )
@@ -438,7 +440,7 @@ const
         break;
       }
       
-      case DOPT:
+      case BASE_MBDOE::DOPT:
       {
 #if defined( MC__FFDCRIT_EIG )
         arma::vec FIMEIGVAL;
@@ -454,7 +456,7 @@ const
         break;
       }
       
-      case EOPT:
+      case BASE_MBDOE::EOPT:
       {
         arma::vec FIMEIGVAL;
         if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIM ) )
@@ -497,14 +499,14 @@ const
     for( size_t i=0; i<nVar; ++i ) // Atomic FIM of new experiment
       if( !e ) FIM  = vVar[0] * _vFIM->at(s).at(e++);
       else     FIM += vVar[i] * _vFIM->at(s).at(e++);
-    if( scaling.n_elem ) FIM = scaling * FIM * scaling;
+    if( scaling.n_elem ) FIM = arma::trans(scaling) * FIM * scaling;
 #ifdef MC__FFGRADDOEEFF_DEBUG
     std::cout << "FIM: " << FIM;
     std::cout << "rank: " << arma::rank( FIM ) << std::endl;
 #endif
 
     switch( FFDOEBase::type ){
-      case AOPT:
+      case BASE_MBDOE::AOPT:
       {
         arma::vec FIMEIGVAL;
         arma::mat FIMEIGVEC;
@@ -515,7 +517,7 @@ const
         std::cout << "FIM eigenvectors: " << FIMEIGVEC;
 #endif
         for( size_t i=0; i<nVar; ++i ){
-          if( scaling.n_elem ) FIMi = scaling * _vFIM->at(s).at(nAP+i) * scaling;
+          if( scaling.n_elem ) FIMi = arma::trans(scaling) * _vFIM->at(s).at(nAP+i) * scaling;
           else                 FIMi = _vFIM->at(s).at(nAP+i);
           vRes[s*nVar+i] = 0.;
           for( size_t k=0; k<FIM.n_rows; ++k ){
@@ -529,7 +531,7 @@ const
         break;
       }
       
-      case DOPT:
+      case BASE_MBDOE::DOPT:
       {
 #if defined( MC__FFDCRIT_EIG )
         arma::vec FIMEIGVAL;
@@ -541,7 +543,7 @@ const
         std::cout << "FIM eigenvectors: " << FIMEIGVEC;
 #endif
         for( size_t i=0; i<nVar; ++i ){
-          if( scaling.n_elem ) FIMi = scaling * _vFIM->at(s).at(nAP+i) * scaling;
+          if( scaling.n_elem ) FIMi = arma::trans(scaling) * _vFIM->at(s).at(nAP+i) * scaling;
           else                 FIMi = _vFIM->at(s).at(nAP+i);
           vRes[s*nVar+i] = 0.;
           for( size_t k=0; k<FIM.n_rows; ++k ){
@@ -560,7 +562,7 @@ const
         std::cout << "FIM Cholesky decomposition: " << L;
 #endif
         for( size_t i=0; i<nVar; ++i ){
-          if( scaling.n_elem ) FIMi = scaling * _vFIM->at(s).at(nAP+i) * scaling;
+          if( scaling.n_elem ) FIMi = arma::trans(scaling) * _vFIM->at(s).at(nAP+i) * scaling;
           else                 FIMi = _vFIM->at(s).at(nAP+i);
           if( !arma::solve( Y, trimatl(L), FIMi ) )  // indicate that L is lower triangular
             throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
@@ -575,7 +577,7 @@ const
         break;
       }
       
-      case EOPT:
+      case BASE_MBDOE::EOPT:
       {
         arma::vec FIMEIGVAL;
         arma::mat FIMEIGVEC;
@@ -586,7 +588,7 @@ const
         std::cout << "FIM min eigenvector: " << FIMEIGVEC.col(0);
 #endif
         for( size_t i=0; i<nVar; ++i ){
-          if( scaling.n_elem ) FIMi = scaling * _vFIM->at(s).at(nAP+i) * scaling;
+          if( scaling.n_elem ) FIMi = arma::trans(scaling) * _vFIM->at(s).at(nAP+i) * scaling;
           else                 FIMi = _vFIM->at(s).at(nAP+i);
           arma::mat const& Et_FIM_E = FIMEIGVEC.col(0).t() * FIMi * FIMEIGVEC.col(0); 
           vRes[s*nVar+i] = Et_FIM_E(0,0);
@@ -807,7 +809,7 @@ public:
     const
     { 
       switch( FFDOEBase::type ){
-        case BROPT: return "Bayes Risk";
+        case BASE_MBDOE::BROPT: return "Bayes Risk";
         default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -935,7 +937,7 @@ public:
     const
     {
       switch( FFDOEBase::type ){
-        case BROPT: return "Grad Bayes Risk";
+        case BASE_MBDOE::BROPT: return "Grad Bayes Risk";
         default:    throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -1219,6 +1221,464 @@ const
 
 ////////////////////////////////////////////////////////////////////////
 
+class FFODISTEff
+: public FFOp,
+  public FFDOEBase
+{
+private:
+
+  // Reference support
+  size_t _ndxSUPP;
+
+  // Output vectors
+  std::vector<std::vector<arma::vec>> const* _vOUT;
+
+  // Prior experimental efforts
+  std::vector<double> const* _vEFFAP;
+    
+public:
+
+  void set
+    ( size_t const ndxSUPP, std::vector<std::vector<arma::vec>> const* vOUT, std::vector<double> const* vEFFAP )
+    {
+#ifdef MC__FFODISTEFF_CHECK
+      assert( vOUT && vEFFAP );
+#endif
+      _ndxSUPP = ndxSUPP;
+      _vOUT    = vOUT;
+      _vEFFAP  = vEFFAP;
+    }
+
+  // Default constructor
+  FFODISTEff
+    ()
+    : FFOp( EXTERN )
+    {}
+    
+  // Copy constructor
+  FFODISTEff
+    ( FFODISTEff const& Op )
+    : FFOp( Op ),
+      _ndxSUPP( Op._ndxSUPP ),
+      _vOUT( Op._vOUT ),
+      _vEFFAP( Op._vEFFAP )
+    {}
+
+  // Define operation
+  FFVar& operator()
+    ( std::vector<FFVar> const& vVar, size_t const ndxSUPP,
+      std::vector<std::vector<arma::vec>> const* vOUT, std::vector<double> const* vEFFAP )
+    {
+#ifdef MC__FFODISTEFF_CHECK
+      assert( vOUT && vEFFAP );
+#endif
+      set( ndxSUPP, vOUT, vEFFAP );
+      return **insert_external_operation( *this, 1, vVar.size(), vVar.data() );
+    }
+
+  // Evaluation overloads
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
+    const
+    {
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<FFVar> ) )
+        return eval( nRes, static_cast<fadbad::F<FFVar>*>(vRes), nVar, static_cast<fadbad::F<FFVar> const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+      else if( idU == typeid( fadbad::F<double> ) )
+        return eval( nRes, static_cast<fadbad::F<double>*>(vRes), nVar, static_cast<fadbad::F<double> const*>(vVar), mVar );
+//      else if( idU == typeid( SLiftVar ) )
+//        return eval( nRes, static_cast<SLiftVar*>(vRes), nVar, static_cast<SLiftVar const*>(vVar), mVar );
+//      else if( idU == typeid( FFExpr ) )
+//        return eval( nRes, static_cast<FFExpr*>(vRes), nVar, static_cast<FFExpr const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFODISTEff::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
+    }
+
+  void eval
+    ( unsigned const nRes, FFDep* vRes, unsigned const nVar, FFDep const* vVar, unsigned const* mVar )
+    const
+    {
+#ifdef MC__FFODISTEFF_TRACE
+      std::cout << "FFODISTEff::eval: FFDep\n";
+#endif
+      vRes[0] = 0;
+      for( size_t i=0; i<nVar; ++i ) vRes[0] += vVar[i];
+      vRes[0].update( FFDep::TYPE::N );
+    }
+    
+  void eval
+    ( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+    const;
+
+  void eval
+    ( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+      unsigned const* mVar )
+    const;
+    
+  void eval
+    ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+    const;
+
+  void eval
+    ( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
+      unsigned const* mVar )
+    const;
+
+  void deriv
+    ( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
+    const;
+
+  // Properties
+  std::string name
+    ()
+    const
+    { 
+      switch( FFDOEBase::type ){
+        case BASE_MBDOE::BROPT: return "Operable Span";
+        default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+      }
+    }
+
+  //! @brief Return whether or not operation is commutative
+  bool commutative
+    ()
+    const
+    { return false; }
+};
+
+class FFGradODISTEff
+: public FFOp,
+  public FFDOEBase
+{
+private:
+
+  // Reference support
+  size_t _ndxSUPP;
+
+  // FIM marices
+  std::vector<std::vector<arma::vec>> const* _vOUT;
+
+  // Prior experimental efforts
+  std::vector<double> const* _vEFFAP;
+    
+public:
+
+  void set
+    ( size_t const ndxSUPP, std::vector<std::vector<arma::vec>> const* vOUT, std::vector<double> const* vEFFAP )
+    {
+#ifdef MC__FFGRADODISTEFF_CHECK
+      assert( vOUT && vEFFAP );
+#endif
+      _ndxSUPP = ndxSUPP;
+      _vOUT    = vOUT;
+      _vEFFAP  = vEFFAP;
+    }
+
+  // Default constructor
+  FFGradODISTEff
+    ()
+    : FFOp( EXTERN )
+    {}
+    
+  // Copy constructor
+  FFGradODISTEff
+    ( FFGradODISTEff const& Op )
+    : FFOp( Op ),
+      _ndxSUPP( Op._ndxSUPP ),
+      _vOUT( Op._vOUT ),
+      _vEFFAP( Op._vEFFAP )
+    {}
+
+  // Define operation
+  FFVar& operator()
+    ( size_t const idep, std::vector<FFVar> const& vVar, size_t const ndxSUPP,
+      std::vector<std::vector<arma::vec>> const* vOUT, std::vector<double> const* vEFFAP )
+    {
+      size_t const nVar = vVar.size();
+#ifdef MC__FFGRADODISTEFF_CHECK
+      assert( idep < nVar && vOUT && vEFFAP );
+#endif
+      set( ndxSUPP, vOUT, vEFFAP );
+      return *(insert_external_operation( *this, nVar, nVar, vVar.data() )[idep]);
+    }
+
+  FFVar** operator()
+    ( std::vector<FFVar> const& vVar, size_t const ndxSUPP,
+      std::vector<std::vector<arma::vec>> const* vOUT, std::vector<double> const* vEFFAP )
+    {
+      size_t const nVar = vVar.size();
+#ifdef MC__FFGRADODISTEFF_CHECK
+      assert( vOUT && vEFFAP );
+#endif
+      set( ndxSUPP, vOUT, vEFFAP );
+      return insert_external_operation( *this, nVar, nVar, vVar.data() );
+    }
+
+  // Evaluation overloads
+  virtual void feval
+    ( std::type_info const& idU, unsigned const nRes, void* vRes, unsigned const nVar,
+      void const* vVar, unsigned const* mVar )
+    const
+    {
+      if( idU == typeid( FFVar ) )
+        return eval( nRes, static_cast<FFVar*>(vRes), nVar, static_cast<FFVar const*>(vVar), mVar );
+//      else if( idU == typeid( fadbad::F<FFVar> ) )
+//        return eval( nRes, static_cast<fadbad::F<FFVar>*>(vRes), nVar, static_cast<fadbad::F<FFVar> const*>(vVar), mVar );
+      else if( idU == typeid( FFDep ) )
+        return eval( nRes, static_cast<FFDep*>(vRes), nVar, static_cast<FFDep const*>(vVar), mVar );
+      else if( idU == typeid( double ) )
+        return eval( nRes, static_cast<double*>(vRes), nVar, static_cast<double const*>(vVar), mVar );
+//      else if( idU == typeid( fadbad::F<double> ) )
+//        return eval( nRes, static_cast<fadbad::F<double>*>(vRes), nVar, static_cast<fadbad::F<double> const*>(vVar), mVar );
+//      else if( idU == typeid( SLiftVar ) )
+//        return eval( nRes, static_cast<SLiftVar*>(vRes), nVar, static_cast<SLiftVar const*>(vVar), mVar );
+//      else if( idU == typeid( FFExpr ) )
+//        return eval( nRes, static_cast<FFExpr*>(vRes), nVar, static_cast<FFExpr const*>(vVar), mVar );
+
+      throw std::runtime_error( "FFGradODISTEff::feval ** No evaluation method for type"+std::string(idU.name())+"\n" );
+    }
+
+  void eval
+    ( unsigned const nRes, FFDep* vRes, unsigned const nVar, FFDep const* vVar, unsigned const* mVar )
+    const
+    {
+#ifdef MC__FFGRADODISTEFF_TRACE
+      std::cout << "FFGradODISTEff::eval: FFDep\n";
+#endif
+      vRes[0] = 0;
+      for( size_t i=0; i<nVar; ++i )
+        vRes[0] += vVar[i];
+      vRes[0].update( FFDep::TYPE::N );
+      for( size_t j=1; j<nRes; ++j )
+        vRes[j] = vRes[0];
+    }
+
+  void eval
+    ( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+    const;
+    
+  void eval
+    ( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+    const;
+
+  // Properties
+  std::string name
+    ()
+    const
+    {
+      switch( FFDOEBase::type ){
+        case BASE_MBDOE::BROPT: return "Grad Operable Span";
+        default:    throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+      }
+    }
+  //! @brief Return whether or not operation is commutative
+  bool commutative
+    ()
+    const
+    { return false; }
+};
+
+inline void
+FFODISTEff::eval
+( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFODISTEFF_TRACE
+  std::cout << "FFODISTEff::eval: FFVar\n";
+#endif
+#ifdef MC__FFODISTEFF_CHECK
+  assert( nRes == 1 );
+#endif
+
+  vRes[0] = **insert_external_operation( *this, 1, nVar, vVar );
+}
+
+inline void
+FFGradODISTEff::eval
+( unsigned const nRes, FFVar* vRes, unsigned const nVar, FFVar const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFGRAODISTREFF_TRACE
+  std::cout << "FFGradODISTEff::eval: FFVar\n";
+#endif
+#ifdef MC__FFGRADODISTEFF_CHECK
+  assert( nRes == nVar );
+#endif
+
+  FFVar** ppRes = insert_external_operation( *this, nRes, nVar, vVar );;
+  for( size_t j=0; j<nRes; ++j )
+    vRes[j] = *(ppRes[j]);
+}
+
+inline void
+FFODISTEff::eval
+( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFODISTEFF_TRACE
+  std::cout << "FFODISTEff::eval: double\n";
+#endif
+#ifdef MC__FFODISTEFF_CHECK
+  assert( _vOUT && !_vOUT->empty() && nRes == 1 && nVar == _vOUT->back().size()-_vEFFAP->size() );
+#endif
+
+  auto OperDist = [&]( size_t e1, size_t e2 ) -> double {
+      double Dist = 0.;
+      for( size_t j=0; j<_vOUT->size(); ++j ){
+#ifdef MC__FFODISTEFF_DEBUG
+        std::cout << "y[" << e1 << "][" << j << "] = " << _vOUT->at(j).at(e1);
+        std::cout << "y[" << e2 << "][" << j << "] = " << _vOUT->at(j).at(e2);
+#endif
+        arma::vec const& dOUT12  = _vOUT->at(j).at(e1) - _vOUT->at(j).at(e2);
+        arma::mat norm12(1,1,arma::fill::none);
+        if( !sigmayinv.empty() ) norm12 = dOUT12.t() * sigmayinv * dOUT12;
+        else                     norm12 = dOUT12.t() * dOUT12;
+        if( !weighting.empty() ) Dist += weighting(j) * norm12(0,0);
+        else                     Dist += norm12(0,0);
+      }
+      return Dist;
+  };
+
+  vRes[0] = 0.;
+  size_t e=0;
+  for( ; e<_vEFFAP->size(); ++e ) // Contributions from prior experiment
+    vRes[0] += OperDist( _ndxSUPP, e );
+  for( size_t i=0; i<nVar; ++i, ++e ){ // Contributions from new experiment
+    if( e == _ndxSUPP ) continue;
+    vRes[0] += vVar[i] * OperDist( _ndxSUPP, e );
+  }
+
+#ifdef MC__FFODISTEFF_DEBUG
+  std::cout << name() << " [" << 0 << "]: " << vRes[0] << std::endl;
+  { int dum; std::cout << "Press 1"; std::cin >> dum; }
+#endif
+}
+
+inline void
+FFGradODISTEff::eval
+( unsigned const nRes, double* vRes, unsigned const nVar, double const* vVar, unsigned const* mVar )
+const
+{
+#ifdef MC__FFGRADODISTEFF_TRACE
+  std::cout << "FFGradODISTEff::eval: double\n";
+#endif
+#ifdef MC__FFGRADODISTEFF_CHECK
+  assert( _vOUT && !_vOUT->empty() && nRes == nVar && nVar == _vOUT->back().size()-_vEFFAP->size() );
+#endif
+
+  auto OperDist = [&]( size_t e1, size_t e2 ) -> double {
+      double Dist = 0.;
+      for( size_t j=0; j<_vOUT->size(); ++j ){
+#ifdef MC__FFGRADODISTEFF_DEBUG
+        std::cout << "y[" << e1 << "][" << j << "] = " << _vOUT->at(j).at(e1);
+        std::cout << "y[" << e2 << "][" << j << "] = " << _vOUT->at(j).at(e2);
+#endif
+        arma::vec const& dOUT12  = _vOUT->at(j).at(e1) - _vOUT->at(j).at(e2);
+        arma::mat norm12(1,1,arma::fill::none);
+        if( !sigmayinv.empty() ) norm12 = dOUT12.t() * sigmayinv * dOUT12;
+        else                     norm12 = dOUT12.t() * dOUT12;
+        if( !weighting.empty() ) Dist += weighting(j) * norm12(0,0);
+        else                     Dist += norm12(0,0);
+      }
+      return Dist;
+  };
+
+  size_t e=_vEFFAP->size();
+  for( size_t i=0; i<nVar; ++i, ++e ) // Contributions from new experiment
+    vRes[i] = ( e==_ndxSUPP? 0.: OperDist( _ndxSUPP, e ) );
+
+#ifdef MC__FFGRADODISTEFF_DEBUG
+  for( size_t i=0; i<nVar; ++i )
+    std::cout << name() << " [" << i << "]: " << vRes[i] << std::endl;
+  { int dum; std::cout << "Press 1"; std::cin >> dum; }
+#endif
+}
+
+inline void
+FFODISTEff::eval
+( unsigned const nRes, fadbad::F<FFVar>* vRes, unsigned const nVar, fadbad::F<FFVar> const* vVar,
+  unsigned const* mVar )
+const
+{
+#ifdef MC__FFODISTEFF_TRACE
+  std::cout << "FFODISTEff::eval: fadbad::F<FFVar>\n";
+#endif
+
+  std::vector<FFVar> vVarVal( nVar );
+  for( size_t i=0; i<nVar; ++i )
+    vVarVal[i] = vVar[i].val();
+  vRes[0] = *(insert_external_operation( *this, 1, nVar, vVarVal.data() )[0]);
+  for( size_t i=0; i<nVar; ++i )
+    vRes[0].setDepend( vVar[i] );
+
+  FFGradODISTEff OpResDer;
+  OpResDer.set( _ndxSUPP, _vOUT, _vEFFAP );
+  FFVar const*const* ppResDer = insert_external_operation( OpResDer, nVar, nVar, vVarVal.data() );
+  for( size_t j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( size_t i=0; i<nVar; ++i ){
+      if( vVar[i][j].cst() && vVar[i][j].num().val() == 0. ) continue;
+      vRes[0][j] += *ppResDer[i] * vVar[i][j];
+    }
+  }
+}
+
+inline void
+FFODISTEff::eval
+( unsigned const nRes, fadbad::F<double>* vRes, unsigned const nVar, fadbad::F<double> const* vVar,
+  unsigned const* mVar )
+const
+{
+#ifdef MC__FFODISTEFF_TRACE
+  std::cout << "FFODISTEff::eval: fadbad::F<double>\n";
+#endif
+
+  std::vector<double> vVarVal( nVar );
+  for( size_t i=0; i<nVar; ++i )
+    vVarVal[i] = vVar[i].val();
+  double ResVal; 
+  eval( 1, &ResVal, nVar, vVarVal.data(), nullptr );
+  vRes[0] = ResVal;
+  for( size_t i=0; i<nVar; ++i )
+    vRes[0].setDepend( vVar[i] );
+
+  FFGradODISTEff OpResDer;
+  OpResDer.set( _ndxSUPP, _vOUT, _vEFFAP );
+  std::vector<double> vResDer( nVar ); 
+  OpResDer.eval( nVar, vResDer.data(), nVar, vVarVal.data(), nullptr );
+  for( size_t j=0; j<vRes[0].size(); ++j ){
+    vRes[0][j] = 0.;
+    for( size_t i=0; i<nVar; ++i ){
+      if( vVar[i][j] == 0. ) continue;
+      vRes[0][j] += vResDer[i] * vVar[i][j];
+    }
+  }
+}
+
+inline void
+FFODISTEff::deriv
+( unsigned const nRes, FFVar const* vRes, unsigned const nVar, FFVar const* vVar, FFVar** vDer )
+const
+{
+#ifdef MC__FFODISTEFF_TRACE
+  std::cout << "FFODISTEff::deriv\n";
+#endif
+
+  FFGradODISTEff OpResDer;
+  OpResDer.set( _ndxSUPP, _vOUT, _vEFFAP );
+  FFVar const*const* ppResDer = insert_external_operation( OpResDer, nVar, nVar, vVar ); 
+  for( size_t i=0; i<nVar; ++i )
+    vDer[0][i] = *ppResDer[i];
+}
+
+////////////////////////////////////////////////////////////////////////
+
 class FFFIMCrit
 : public FFOp,
   public FFDOEBase
@@ -1248,7 +1708,7 @@ private:
   // Number of controls
   size_t _nc;
   // Number of outputs
-  size_t _ny;
+//  size_t _ny;
   // Number of scenarios
   size_t _ns;
   // Number of experiments
@@ -1294,7 +1754,7 @@ public:
 
       _np = _FPAR->size();
       _nc = _FCON->size();
-      _ny = std::round( std::sqrt(2*_FFIM->size()+0.25) - 0.5 );
+//      _ny = std::round( std::sqrt(2*_FFIM->size()+0.25) - 0.5 );
       _ns = _DPAR->size();
       _ne = _EFF->size();
     }
@@ -1319,7 +1779,7 @@ public:
       _FIMAP( Op._FIMAP ),
       _np( Op._np ),
       _nc( Op._nc ),
-      _ny( Op._ny ),
+//      _ny( Op._ny ),
       _ns( Op._ns ),
       _ne( Op._ne )
     {}
@@ -1405,9 +1865,9 @@ public:
     const
     { 
       switch( FFDOEBase::type ){
-        case AOPT: return "-tr Inv";
-        case DOPT: return "log Det";
-        case EOPT: return "min Eig";
+        case BASE_MBDOE::AOPT: return "-tr Inv";
+        case BASE_MBDOE::DOPT: return "log Det";
+        case BASE_MBDOE::EOPT: return "min Eig";
         default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -1450,7 +1910,7 @@ private:
   // Number of controls
   size_t _nc;
   // Number of outputs
-  size_t _ny;
+//  size_t _ny;
   // Number of scenarios
   size_t _ns;
   // Number of experiments
@@ -1498,7 +1958,7 @@ public:
 
       _np = _FPAR->size();
       _nc = _FCON->size();
-      _ny = std::round( std::sqrt(2*fim->size()+0.25) - 0.5 );
+//      _ny = std::round( std::sqrt(2*fim->size()+0.25) - 0.5 );
       _ns = _DPAR->size();
       _ne = _EFF->size();
 
@@ -1539,7 +1999,7 @@ public:
       _FIMAP( Op._FIMAP ),
       _np( Op._np ),
       _nc( Op._nc ),
-      _ny( Op._ny ),
+//      _ny( Op._ny ),
       _ns( Op._ns ),
       _ne( Op._ne ),
       _FDCON( Op._FDCON )
@@ -1611,9 +2071,9 @@ public:
     const
     {
       switch( FFDOEBase::type ){
-        case AOPT: return "-Grad tr Inv";
-        case DOPT: return "Grad log Det";
-        case EOPT: return "Grad min Eig";
+        case BASE_MBDOE::AOPT: return "-Grad tr Inv";
+        case BASE_MBDOE::DOPT: return "Grad log Det";
+        case BASE_MBDOE::EOPT: return "Grad min Eig";
         default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -1697,49 +2157,50 @@ const
   std::cout << "FFDOECrit::_FIMCrit\n"; 
 #endif
 
-  arma::mat FIM( _ny, _ny, arma::fill::none );
-  for( size_t i=0, l=0; i<_ny; ++i )
-    for( size_t j=i; j<_ny; ++j, ++l )
+  arma::mat FIM( _np, _np, arma::fill::none );
+  for( size_t i=0, l=0; i<_np; ++i )
+    for( size_t j=i; j<_np; ++j, ++l )
       if( i == j ) FIM(i,i) = vfim[l]; 
       else         FIM(i,j) = FIM(j,i) = vfim[l];
-  if( scaling.n_elem ) FIM = scaling * FIM * scaling;
+  if( scaling.n_elem ) FIM = arma::trans(scaling) * FIM * scaling;
 #ifdef MC__FFDOECRIT_DEBUG
   std::cout << "FIM:\n" << FIM;
   std::cout << "rank: " << arma::rank( FIM ) << std::endl;
 #endif
 
   switch( FFDOEBase::type ){
-    case AOPT:
+    case BASE_MBDOE::AOPT:
     {
       arma::vec FIMEIGVAL;
-      if( arma::rank( FIM ) < _ny || !arma::eig_sym( FIMEIGVAL, FIM ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIM ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       crit = 0.;
-      for( size_t k=0; k<_ny; ++k )
+      for( size_t k=0; k<FIM.n_rows; ++k )
         crit -= 1./FIMEIGVAL(k);
       break;
     }
     
-    case DOPT:
+    case BASE_MBDOE::DOPT:
     {
 #if defined( MC__FFDCRIT_EIG )
       arma::vec FIMEIGVAL;
-      if( arma::rank( FIM ) < _ny || !arma::eig_sym( FIMEIGVAL, FIM ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIM ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       crit = 0.;
-      for( size_t k=0; k<_ny; ++k )
+      for( size_t k=0; k<FIM.n_rows; ++k )
         crit += std::log( FIMEIGVAL(k) );
+      std::cout << "FIMEIGVAL: " << arma::trans( FIMEIGVAL ) << std::endl;
 #else
-      if( arma::rank( FIM ) < _ny || !arma::log_det_sympd( crit, FIM ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::log_det_sympd( crit, FIM ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
 #endif
       break;
     }
     
-    case EOPT:
+    case BASE_MBDOE::EOPT:
     {
       arma::vec FIMEIGVAL;
-      if( arma::rank( FIM ) < _ny || !arma::eig_sym( FIMEIGVAL, FIM ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIM ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       crit = FIMEIGVAL(0);
       break;
@@ -1761,77 +2222,107 @@ const
   std::cout << "FFDOECrit::_FIMDerCrit\n"; 
 #endif
 
-  arma::mat FIM( _ny, _ny, arma::fill::none );
-  for( size_t i=0, l=0; i<_ny; ++i )
-    for( size_t j=i; j<_ny; ++j, ++l )
+  arma::mat FIM( _np, _np, arma::fill::none );
+  for( size_t i=0, l=0; i<_np; ++i )
+    for( size_t j=i; j<_np; ++j, ++l )
       if( i == j ) FIM(i,i) = vfim[l].val(); 
       else         FIM(i,j) = FIM(j,i) = vfim[l].val();
-  if( scaling.n_elem ) FIM = scaling * FIM * scaling;
+  if( scaling.n_elem ) FIM = arma::trans(scaling) * FIM * scaling;
 #ifdef MC__FFGRADDOECRIT_DEBUG
   std::cout << "FIM: " << FIM;
   std::cout << "rank: " << arma::rank( FIM ) << std::endl;
 #endif
 
   switch( FFDOEBase::type ){
-    case AOPT:
+    case BASE_MBDOE::AOPT:
     {
       arma::vec FIMEIGVAL;
       arma::mat FIMEIGVEC;
-      if( arma::rank( FIM ) < _ny || !arma::eig_sym( FIMEIGVAL, FIMEIGVEC, FIM, "std" ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIMEIGVEC, FIM, "std" ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
 #ifdef MC__FFGRADDOECRIT_DEBUG
       std::cout << "FIM eigenvalues: "  << FIMEIGVAL;
       std::cout << "FIM eigenvectors: " << FIMEIGVEC;
 #endif
-      for( size_t i=0, l=0; i<_ny; ++i )
-        for( size_t j=i; j<_ny; ++j, ++l ){
+      for( size_t i=0, l=0; i<_np; ++i )
+        for( size_t j=i; j<_np; ++j, ++l ){
           dercrit[l] = 0.;
-          for( size_t k=0; k<_ny; ++k )
-            if( scaling.n_elem )
-              dercrit[l] += (i==j? FIMEIGVEC(i,k)*FIMEIGVEC(i,k): 2*FIMEIGVEC(i,k)*FIMEIGVEC(i,k) )
-                       * (scaling(i,i)*scaling(j,j)) / (FIMEIGVAL(k)*FIMEIGVAL(k));
-            else
+          if( scaling.n_elem ){
+            FIM.zeros(_np,_np); // repurpose the FIM matrix
+            FIM(i,j) = ( i==j? 1: FIM(j,i) = 1 );
+            for( size_t k=0; k<scaling.n_cols; ++k ){
+              arma::mat&& FIMEIGVECk = scaling * FIMEIGVEC.col(k);
+              arma::mat&& FIMPROJ = FIMEIGVECk.t() * FIM * FIMEIGVECk;
+              dercrit[l] += FIMPROJ(0,0) / (FIMEIGVAL(k)*FIMEIGVAL(k));
+            }
+          }
+          else
+            for( size_t k=0; k<_np; ++k )
               dercrit[l] += (i==j? FIMEIGVEC(i,k)*FIMEIGVEC(i,k): 2*FIMEIGVEC(i,k)*FIMEIGVEC(j,k) )
                        / (FIMEIGVAL(k)*FIMEIGVAL(k));
+          //for( size_t k=0; k<_np; ++k )
+          //  if( scaling.n_elem ){
+          //    dercrit[l] += (i==j? FIMEIGVEC(i,k)*FIMEIGVEC(i,k): 2*FIMEIGVEC(i,k)*FIMEIGVEC(i,k) )
+          //             * (scaling(i,i)*scaling(j,j)) / (FIMEIGVAL(k)*FIMEIGVAL(k));
+          //  }
+          //  else
+          //    dercrit[l] += (i==j? FIMEIGVEC(i,k)*FIMEIGVEC(i,k): 2*FIMEIGVEC(i,k)*FIMEIGVEC(j,k) )
+          //             / (FIMEIGVAL(k)*FIMEIGVAL(k));
         }
       break;
     }
     
-    case DOPT:
+    case BASE_MBDOE::DOPT:
     {
 #if defined( MC__FFDCRIT_EIG )
       arma::vec FIMEIGVAL;
       arma::mat FIMEIGVEC;
-      if( arma::rank( FIM ) < _ny || !arma::eig_sym( FIMEIGVAL, FIMEIGVEC, FIM, "std" ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIMEIGVEC, FIM, "std" ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
 #ifdef MC__FFGRADDOECRIT_DEBUG
       std::cout << "FIM eigenvalues: "  << FIMEIGVAL;
       std::cout << "FIM eigenvectors: " << FIMEIGVEC;
 #endif
-      for( size_t i=0, l=0; i<_ny; ++i )
-        for( size_t j=i; j<_ny; ++j, ++l ){
+      for( size_t i=0, l=0; i<_np; ++i )
+        for( size_t j=i; j<_np; ++j, ++l ){
           dercrit[l] = 0.;
-          for( size_t k=0; k<_ny; ++k )
-            if( scaling.n_elem )
-              dercrit[l] += (i==j? FIMEIGVEC(i,k)*FIMEIGVEC(i,k): 2*FIMEIGVEC(i,k)*FIMEIGVEC(j,k) )
-                       * (scaling(i,i)*scaling(j,j)) / FIMEIGVAL(k);
-            else
+          if( scaling.n_elem ){
+            FIM.zeros(_np,_np); // repurpose the FIM matrix
+            FIM(i,j) = ( i==j? 1: FIM(j,i) = 1 );
+            for( size_t k=0; k<scaling.n_cols; ++k ){
+              arma::mat&& FIMEIGVECk = scaling * FIMEIGVEC.col(k);
+              arma::mat&& FIMPROJ = FIMEIGVECk.t() * FIM * FIMEIGVECk;
+              dercrit[l] += FIMPROJ(0,0) / FIMEIGVAL(k);
+            }
+          }
+          else
+            for( size_t k=0; k<_np; ++k )
               dercrit[l] += (i==j? FIMEIGVEC(i,k)*FIMEIGVEC(i,k): 2*FIMEIGVEC(i,k)*FIMEIGVEC(j,k) )
                        / FIMEIGVAL(k);
         }
 #else
-      arma::mat L, X, Y, E( _ny, _ny, arma::fill::none );
+      arma::mat L, X, Y;
       if( !arma::chol( L, FIM, "lower" ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
 #ifdef MC__FFGRADDOECRIT_DEBUG
       std::cout << "FIM Cholesky decomposition:\n" << L;
 #endif
-      for( size_t i=0, l=0; i<_ny; ++i ){
-        for( size_t j=i; j<_ny; ++j, ++l ){
-          E.zeros();
-          E(i,j) = E(j,i) = ( scaling.n_elem? scaling(i,i)*scaling(j,j): 1. );
-          if( !solve( Y, trimatl(L), E ) )  // indicate that L is lower triangular
-            throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+      for( size_t i=0, l=0; i<_np; ++i ){
+        for( size_t j=i; j<_np; ++j, ++l ){
+          FIM.zeros(_np,_np); // repurpose the FIM matrix
+          FIM(i,j) = ( i==j? 1: FIM(j,i) = 1 );
+          if( scaling.n_elem ){
+            arma::mat&& FIMPROJ = trans(scaling) * FIM * scaling;
+#ifdef MC__FFGRADDOECRIT_DEBUG
+            std::cout << "FIM derivative projection:\n" << FIMPROJ;
+#endif
+            if( !solve( Y, trimatl(L), FIMPROJ ) )  // indicate that L is lower triangular
+              throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+          }
+          else{
+            if( !solve( Y, trimatl(L), FIM ) )  // indicate that L is lower triangular
+              throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
+          }
           if( !solve( X, trimatu(trans(L)), Y ) )  // indicate that L^T is upper triangular
             throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
           dercrit[l] = arma::trace( X );
@@ -1841,21 +2332,27 @@ const
       break;
     }
 
-    case EOPT:
+    case BASE_MBDOE::EOPT:
     {
       arma::vec FIMEIGVAL;
       arma::mat FIMEIGVEC;
-      if( arma::rank( FIM ) < _ny || !arma::eig_sym( FIMEIGVAL, FIMEIGVEC, FIM, "std" ) )
+      if( arma::rank( FIM ) < FIM.n_rows || !arma::eig_sym( FIMEIGVAL, FIMEIGVEC, FIM, "std" ) )
         throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
 #ifdef MC__FFGRADDOECRIT_DEBUG
       std::cout << "FIM min eigenvalue: "  << FIMEIGVAL(0) << std::endl;
       std::cout << "FIM min eigenvector: " << trans(FIMEIGVEC.col(0));
 #endif
-      for( size_t i=0, l=0; i<_ny; ++i )
-        for( size_t j=i; j<_ny; ++j, ++l )
-          if( scaling.n_elem )
-            dercrit[l] = (i==j? FIMEIGVEC(i,0)*FIMEIGVEC(i,0): 2*FIMEIGVEC(i,0)*FIMEIGVEC(j,0) )
-                    * (scaling(i,i)*scaling(j,j));
+     for( size_t i=0, l=0; i<_np; ++i )
+        for( size_t j=i; j<_np; ++j, ++l )
+          if( scaling.n_elem ){
+            FIM.zeros(_np,_np); // repurpose the FIM matrix
+            FIM(i,j) = ( i==j? 1: FIM(j,i) = 1 );
+            arma::mat&& FIMEIGVEC0 = scaling * FIMEIGVEC.col(0);
+            arma::mat&& FIMPROJ = FIMEIGVEC0.t() * FIM * FIMEIGVEC0;
+            dercrit[l] = FIMPROJ(0,0);
+            //dercrit[l] = (i==j? FIMEIGVEC(i,0)*FIMEIGVEC(i,0): 2*FIMEIGVEC(i,0)*FIMEIGVEC(j,0) )
+            //        * (scaling(i,i)*scaling(j,j));
+          }
           else
             dercrit[l] = (i==j? FIMEIGVEC(i,0)*FIMEIGVEC(i,0): 2*FIMEIGVEC(i,0)*FIMEIGVEC(j,0) );
       break;
@@ -1863,8 +2360,8 @@ const
     default:   throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
   }
 #ifdef MC__FFGRADDOECRIT_DEBUG
-  for( size_t i=0, l=0; i<_ny; ++i )
-    for( size_t j=i; j<_ny; ++j, ++l )
+  for( size_t i=0, l=0; i<_np; ++i )
+    for( size_t j=i; j<_np; ++j, ++l )
       std::cout << name() << " [" << i << "," << j << "]: " << dercrit[l] << std::endl;
   { int dum; std::cout << "Press 1"; std::cin >> dum; }
 #endif
@@ -1887,8 +2384,8 @@ const
   _DFIM.resize( _ns );
   for( size_t s=0; s<_ns; ++s ){
     _DFIM[s].assign( _FFIM->size(), 0. );
-    for( size_t i=0, l=0; i<_ny; ++i )
-      for( size_t j=i; j<_ny; ++j, ++l ){
+    for( size_t i=0, l=0; i<_np; ++i )
+      for( size_t j=i; j<_np; ++j, ++l ){
         size_t e=0;
         //std::cout << "FIMAP[" << s << "][" << e << "]:" << std::endl << _FIMAP->at(s).at(e);
         for( auto const& eff : *_EFFAP ) // Atomic FIM of prior experiment
@@ -1931,8 +2428,8 @@ const
   _FDFIM.resize( _ns );
   for( size_t s=0; s<_ns; ++s ){
     _FDFIM[s].assign( _FFIM->size(), 0. );
-    for( size_t i=0, l=0; i<_ny; ++i )
-      for( size_t j=i; j<_ny; ++j, ++l ){
+    for( size_t i=0, l=0; i<_np; ++i )
+      for( size_t j=i; j<_np; ++j, ++l ){
         size_t e=0;
         //std::cout << "FIMAP[" << s << "][" << e << "]:" << std::endl << _FIMAP->at(s).at(e);
         for( auto const& eff : *_EFFAP ) // Atomic FIM of prior experiment
@@ -2247,7 +2744,7 @@ public:
     const
     { 
       switch( FFDOEBase::type ){
-        case BROPT: return "Bayes Risk";
+        case BASE_MBDOE::BROPT: return "Bayes Risk";
         default:    throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }
@@ -2449,7 +2946,7 @@ public:
     const
     {
       switch( FFDOEBase::type ){
-        case BROPT: return "Grad Bayes Risk";
+        case BASE_MBDOE::BROPT: return "Grad Bayes Risk";
         default:    throw FFBase::Exceptions( FFBase::Exceptions::EXTERN );
       }
     }

@@ -147,7 +147,7 @@ public:
   MBDOESLV()
     : _dag(nullptr), _dagdoe(nullptr),
       _VOpt(0./0.)
-    {}
+    { stats.reset(); }
 
   //! @brief Destructor
   virtual ~MBDOESLV()
@@ -161,7 +161,8 @@ public:
   {
     //! @brief Constructor
     Options():
-      CRITERION(FFDOEBase::DOPT), RISK(NEUTRAL), UNCREDUC(0), CVARTHRES(0.25),
+      CRITERION(BASE_MBDOE::DOPT), RISK(NEUTRAL), CVARTHRES(0.25),
+      UNCREDUC(1e-2), FIMSTOL(1e-7), 
       MINDIST(1e-6), MAXITER(4), TOLITER(1e-5), DISPLEVEL(0),
       MINLPSLV(), NLPSLV()
       {
@@ -211,8 +212,9 @@ public:
     Options& operator= ( Options const& options ){
         CRITERION   = options.CRITERION;
         RISK        = options.RISK;
-        UNCREDUC    = options.UNCREDUC;
         CVARTHRES   = options.CVARTHRES;
+        UNCREDUC    = options.UNCREDUC;
+        FIMSTOL     = options.FIMSTOL;
         MINDIST     = options.MINDIST;
         MAXITER     = options.MAXITER;
         TOLITER     = options.TOLITER;
@@ -227,13 +229,15 @@ public:
       AVERSE     //!< Perform a risk-averse CVaR design
     };
     //! @brief Selected DOE criterion
-    FFDOEBase::TYPE          CRITERION;
+    BASE_MBDOE::TYPE         CRITERION;
     //! @brief Selected risk attitude
     RISK_TYPE                RISK;
-    //! @brief Uncertainty scenario reduction to k nearest neighboors (0: no reduction)
-    size_t                   UNCREDUC;
     //! @brief Percentile threshold for CVaR calculation
     double                   CVARTHRES;
+    //! @brief Uncertainty scenario reduction within threshold (if >=0) or to k-nearest neighboors (<0)
+    double                   UNCREDUC;
+    //! @brief Tolerance for singular value in FIM
+    double                   FIMSTOL;
     //! @brief Minimal relative mean-absolute distance between support points after refinement
     double                   MINDIST;
    //! @brief Maximal iteration of effort-based and gradient-based solves
@@ -281,6 +285,48 @@ public:
   private:
     TYPE _ierr;
   };
+
+  //! @brief MBDOE solver statistics
+  struct Stats{
+    //! @brief Reset statistics
+    void reset()
+      { walltime_all = walltime_setup = walltime_samgen = walltime_slvnlp = walltime_slvmip =
+        std::chrono::microseconds(0); }
+    //! @brief Display statistics
+    void display
+      ( std::ostream&os=std::cout )
+      { os << std::fixed << std::setprecision(2) << std::right
+           << std::endl
+           << "#  WALL-CLOCK TIMES" << std::endl
+           << "#  SOLVER SETUP:         " << std::setw(10) << to_time( walltime_setup )   << " SEC" << std::endl
+           << "#  SCENARIO GENERATION:  " << std::setw(10) << to_time( walltime_samgen )  << " SEC" << std::endl
+           << "#  EFFORT-BASED SOLVE:   " << std::setw(10) << to_time( walltime_slvmip )  << " SEC" << std::endl
+           << "#  GRADIENT-BASED SOLVE: " << std::setw(10) << to_time( walltime_slvnlp )  << " SEC" << std::endl
+           << "#  TOTAL:                " << std::setw(10) << to_time( walltime_all )     << " SEC" << std::endl
+           << std::endl; }
+    //! @brief Total wall-clock time (in microseconds)
+    std::chrono::microseconds walltime_all;
+    //! @brief Cumulated wall-clock time used for problem setup (in microseconds)
+    std::chrono::microseconds walltime_setup;
+    //! @brief Cumulated wall-clock time used by sample generation and scenario reduction (in microseconds)
+    std::chrono::microseconds walltime_samgen;
+    //! @brief Cumulated wall-clock time used by gradient-based NLP solver (in microseconds)
+    std::chrono::microseconds walltime_slvnlp;
+    //! @brief Cumulated wall-clock time used by effort-based MINLP solver (in microseconds)
+    std::chrono::microseconds walltime_slvmip;
+    //! @brief Get current time point
+    std::chrono::time_point<std::chrono::system_clock> start
+      () const
+      { return std::chrono::system_clock::now(); }
+    //! @brief Get current time lapse with respect to start time point
+    std::chrono::microseconds walltime
+      ( std::chrono::time_point<std::chrono::system_clock> const& start ) const
+      { return std::chrono::duration_cast<std::chrono::microseconds>( std::chrono::system_clock::now() - start ); }    
+    //! @brief Convert microsecond ticks to time
+    double to_time
+      ( std::chrono::microseconds t ) const
+      { return t.count() * 1e-6; }
+  } stats;
 
   //! @brief Setup MBDOE problem before solution
   bool setup
@@ -364,7 +410,12 @@ protected:
   bool _sample_out
     ( size_t const NSAM, std::ostream& os=std::cout );
 
-  //! @brief Select uncertainty scenatrio subset
+  //! @brief Select uncertainty scenario subset based on highest value
+  void _sample_rank
+    ( std::set<std::pair<size_t,size_t>>& parsel,
+      FFDOEBase const& BRCrit, std::vector<double> const& E0, std::ostream& os );
+
+  //! @brief Select uncertainty scenario subset based on nearest-neighbors criterion
   void _sample_select
     ( size_t const start, size_t const inc, std::set<std::pair<size_t,size_t>>& parsel,
       FFDOEBase const& BRCrit, std::vector<double> const& E0, std::ostream& os );
@@ -429,15 +480,7 @@ protected:
   void _refine_set_FIMAverse
     ( NLP& doeref, std::map<size_t,double> const& EOpt, std::vector<FFVar> const& CTOT,
       std::vector<double>& CTOT0, std::ostream& os );
-/*
-  //! @brief Solve gradient-based experiment design for refinement of <a>EOpt</a> supports to minimize Bayesian risk
-  void _gradient_minimize_br
-    ( std::map<size_t,double> const& EOpt, bool const update=true, std::ostream& os=std::cout );
 
-  //! @brief Solve gradient-based experiment design for refinement of <a>EOpt</a> supports to maximize FIM
-  void _gradient_maximize_fim
-    ( std::map<size_t,double> const& EOpt, bool const update=true, std::ostream& os=std::cout );
-*/
   //! @brief Generate samples for refined supports
   bool _update_supports
     ( std::map<size_t,double> const EOpt, std::map<size_t,std::vector<double>> const SOpt,
@@ -470,21 +513,26 @@ bool
 MBDOESLV::setup
 ()
 {
+  stats.reset();
+  auto&& t_setup = stats.start();
+
   if( !_ny ) 
     throw Exceptions( Exceptions::NOMODEL );
 
   switch( options.CRITERION ){
-   case FFDOEBase::BROPT:
+   case BROPT:
     _setup_out();
     break;
-   case FFDOEBase::AOPT:
-   case FFDOEBase::DOPT:
-   case FFDOEBase::EOPT:
+   case AOPT:
+   case DOPT:
+   case EOPT:
    default:
     _setup_fim();
     break;
   }
 
+  stats.walltime_setup += stats.walltime( t_setup );
+  stats.walltime_all   += stats.walltime( t_setup );
   return true;
 }
 
@@ -572,8 +620,7 @@ bool
 MBDOESLV::sample_supports
 ( size_t const NSAM, std::ostream& os )
 {
-  if( options.DISPLEVEL )
-    os << "** GENERATING SUPPORT SAMPLES " << std::flush;
+  auto&& t_samgen = stats.start();
 
   // Control samples
   typedef boost::random::sobol_engine< boost::uint_least64_t, 64u > sobol64;
@@ -593,13 +640,13 @@ MBDOESLV::sample_supports
   // Observation samples
   bool flag = false;
   switch( options.CRITERION ){
-    case FFDOEBase::BROPT:
+    case BROPT:
       flag = _sample_out( NSAM, os );
       break;
       
-    case FFDOEBase::AOPT:
-    case FFDOEBase::DOPT:
-    case FFDOEBase::EOPT:
+    case AOPT:
+    case DOPT:
+    case EOPT:
     default:
       flag = _sample_fim( NSAM, os );
       break;
@@ -607,7 +654,9 @@ MBDOESLV::sample_supports
 
   if( options.DISPLEVEL )
     os << std::endl;
-    
+
+  stats.walltime_samgen += stats.walltime( t_samgen );
+  stats.walltime_all    += stats.walltime( t_samgen );
   return flag;
 }
 
@@ -616,10 +665,15 @@ bool
 MBDOESLV::_sample_out
 ( size_t const NSAM, std::ostream& os )
 {
+  auto&& tstart = stats.start();
+  if( options.DISPLEVEL )
+    os << "** GENERATING SUPPORT SAMPLES " << std::flush;
+
   // Reset and resize output/intermediate containers
+  size_t NUNC = _vPARVAL.size();
   _vOUTSAM.clear();
-  _vOUTSAM.resize( _vPARVAL.size() );
-  _dOUT.resize( _vPARVAL.size() );
+  _vOUTSAM.resize( NUNC );
+  _dOUT.resize( NUNC );
 
   // Compute responses for every a priori control and uncertainty scenarios
   for( size_t s=0; s<_ne0; ++s ){
@@ -638,10 +692,15 @@ MBDOESLV::_sample_out
     if( options.DISPLEVEL > 1  && !((s+_ne0)%20) )
       os << "." << std::flush;
   }
+  if( options.DISPLEVEL )
+    os << "(" << NUNC*(_ne0+NSAM) << ")"
+       << std::right << std::fixed << std::setprecision(2)
+       << std::setw(10) << stats.to_time( stats.walltime( tstart ) ) << " SEC" << std::flush;
 
-  if( !NSAM || !options.UNCREDUC || options.UNCREDUC >= _vOUTSAM.size()-1 )
+  if( !NSAM || options.UNCREDUC==0 || options.UNCREDUC >= 1. || -options.UNCREDUC >= NUNC-1 )
     return true;
 
+  tstart = stats.start();
   if( options.DISPLEVEL )
     os << std::endl
        << "** REDUCING UNCERTAINTY SCENARIO PAIRS " << std::flush;
@@ -650,29 +709,40 @@ MBDOESLV::_sample_out
   FFDOEBase::set_noise( _vOUTVAR );
   std::vector<double> E0( NSAM, 1./(double)NSAM );
 
+  // Select sample pairs leading to given %age of BR full criterion
+  if( options.UNCREDUC > 0. )
+    _sample_rank( _sPARSEL, BRCrit, E0, os );
+
+  // Select sample pairs as nearest neighbours 
+  else{
 #ifdef MC__USE_THREAD
-  size_t const NOTHREADS = ( _dag->options.MAXTHREAD>0? _dag->options.MAXTHREAD: std::thread::hardware_concurrency() );
-  std::vector<std::thread> vth( NOTHREADS-1 ); // Main thread also runs evaluations
-  std::vector<std::set<std::pair<size_t,size_t>>> vsel( NOTHREADS-1 );
+    size_t const NOTHREADS = ( _dag->options.MAXTHREAD>0? _dag->options.MAXTHREAD: std::thread::hardware_concurrency() );
+    std::vector<std::thread> vth( NOTHREADS-1 ); // Main thread also runs evaluations
+    std::vector<std::set<std::pair<size_t,size_t>>> vsel( NOTHREADS-1 );
 
-  // Dispatch neightbors selection on auxiliary thread
-  for( size_t th=1; th<NOTHREADS; th++ )
-    vth[th-1] = std::thread( &MBDOESLV::_sample_select, this, th, NOTHREADS, std::ref(vsel[th-1]),
-                             std::cref(BRCrit), std::cref(E0), std::ref(os) );
+    // Dispatch neightbors selection on auxiliary thread
+    for( size_t th=1; th<NOTHREADS; th++ )
+      vth[th-1] = std::thread( &MBDOESLV::_sample_select, this, th, NOTHREADS, std::ref(vsel[th-1]),
+                               std::cref(BRCrit), std::cref(E0), std::ref(os) );
 
-  // Run evaluations on main thread as well
-  _sPARSEL.clear();
-  _sample_select( 0, NOTHREADS, _sPARSEL, BRCrit, E0, os ); 
+    // Run evaluations on main thread as well
+    _sPARSEL.clear();
+    _sample_select( 0, NOTHREADS, _sPARSEL, BRCrit, E0, os ); 
 
-  // Join all the threads to the main one
-  for( size_t th=1; th<NOTHREADS; th++ ){
-    vth[th-1].join();
-    _sPARSEL.insert( vsel[th-1].cbegin(), vsel[th-1].cend() );
+    // Join all the threads to the main one
+    for( size_t th=1; th<NOTHREADS; th++ ){
+      vth[th-1].join();
+      _sPARSEL.insert( vsel[th-1].cbegin(), vsel[th-1].cend() );
+    }
+#else
+    _sample_select( 0, 1, _sPARSEL, BRCrit, E0, os ); 
+#endif
   }
 
-#else
-  _sample_select( 0, 1, _sPARSEL, os ); 
-#endif
+  if( options.DISPLEVEL )
+    os << "(" << _sPARSEL.size() << ")"
+       << std::right << std::fixed << std::setprecision(2)
+       << std::setw(10) << stats.to_time( stats.walltime( tstart ) ) << " SEC" << std::flush;
 
 #ifdef CANON__MBDOE_SAMPLE_DEBUG
   std::cout << "PARSEL[" << _sPARSEL.size() << "]: ";
@@ -691,7 +761,7 @@ MBDOESLV::_sample_select
   FFDOEBase const& BRCrit, std::vector<double> const& E0, std::ostream& os )
 {
   std::vector<std::pair<size_t,double>> BRall( _vOUTSAM.size()-1 );
-  std::vector<std::pair<size_t,double>> BRtop( options.UNCREDUC );
+  std::vector<std::pair<size_t,double>> BRtop( std::round(-options.UNCREDUC) );
 
   for( size_t j=start; j<_vOUTSAM.size(); j+=inc ){
   
@@ -711,6 +781,36 @@ MBDOESLV::_sample_select
     }
     //std::cerr << std::endl;
   }
+}
+
+inline
+void
+MBDOESLV::_sample_rank
+( std::set<std::pair<size_t,size_t>>& parsel,
+  FFDOEBase const& BRCrit, std::vector<double> const& E0, std::ostream& os )
+{
+  size_t NUNC = _vPARVAL.size();
+  std::vector<std::pair<std::pair<size_t,size_t>,double>> BRall( NUNC*(NUNC+1)/2 );
+  double BRtot = 0., BRsum = 0.;
+  
+  for( size_t j=0, kk=0; j<NUNC; ++j ){
+    for( size_t k=j+1; k<NUNC; ++k, ++kk ){
+      BRall[kk] = std::make_pair( std::make_pair(j,k), BRCrit.atom_BR( _vOUTSAM.at(j), _vOUTSAM.at(k), E0 ) );
+      BRtot += BRall[kk].second;
+    }
+  }
+  
+  auto BRgt = []( std::pair<std::pair<size_t,size_t>,double> const& a, std::pair<std::pair<size_t,size_t>,double> const& b )
+                { return a.second > b.second; };
+  std::sort( BRall.begin(), BRall.end(), BRgt );
+
+  for( auto const& [jk,val] : BRall ){
+    BRsum += val;
+    parsel.insert( jk );
+    //std::cerr << "(" << jk.first << "," << jk.second << "," << val << ") " << BRsum/BRtot*1e2 << "%\n";
+    if( BRsum >= BRtot*(1-options.UNCREDUC) ) break;
+  }
+  //std::cerr << parsel.size() << " pairs\n";
 }
 
 inline
@@ -748,9 +848,15 @@ bool
 MBDOESLV::_sample_fim
 ( size_t const NSAM, std::ostream& os )
 {
+  auto&& tstart = stats.start();
+  if( options.DISPLEVEL )
+    os << "** GENERATING SUPPORT SAMPLES " << std::flush;
+
+  // Reset and resize FIM/intermediate containers
+  size_t NUNC = _vPARVAL.size();
   _vFIMSAM.clear();
-  _vFIMSAM.resize( _vPARVAL.size() );
-  _dFIM.resize( _vPARVAL.size() );
+  _vFIMSAM.resize( NUNC );
+  _dFIM.resize( NUNC );
 
   // Compute FIMs for every a priori control and uncertainty scenarios
   for( size_t s=0; s<_ne0; ++s ){
@@ -769,12 +875,69 @@ MBDOESLV::_sample_fim
     if( options.DISPLEVEL > 1  && !((s+_ne0)%20) )
       os << "." << std::flush;
   }
-  
+  if( options.DISPLEVEL )
+    os << "(" << NUNC*(_ne0+NSAM) << ")"
+       << std::right << std::fixed << std::setprecision(2)
+       << std::setw(10) << stats.to_time( stats.walltime( tstart ) ) << " SEC" << std::flush;
+
 #ifdef CANON__MBDOE_SAMPLE_DEBUG
   size_t s=0;
   for( auto const& FIMk : _vFIMSAM )
     std::cout << "_vFIMSAM[" << s++ << "]: " << FIMk.size() << std::endl;
 #endif
+
+  if( options.FIMSTOL <= 0e0 )
+    return true;
+
+  tstart = stats.start();
+  if( options.DISPLEVEL )
+    os << std::endl
+       << "** CHECKING FIM REGULARITY " << std::flush;
+
+  arma::mat FIM( _np, _np, arma::fill::zeros ); // average FIM
+  for( size_t s=0; s<NUNC; ++s ){
+    arma::mat FIMs( _np, _np, arma::fill::zeros ); // average FIM
+    size_t e=0;
+    for( auto const& eff : _vEFFAP ) // Atomic FIM of prior experiment
+      FIMs += eff * _vFIMSAM.at(s).at(e++);
+    for( size_t i=0; i<NSAM; ++i ) // Atomic FIM of new experiment
+      FIMs += _vFIMSAM.at(s).at(e++) / NSAM;
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+    std::cout << "FIM[" << s << "]: rank = " << arma::rank( FIMs ) << std::endl << FIMs;
+#endif
+    if( _vPARWEI.size() == NUNC ) FIMs *= _vPARWEI[s]; // uncertainty scenario probability
+    FIM += FIMs;
+  }
+  if( _mPARSCA.n_elem ) FIM = arma::trans(_mPARSCA) * FIM * _mPARSCA; // parameter scaling factors
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+  std::cout << "Average FIM: rank = " << arma::rank( FIM ) << std::endl << FIM;
+#endif
+
+  if( options.DISPLEVEL )
+    os << std::right << std::fixed << std::setprecision(2)
+       << std::setw(10) << stats.to_time( stats.walltime( tstart ) ) << " SEC" << std::flush;
+
+  arma::mat PROJ = arma::orth( FIM, options.FIMSTOL );
+#ifdef CANON__MBDOE_SAMPLE_DEBUG
+  std::cout << "\nFIM image space: " << std::endl << PROJ;
+#endif
+  if( PROJ.n_rows > PROJ.n_cols )
+    if( _mPARSCA.n_elem ) _mPARSCA *= PROJ;
+    else                  _mPARSCA  = PROJ;
+
+  if( options.DISPLEVEL )
+    if( PROJ.n_rows > PROJ.n_cols )
+      os << "\n   " << PROJ.n_cols << " OUT OF " << PROJ.n_rows << " SINGULAR VALUES ABOVE THRESHOLD ("
+         << std::scientific << options.FIMSTOL << ")";
+    else
+      os << "\n   ALL " << PROJ.n_cols << " SINGULAR VALUES ABOVE THRESHOLD ("
+         << std::scientific << options.FIMSTOL << ")";  
+  
+// USE ARMADILLO FUNCTIONS NULL AND ORTH: https://arma.sourceforge.net/docs.html#orth
+// os << "  FIM is regular on the experimental space discretization" << std::endl; 
+// os << "  FIM is rank-defficient on the experimental space discretization - Rank = " << std::endl; 
+// os << "  x relationships between parameters... " << std::endl; 
+
   return true;
 }
 
@@ -851,6 +1014,7 @@ MBDOESLV::_update_supports
 ( std::map<size_t,double> const EOpt, std::map<size_t,std::vector<double>> const SOpt,
   std::ostream& os )
 {
+  auto&& t_samgen = stats.start();
   if( options.DISPLEVEL )
     os << "** REFINING SUPPORT SAMPLES" << std::endl;
 
@@ -890,14 +1054,14 @@ MBDOESLV::_update_supports
   for( size_t s=posSupp; s<posSupp+newSupp; ++s ){
 
     switch( options.CRITERION ){
-      case FFDOEBase::BROPT:
+      case BROPT:
         if( !_append_out( _vCONSAM[s], _vPARVAL, _dOUT, _vOUTSAM, os ) )
           return false;
         break;
       
-      case FFDOEBase::AOPT:
-      case FFDOEBase::DOPT:
-      case FFDOEBase::EOPT:
+      case AOPT:
+      case DOPT:
+      case EOPT:
       default:
         if( !_append_fim( _vCONSAM[s], _vPARVAL, _dFIM, _vFIMSAM, os ) )
           return false;
@@ -909,6 +1073,8 @@ MBDOESLV::_update_supports
   if( options.DISPLEVEL > 1 )
     os << std::endl;
 
+  stats.walltime_samgen += stats.walltime( t_samgen );
+  stats.walltime_all    += stats.walltime( t_samgen );
   return true;
 }
 
@@ -933,14 +1099,14 @@ MBDOESLV::file_export
       ofile << ( _EOpt.count(k)? _EOpt[k]: 0 ) << "  ";
 
       switch( options.CRITERION ){
-        case FFDOEBase::BROPT:
+        case BROPT:
           for( size_t i=0; i<_vOUTSAM[s][k].n_rows; ++i )
             ofile << _vOUTSAM[s][k](i) << "  ";
           break;
           
-        case FFDOEBase::AOPT:
-        case FFDOEBase::DOPT:
-        case FFDOEBase::EOPT:
+        case AOPT:
+        case DOPT:
+        case EOPT:
         default:
           for( size_t i=0; i<_vFIMSAM[s][k].n_rows; ++i )
             for( size_t j=i; j<_vFIMSAM[s][k].n_cols; ++j )
@@ -1037,6 +1203,8 @@ void
 MBDOESLV::effort_solve
 ( size_t const NEXP, std::map<size_t,double> const& EIni, std::ostream& os )
 {
+  auto&& t_slvmip = stats.start();
+
   // Define MINLP DAG
   delete _dagdoe; _dagdoe = new DAG;
 
@@ -1055,7 +1223,7 @@ MBDOESLV::effort_solve
   
   // Update external operations
   FFDOEBase::set_weighting( _vPARWEI );
-  FFDOEBase::set_scaling( _vPARSCA );
+  FFDOEBase::set_scaling( _mPARSCA );
   FFDOEBase::set_noise( _vOUTVAR );
   FFDOEBase::parsubset = &_sPARSEL;
   FFDOEBase::type = options.CRITERION;
@@ -1067,13 +1235,13 @@ MBDOESLV::effort_solve
   doe.set_var( EFF, 0e0, NEXP, 1 );
 
   switch( options.CRITERION ){
-    case FFDOEBase::BROPT:
+    case BROPT:
       _effort_set_BRisk( doe, NEXP, EFF );
       break;
       
-    case FFDOEBase::AOPT:
-    case FFDOEBase::DOPT:
-    case FFDOEBase::EOPT:
+    case AOPT:
+    case DOPT:
+    case EOPT:
     default:
       switch( options.RISK){
         case Options::NEUTRAL:
@@ -1115,6 +1283,9 @@ MBDOESLV::effort_solve
 
   if( options.DISPLEVEL )
     _display_design( "EFFORT-BASED EXACT DESIGN", _VOpt, _EOpt, _SOpt, os ); 
+
+  stats.walltime_slvmip += stats.walltime( t_slvmip );
+  stats.walltime_all    += stats.walltime( t_slvmip );
 }
 
 inline
@@ -1139,8 +1310,15 @@ MBDOESLV::_evaluate_BRisk
   std::vector<double> const& CTOT0, std::ostream& os )
 {
   // Check supports for a priori experiments
-  if( !_vEFFAP.empty() && _vOUTSAM.empty() )
+  if( !_vEFFAP.empty() && _vOUTSAM.empty() ){
+    auto DISPLEVEL  = options.DISPLEVEL;
+    auto UNCREDUC   = options.UNCREDUC;
+    options.UNCREDUC  = 0.;
+    options.DISPLEVEL = 0;
     _sample_out( 0, os );
+    options.DISPLEVEL = DISPLEVEL;
+    options.UNCREDUC  = UNCREDUC;
+  }
 
   // Define Bayes risk criterion
   FFBRCrit OpBRCrit;
@@ -1176,9 +1354,16 @@ MBDOESLV::_evaluate_FIMNeutral
   std::vector<double> const& CTOT0, std::ostream& os )
 {
   // Check supports for a priori experiments
-  if( !_vEFFAP.empty() && _vFIMSAM.empty() )
+  if( !_vEFFAP.empty() && _vFIMSAM.empty() ){
+    auto DISPLEVEL = options.DISPLEVEL;
+    auto FIMSTOL   = options.FIMSTOL;
+    options.FIMSTOL   = 0.;
+    options.DISPLEVEL = 0;
     _sample_fim( 0, os );
-
+    options.DISPLEVEL = DISPLEVEL;
+    options.FIMSTOL   = FIMSTOL;
+  }
+  
   // Define FIM criterion
   FFFIMCrit OpFIMCrit;
   FFVar const*const* ppFIMCrit = OpFIMCrit( CTOT.data(), _dag, &_vPAR, &_vCON, &_vFIM, &EOpt, &_vPARVAL, &_vFIMSAM, &_vEFFAP );
@@ -1209,8 +1394,15 @@ MBDOESLV::_evaluate_FIMAverse
   std::vector<double> const& CTOT0, std::ostream& os )
 {
   // Check supports for a priori experiments
-  if( !_vEFFAP.empty() && _vFIMSAM.empty() )
+  if( !_vEFFAP.empty() && _vFIMSAM.empty() ){
+    auto DISPLEVEL = options.DISPLEVEL;
+    auto FIMSTOL   = options.FIMSTOL;
+    options.FIMSTOL   = 0.;
+    options.DISPLEVEL = 0;
     _sample_fim( 0, os );
+    options.DISPLEVEL = DISPLEVEL;
+    options.FIMSTOL   = FIMSTOL;
+  }
 
   // Define FIM criterion
   FFFIMCrit OpFIMCrit;
@@ -1275,7 +1467,7 @@ MBDOESLV::evaluate_design
   
   // Update external operations
   FFDOEBase::set_weighting( _vPARWEI );
-  FFDOEBase::set_scaling( _vPARSCA );
+  FFDOEBase::set_scaling( _mPARSCA );
   FFDOEBase::set_noise( _vOUTVAR );
   FFDOEBase::parsubset = &_sPARSEL;
   FFDOEBase::type = options.CRITERION;
@@ -1286,13 +1478,13 @@ MBDOESLV::evaluate_design
 
   try{
     switch( options.CRITERION ){
-      case FFDOEBase::BROPT:
+      case BROPT:
         crit = _evaluate_BRisk( EOpt, CTOT, CTOT0, os );
         break;
       
-      case FFDOEBase::AOPT:
-      case FFDOEBase::DOPT:
-      case FFDOEBase::EOPT:
+      case AOPT:
+      case DOPT:
+      case EOPT:
       default:
         switch( options.RISK){
           case Options::NEUTRAL:
@@ -1370,7 +1562,19 @@ MBDOESLV::_refine_set_FIMNeutral
   auto&& FGRADFIM  = _dagdoe->FAD( std::vector<FFVar>({FFIM}), CTOT );
   std::vector<double> DGRADFIM;
   _dagdoe->eval( FGRADFIM, DGRADFIM, CTOT, CTOT0 );
-  std::cout << "Grad Cit = " << arma::vec( DGRADFIM.data(), DGRADFIM.size(), false ) << std::endl;
+  std::cout << "Grad Cit AD = " << arma::trans( arma::vec( DGRADFIM.data(), DGRADFIM.size(), false ) ) << std::endl;
+  double const TOL = 1e-3;
+  for( size_t i=0; i<CTOT.size(); ++i ){
+    std::vector<double> CTOT1 = CTOT0;
+    CTOT1[i] = CTOT0[i] + std::fabs(CTOT0[i])*TOL + TOL;
+    _dagdoe->eval( 1, &FFIM, &DFIM, CTOT.size(), CTOT.data(), CTOT1.data() );
+    DGRADFIM[i] = DFIM;
+    CTOT1[i] = CTOT0[i] - std::fabs(CTOT0[i])*TOL - TOL;
+    _dagdoe->eval( 1, &FFIM, &DFIM, CTOT.size(), CTOT.data(), CTOT1.data() );
+    DGRADFIM[i] -= DFIM;
+    DGRADFIM[i] /= std::fabs(CTOT0[i])*2*TOL + 2*TOL;
+  }
+  std::cout << "Grad Cit FD = " << arma::trans( arma::vec( DGRADFIM.data(), DGRADFIM.size(), false ) ) << std::endl;
   { int dum; std::cout << "Paused"; std::cin >> dum; }
 #endif
   doeref.set_obj( BASE_OPT::MAX, FFIM ); // maximize average FIM-based criterion
@@ -1416,6 +1620,8 @@ void
 MBDOESLV::gradient_solve
 ( std::map<size_t,double> const& EOpt, bool const update, std::ostream& os )
 {
+  auto&& t_slvnlp = stats.start();
+
   // Define NLP DAG
   delete _dagdoe; _dagdoe = new DAG;
   
@@ -1443,7 +1649,7 @@ MBDOESLV::gradient_solve
 
   // Update external operations
   FFDOEBase::set_weighting( _vPARWEI );
-  FFDOEBase::set_scaling( _vPARSCA );
+  FFDOEBase::set_scaling( _mPARSCA );
   FFDOEBase::set_noise( _vOUTVAR );
   FFDOEBase::parsubset = &_sPARSEL;
   FFDOEBase::type = options.CRITERION;
@@ -1455,13 +1661,13 @@ MBDOESLV::gradient_solve
   doeref.add_var( CTOT, CTOTLB, CTOTUB );
 
   switch( options.CRITERION ){
-    case FFDOEBase::BROPT:
+    case BROPT:
       _refine_set_BRisk( doeref, EOpt, CTOT, CTOT0, os );
       break;
       
-    case FFDOEBase::AOPT:
-    case FFDOEBase::DOPT:
-    case FFDOEBase::EOPT:
+    case AOPT:
+    case DOPT:
+    case EOPT:
     default:
       switch( options.RISK){
         case Options::NEUTRAL:
@@ -1504,6 +1710,9 @@ MBDOESLV::gradient_solve
 
   if( options.DISPLEVEL )
     _display_design( "GRADIENT-BASED REFINED DESIGN", _VOpt, EOpt, _SOpt, os ); 
+
+  stats.walltime_slvnlp += stats.walltime( t_slvnlp );
+  stats.walltime_all    += stats.walltime( t_slvnlp );
 }
 
 inline

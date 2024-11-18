@@ -12,11 +12,11 @@ int main()
   // Define model
 
   mc::FFGraph DAG;  // DAG describing the IVP-ODE
-  DAG.options.MAXTHREAD = 0;
+  DAG.options.MAXTHREAD = 0; //8;
 
-  size_t const NS = 12;       // Time stages
+  size_t const NS = 8;       // Time stages
   size_t const NK = 4;       // Number of estimated parameters
-  size_t const NC = NS+1;//NS/2+1;  // Number of experimental controls
+  size_t const NC = NS/2+1;  // Number of experimental controls
   size_t const NX = 3;       // Number of states
   size_t const NY = 2;       // Number of outputs
 
@@ -26,7 +26,7 @@ int main()
 
   std::vector<mc::FFVar> C( NC );  // Controls
   for( size_t i=0; i<NC; i++ ) C[i].set( &DAG );
-  mc::FFVar& T     = C[NS];//C[NS/2];
+  mc::FFVar& T     = C[NS/2];
 
   std::vector<mc::FFVar> K( NK );  // Parameters
   for( size_t i=0; i<NK; i++ ) K[i].set( &DAG );
@@ -47,7 +47,7 @@ int main()
 
   std::vector<std::vector<mc::FFVar>> RHS( NS, std::vector<mc::FFVar>(NX) );  // Right-hand side function
   for( size_t i=0; i<NS; i++ ){
-    mc::FFVar& Qin = C[i];//C[i/2]; // [L/min]
+    mc::FFVar& Qin = C[i/2]; // [L/min]
     mc::FFVar R = exp( K0 + K1 * ( 1 - T / Tref ) ) * ( pow( CA + eps, alpha ) - pow( eps, alpha ) );
     RHS[i][0]   = Qin / V * ( CAin - CA ) - R;
     RHS[i][1] = - Qin / V * CB + nu * R;
@@ -72,8 +72,8 @@ int main()
   IVP.options.FSACORR   = mc::BASE_CVODES::Options::STAGGERED;//STAGGERED1;//SIMULTANEOUS;
   IVP.options.NMAX      = 2000;
   IVP.options.DISPLAY   = 0;
-  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-9;
-  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-9;
+  IVP.options.ATOL      = IVP.options.ATOLB     = IVP.options.ATOLS  = 1e-10;
+  IVP.options.RTOL      = IVP.options.RTOLB     = IVP.options.RTOLS  = 1e-10;
   IVP.options.FSAERR    = IVP.options.QERR      = IVP.options.QERRS     = 1;
   IVP.options.ASACHKPT  = 2000;
 #if defined( SAVE_RESULTS )
@@ -110,22 +110,27 @@ int main()
   /////////////////////////////////////////////////////////////////////////
   // Perform MBDOE
 
-  size_t const NEXP = 5;
+  size_t const NEXP = 5; //1;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NKSAM = 100;
+  size_t const NKSAM = 1024;//512;//256;//
   std::vector<double> KLB(NK), KUB(NK);
 //  KLB[0] =         KUB[0] = 5e-1;    // nu
 //  KLB[1] =         KUB[1] = 1e0;     // alpha
 //  KLB[2] =         KUB[2] = -3.1;  // K0
 //  KLB[3] =         KUB[3] = 2.4;   // K1 
-  KLB[0] =         KUB[0] = 5e-1;    // nu
-  KLB[1] =         KUB[1] = 1e0;     // alpha
+//  KLB[0] =         KUB[0] = 5e-1;    // nu
+//  KLB[1] =         KUB[1] = 1e0;     // alpha
+  KLB[0] = 3e-1;   KUB[0] = 7e-1;    // nu
+  KLB[1] = 1e0;    KUB[1] = 2e0;     // alpha
   KLB[2] = -5.866; KUB[2] = -0.543;  // K0
   KLB[3] = 0.454;  KUB[3] = 4.388;   // K1 
 
+  // Nominal model parameters
+  std::vector<double> dK{ 0.5, 1.0, -3.1, 2.4 };
+
   // Experimental control space
-  size_t const NCSAM = 200;
+  size_t const NCSAM = 128;//256;
   std::vector<double> CLB(NC), CUB(NC);
   for( size_t i=0; i<NC-1; ++i ){
     CLB[i] = 0e0;
@@ -138,20 +143,31 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;
+  DOE.options.CRITERION = mc::MBDOESLV::BROPT;//DOPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
+  DOE.options.UNCREDUC  = 1e-3;//-16;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
   DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
   DOE.options.MINLPSLV.NLPSLV.OPTIMTOL  = 1e-6;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
-  DOE.options.NLPSLV.DISPLEVEL = 1;
-  DOE.options.NLPSLV.GRADCHECK = 0;
+  DOE.options.MINLPSLV.NLPSLV.GRADMETH = DOE.options.MINLPSLV.NLPSLV.FAD;
+  DOE.options.NLPSLV.DISPLEVEL   = 1;
+  DOE.options.NLPSLV.GRADCHECK   = 0;
+  DOE.options.NLPSLV.GRADMETH    = DOE.options.NLPSLV.FSYM;//FAD;
+  DOE.options.NLPSLV.GRADLSEARCH = 0;
+  DOE.options.NLPSLV.FCTPREC     = 1e-7;
   DOE.set_dag( DAG );
   DOE.set_model( Y, YVAR );
   DOE.set_controls( C, CLB, CUB );
-  DOE.set_parameters( K, DOE.uniform_sample( NKSAM, KLB, KUB ) );
+
+  std::list<std::vector<double>>&& KSAM = DOE.uniform_sample( NKSAM, KLB, KUB );
+  for( auto& KSAMi : KSAM ) // Correction for reaction order alpha to follow a Bernouilli distribution: 1=75%, 2=25%
+    if( KSAMi[1] <= 1.75 ) KSAMi[1] = KLB[1];
+    else                   KSAMi[1] = KUB[1];
+  DOE.set_parameters( K, KSAM );
+//  DOE.set_parameters( K, dK );
 
   // Solve MBDOE
   DOE.setup();
@@ -161,6 +177,7 @@ int main()
   //DOE.gradient_solve( DOE.efforts(), true );
   //DOE.effort_solve( NEXP, DOE.efforts() );
   //DOE.file_export( "test1" );
+  DOE.stats.display();
   auto campaign = DOE.campaign();
 
 /*
@@ -188,28 +205,30 @@ int main()
     // SUPPORT #84: 3 x [ 9.92188e-02 9.92188e-02 5.39063e-02 1.17188e-02 2.75884e+02 ]
     //{ 3, { 9.92188e-02, 9.92188e-02, 5.39063e-02, 1.17188e-02, 2.75884e+02 } }
   };
+** EFFORT-BASED EXACT DESIGN: -2.35130e+00
+   SUPPORT #500: 2 x [ 1.00000e-01 1.00000e-01 3.43346e-02 4.01407e-02 3.23150e+02 ]
+   SUPPORT #501: 3 x [ 1.00000e-01 1.00000e-01 0.00000e+00 0.00000e+00 2.73150e+02 ]
 */
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
  
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;//
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;//BROPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-AVERSE" );
 
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;//DOPT;//
+  DOE.options.CRITERION = mc::MBDOESLV::BROPT;//DOPT;//
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.setup();
   DOE.evaluate_design( campaign, "BROPT" );
 
 
+return 0;
+
   /////////////////////////////////////////////////////////////////////////
   // Simulate experimental campaign
-
-  // Nominal model parameters
-  std::vector<double> dK{ 0.5, 1.0, -3.1, 2.4 };
 
   // Nomimal model predictions
   std::vector<std::vector<double>> simulated_campaign; 
@@ -268,6 +287,8 @@ int main()
   auto D2FMLE = DAG.SFAD( NK+NYM, DFMLE, NK, K.data() );
   size_t const NELE = std::get<0>(D2FMLE);
   std::vector<double> dD2FMLE( NELE );
+
+/*
   DAG.eval( NELE, std::get<3>(D2FMLE), dD2FMLE.data(),
             NK, K.data(), dK.data(),
             CMLE.size(), CMLE.data(), dCMLE.data(),
@@ -282,7 +303,7 @@ int main()
   }
   //std::cout << "d2FMLE/dK2 =\n" << dD2FMLEDK2;
   //std::cout << "d2FMLE/dYdK =\n " << dD2FMLEDYDK;
-  
+
   delete[] DFMLE;
   delete[] std::get<1>(D2FMLE);
   delete[] std::get<2>(D2FMLE);
@@ -293,10 +314,64 @@ int main()
   arma::mat A = arma::inv( dD2FMLEDK2 ) * arma::trans( dD2FMLEDYDK );
   arma::mat COVK = A * COVY * arma::trans(A);
   std::cout << "Parameter covariance\n " << COVK;
-
-  //return 0;
+*/
   
+  KSAM = DOE.uniform_sample( NKSAM+1000, KLB, KUB );
+  auto itKSAMlast = KSAM.begin();
+  std::advance(itKSAMlast, NKSAM);
+  KSAM.erase( KSAM.begin(), itKSAMlast ); // consider only new samples
+  for( auto& KSAMi : KSAM ) // Correction for reaction order alpha to follow a Bernouilli distribution: 1=75%, 2=25%
+    if( KSAMi[1] <= 1.75 ) KSAMi[1] = KLB[1];
+    else                   KSAMi[1] = KUB[1];
+
+  unsigned isam=0;
+  for( auto const& dK : KSAM ){
+
+    dYMMLE.clear();
+    for( auto const& c : campaign ){
+      IVP.solve_state( dK, c.second );
+      for( size_t ieff=0; ieff< std::round(c.first); ++ieff )
+        dYMMLE.insert( dYMMLE.end(), IVP.val_function().cbegin(), IVP.val_function().cend() );
+    }
+
+    DAG.eval( NELE, std::get<3>(D2FMLE), dD2FMLE.data(),
+              NK, K.data(), dK.data(),
+              CMLE.size(), CMLE.data(), dCMLE.data(),
+              NYM, YMMLE.data(), dYMMLE.data() );  
+    arma::mat dD2FMLEDYDK( NYM, NK );//, arma::fill::zeros );
+    arma::mat dD2FMLEDK2( NK, NK, arma::fill::zeros );
+    for( size_t k=0; k<std::get<0>(D2FMLE); ++k ){
+      size_t i = std::get<1>(D2FMLE)[k];
+      size_t j = std::get<2>(D2FMLE)[k];
+      if( i < NK ) dD2FMLEDK2(i,j)     = dD2FMLE[k];
+      else         dD2FMLEDYDK(i-NK,j) = dD2FMLE[k];
+    }
+    //std::cout << "d2FMLE/dK2 =\n" << dD2FMLEDK2;
+    //std::cout << "d2FMLE/dYdK =\n " << dD2FMLEDYDK;
+  
+    arma::mat COVY = arma::kron( arma::eye(NEXP,NEXP), arma::diagmat( arma::vec( YVAR ) ) );
+    //std::cout << "Measurement covariance\n " << COVY;
+    arma::mat A = arma::inv( dD2FMLEDK2 ) * arma::trans( dD2FMLEDYDK );
+    arma::mat COVK = A * COVY * arma::trans(A);
+    
+    //std::cout << "Parameter covariance\n " << COVK;
+    //std::cout << "Eivenvalues\n " << arma::trans( arma::eig_sym( COVK ) );
+    //std::cout << "Rank: " << arma::rank( COVK ) << std::endl;
+    std::cout << isam++ << ":" << std::scientific << std::setprecision(6);
+    for( auto const& dKi : dK ) std::cout << "  " << dKi;
+    std::cout << arma::trans( arma::sqrt( COVK.diag() ) );
+  }
+
+  delete[] DFMLE;
+  delete[] std::get<1>(D2FMLE);
+  delete[] std::get<2>(D2FMLE);
+  delete[] std::get<3>(D2FMLE);
+
+  return 0;
+  
+  /////////////////////////////////////////////////////////////////////////
   // Bootstrapped MLE calculations
+
   size_t const NREP = 200;
   std::list<std::vector<double>> MLEREP;
   for( size_t irep=0; irep<NREP; ++irep ){

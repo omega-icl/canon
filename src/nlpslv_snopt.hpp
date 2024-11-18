@@ -568,8 +568,8 @@ public:
     //! @brief Constructor
     Options():
       FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FSYM), GRADCHECK(false),
-      QPFEASTOL(1e-7), QPMAXITER(500), QPMETH(CHOL), DISPLEVEL(0), LOGFILE(),
-      FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
+      GRADLSEARCH(true), QPFEASTOL(1e-7), QPMAXITER(500), QPMETH(CHOL), FCTPREC(0.),
+      DISPLEVEL(0), LOGFILE(), FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
       {}
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
@@ -578,9 +578,11 @@ public:
         MAXITER      = options.MAXITER;
         GRADMETH     = options.GRADMETH;
         GRADCHECK    = options.GRADCHECK;
+        GRADLSEARCH  = options.GRADLSEARCH;
         QPFEASTOL    = options.QPFEASTOL;
         QPMAXITER    = options.QPMAXITER;
         QPMETH       = options.QPMETH;
+        FCTPREC      = options.FCTPREC;
         DISPLEVEL    = options.DISPLEVEL;
         LOGFILE      = options.LOGFILE;
         TIMELIMIT    = options.TIMELIMIT;
@@ -612,12 +614,16 @@ public:
     GRADIENT_STRATEGY GRADMETH;
     //! @brief Corresponds to "Verify level" in snOptA, which enables finite-difference checks on the derivatives computed by the user-provided routines at the first point that satisfies all bounds and linear constraints.
     bool GRADCHECK;
+    //! @brief Corresponds to "derivative linesearch" vs. "Nonderivative linesearch" in snOptA. A Derivative linesearch uses safeguarded cubic interpolation and requires both function and gradient values to compute estimates of the step. If some analytic derivatives are not provided, or a Nonderivative linesearch is specified, SNOPT employs a line search based upon safeguarded quadratic interpolation, which does not require gradient evaluations.
+    bool GRADLSEARCH;
     //! @brief Corresponds to "Minor feasibility tolerance" in snOptA, which ensures that all linear constraints eventually satisfy their upper and lower bounds to within this tolerance.
     double QPFEASTOL;
    //! @brief Corresponds to "Minor iterations limit" in snOptA. If the number of minor iterations for the optimality phase of the QP subproblem exceeds this value, then all nonbasic QP variables that have not yet moved are frozen at their current values and the reduced QP is solved to optimality.
     int QPMAXITER;
     //! @brief Corresponds to "QPSolver" in snOptA, which specifies the method used to solve the QP subproblems: Cholesky QP solver (CHOL), conjugate-gradient QP solver (CG), quasi-Newton QP solver (QN).
     QP_STRATEGY QPMETH;
+    //! @brief Corresponds to "Function precision" in snOptA, a measure of the relative accuracy with which the nonlinear functions can be computed. The default value is appropriate for simple analytic functions. In some cases the function values will be the result of extensive computation, possibly involving an iterative procedure that can provide rather few digits of precision at reasonable cost. Specifying an appropriate Function precision may lead to savings, by allowing the linesearch procedure to terminate when the difference between function values along the search direction becomes as small as the absolute error in the values.
+    double FCTPREC;
     //! @brief Corresponds to "Summary file" in snOptA, which specifies whether (>0) or not (<=0) to generate the summary file.
     int DISPLEVEL;
     //! @brief Corresponds to "Print file" in snOptA, which specifies the file name for the "Summary file". Displays to screen if an empty string is passed (default).
@@ -1012,6 +1018,10 @@ WORKER_SNOPT::callback
           for( int ie=0; ie<*neG; ie++ )
             std::cout << "NLPSLV::G[" << iGfun[ie] << "," << jGvar[ie] << "] = " << G[ie] << std::endl;
 #endif
+          break;
+
+        // Let SnOpt use finite differences
+        case NLPSLV_SNOPT::Options::FD:
           break;
 
         // Other derivative method - error
@@ -1621,16 +1631,20 @@ NLPSLV_SNOPT::_set_options
 
   int error = 0;
   //if( th->snOptA.setIntParameter ( "Print file ",                   0 )                                         ) error++;
-  if( th->snOptA.setIntParameter ( "Summary file ",                 options.DISPLEVEL>0? 6: 0 )                   ) error++;
-  if( th->snOptA.setIntParameter ( "Major Iterations limit ",       options.MAXITER>0? options.MAXITER:0 )        ) error++;
-  if( th->snOptA.setIntParameter ( "Minor Iterations limit ",       options.QPMAXITER>0? options.QPMAXITER: 500)  ) error++;
-  if( th->snOptA.setIntParameter ( "Verify level ",                 options.GRADCHECK? 3: -1 )                    ) error++;
-  if( th->snOptA.setRealParameter( "Major feasibility tolerance ",  options.FEASTOL<0.?   0.: options.FEASTOL )   ) error++;
-  if( th->snOptA.setRealParameter( "Major optimality tolerance ",   options.OPTIMTOL<0.?  0.: options.OPTIMTOL )  ) error++;
-  if( th->snOptA.setRealParameter( "Minor feasibility tolerance ",  options.QPFEASTOL<0.? 0.: options.QPFEASTOL ) ) error++;
-  if( th->snOptA.setRealParameter( "Infinite bound ",               BASE_OPT::INF )                               ) error++;
-  if( th->snOptA.setIntParameter ( "Iterations limit ",             options.MAXITER*options.QPMAXITER>0?
-                                                                    options.MAXITER*options.QPMAXITER: 10000 )    ) error++;
+  if( th->snOptA.setIntParameter ( "Summary file",                 options.DISPLEVEL>0? 6: 0 )                   ) error++;
+  if( th->snOptA.setIntParameter ( "Major Iterations limit",       options.MAXITER>0? options.MAXITER:0 )        ) error++;
+  if( th->snOptA.setIntParameter ( "Minor Iterations limit",       options.QPMAXITER>0? options.QPMAXITER: 500)  ) error++;
+  if( th->snOptA.setIntParameter ( "Verify level",                 options.GRADCHECK? 3: -1 )                    ) error++;
+  if( th->snOptA.setRealParameter( "Major feasibility tolerance",  options.FEASTOL<0.?   0.: options.FEASTOL )   ) error++;
+  if( th->snOptA.setRealParameter( "Major optimality tolerance",   options.OPTIMTOL<0.?  0.: options.OPTIMTOL )  ) error++;
+  if( th->snOptA.setRealParameter( "Minor feasibility tolerance",  options.QPFEASTOL<0.? 0.: options.QPFEASTOL ) ) error++;
+  if( th->snOptA.setRealParameter( "Infinite bound",               BASE_OPT::INF )                               ) error++;
+  if( th->snOptA.setIntParameter ( "Iterations limit",             options.MAXITER*options.QPMAXITER>0?
+                                                                   options.MAXITER*options.QPMAXITER: 10000 )    ) error++;
+
+  if( options.FCTPREC > 0e0 )
+    if( th->snOptA.setRealParameter( "Function precision",         options.FCTPREC )                             ) error++;
+
   switch( options.QPMETH ){
    case Options::CHOL: if( th->snOptA.setParameter( "QPSolver Cholesky" )         ) error++; break;
    case Options::CG:   if( th->snOptA.setParameter( "QPSolver CG" )               ) error++; break;
@@ -1640,6 +1654,13 @@ NLPSLV_SNOPT::_set_options
   switch( options.GRADMETH ){
    case Options::FD:   if( th->snOptA.setIntParameter( "Derivative option", 0 )   ) error++; break;
    default:            if( th->snOptA.setIntParameter( "Derivative option", 1 )   ) error++; break;
+  }
+ 
+  if( options.GRADLSEARCH ){
+    if( th->snOptA.setParameter( "Derivative linesearch" ) ) error++;
+  }
+  else{
+    if( th->snOptA.setParameter( "Nonderivative linesearch" ) ) error++;
   }
  
   if( options.FEASPB || !_ObjDir ){

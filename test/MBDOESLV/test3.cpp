@@ -150,22 +150,24 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;//BROPT;
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;//BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
   DOE.options.CVARTHRES = 0.25;
-  DOE.options.UNCREDUC  = 10;
+  DOE.options.UNCREDUC  = 1e-3;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
-  DOE.options.MINLPSLV.MAXITER = 100;
+  DOE.options.MINLPSLV.MAXITER   = 100;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 0;
   DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
-  DOE.options.MINLPSLV.NLPSLV.GRADMETH = DOE.options.MINLPSLV.NLPSLV.FAD;
-  DOE.options.NLPSLV.OPTIMTOL  = 1e-5;
-  DOE.options.NLPSLV.MAXITER   = 250;
-  DOE.options.NLPSLV.DISPLEVEL = 1;
-  DOE.options.NLPSLV.GRADCHECK = 0;
-  DOE.options.NLPSLV.GRADMETH = DOE.options.NLPSLV.FSYM;//FAD;
+  DOE.options.MINLPSLV.NLPSLV.GRADMETH  = DOE.options.MINLPSLV.NLPSLV.FAD;
+  DOE.options.NLPSLV.OPTIMTOL    = 1e-5;
+  DOE.options.NLPSLV.MAXITER     = 250;
+  DOE.options.NLPSLV.DISPLEVEL   = 1;
+  DOE.options.NLPSLV.GRADCHECK   = 0;
+  DOE.options.NLPSLV.GRADMETH    = DOE.options.NLPSLV.FSYM;//FAD;
+  DOE.options.NLPSLV.GRADLSEARCH = 0;
+  DOE.options.NLPSLV.FCTPREC     = 1e-7;
   DOE.set_dag( DAG );
   DOE.set_model( Y, YVAR );
   DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
@@ -260,17 +262,17 @@ int main()
 */
 
   DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
-  DOE.options.CRITERION = mc::FFDOEBase::BROPT;
+  DOE.options.CRITERION = mc::MBDOESLV::BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
   DOE.evaluate_design( campaign, "BROPT" );
   
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-NEUTRAL" );
 
-  DOE.options.CRITERION = mc::FFDOEBase::DOPT;
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-AVERSE" );
