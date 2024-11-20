@@ -8,7 +8,6 @@
 \version 2.0
 \date 2024
 \bug No known bugs.
-
 */
 
 #ifndef CANON__MBDOESLV_HPP
@@ -186,8 +185,8 @@ public:
 #endif
         MINLPSLV.SEARCHALG          = MINLP::Options::OA;
         MINLPSLV.DISPLEVEL          = DISPLEVEL;
-        MINLPSLV.CVRTOL             = 1e-6;
-        MINLPSLV.CVATOL             = 1e-9;
+        MINLPSLV.CVRTOL             = 1e-5;
+        MINLPSLV.CVATOL             = 1e-8;
         MINLPSLV.FEASTOL            = 1e-6;
         MINLPSLV.FEASPUMP           = 0;
         MINLPSLV.ROOTCUT            = 1;
@@ -343,16 +342,20 @@ public:
 
   //! @brief Solve effort-based exact experiment design with <a>NEXP</a> supports
   void effort_solve
-    ( size_t const NEXP, std::map<size_t,double> const& EIni = std::map<size_t,double>(),
-      std::ostream& os=std::cout );
+    ( size_t const NEXP, bool const exact=true, 
+     std::map<size_t,double> const& EIni=std::map<size_t,double>(),
+     std::ostream& os=std::cout );
 
   //! @brief Solve gradient-based experiment design for refinement of <a>EOpt</a> supports 
   void gradient_solve
-    ( std::map<size_t,double> const& EOpt, bool const update=true, std::ostream& os=std::cout );
+    ( std::map<size_t,double> const& EOpt, bool const update=true,
+      std::ostream& os=std::cout );
 
-  //! @brief Solve combined effort- and gradient-based experiment designwith <a>NEXP</a> supports 
+  //! @brief Solve combined effort- and gradient-based experiment design with <a>NEXP</a> supports 
   void combined_solve
-    ( size_t const NEXP, std::ostream& os=std::cout );
+    ( size_t const NEXP, bool const exact=true, 
+     std::map<size_t,double> const& EIni=std::map<size_t,double>(),
+     std::ostream& os=std::cout );
 
   //! @brief Export effort, support and fim to file
   bool file_export
@@ -1122,12 +1125,13 @@ MBDOESLV::file_export
 inline
 void
 MBDOESLV::combined_solve
-( size_t const NEXP, std::ostream& os )
+( size_t const NEXP, bool const exact, std::map<size_t,double> const& EIni,
+  std::ostream& os )
 {
-  _EOpt.clear();
+  _EOpt = EIni;
   double VLast;
   for( int it=0; ; ){
-    effort_solve( NEXP, _EOpt, os );
+    effort_solve( NEXP, exact, _EOpt, os );
     if( it && std::fabs( VLast - _VOpt ) < options.TOLITER * std::fabs( VLast + _VOpt ) / 2 ){
       if( options.DISPLEVEL )
         os << "** CONVERGENCE TOLERANCE SATISFIED" << std::endl;
@@ -1201,7 +1205,8 @@ const
 inline
 void
 MBDOESLV::effort_solve
-( size_t const NEXP, std::map<size_t,double> const& EIni, std::ostream& os )
+( size_t const NEXP, bool const exact, std::map<size_t,double> const& EIni,
+  std::ostream& os )
 {
   auto&& t_slvmip = stats.start();
 
@@ -1232,7 +1237,7 @@ MBDOESLV::effort_solve
   MINLP doe;
   doe.options = options.MINLPSLV;
   doe.set_dag( _dagdoe );
-  doe.set_var( EFF, 0e0, NEXP, 1 );
+  doe.set_var( EFF, 0e0, NEXP, exact );
 
   switch( options.CRITERION ){
     case BROPT:
@@ -1282,7 +1287,8 @@ MBDOESLV::effort_solve
   }
 
   if( options.DISPLEVEL )
-    _display_design( "EFFORT-BASED EXACT DESIGN", _VOpt, _EOpt, _SOpt, os ); 
+    if( exact ) _display_design( "EFFORT-BASED EXACT DESIGN", _VOpt, _EOpt, _SOpt, os ); 
+    else        _display_design( "EFFORT-BASED CONTINUOUS DESIGN", _VOpt, _EOpt, _SOpt, os ); 
 
   stats.walltime_slvmip += stats.walltime( t_slvmip );
   stats.walltime_all    += stats.walltime( t_slvmip );
@@ -1731,7 +1737,7 @@ const
    
   os  << std::scientific << std::setprecision(5) << crit << std::endl;
   for( auto const& [i,s] : supp ){
-    os << "   SUPPORT #" << i << ": " << std::fixed << std::setprecision(0) << eff.at(i) << " x [ "
+    os << "   SUPPORT #" << i << ": " << std::fixed << std::setprecision(2) << eff.at(i) << " x [ "
        << std::scientific << std::setprecision(5);
       for( auto Ck : s )
         os << Ck << " ";
@@ -1758,7 +1764,7 @@ const
   os  << std::scientific << std::setprecision(5) << crit << std::endl;
   size_t i=0;
   for( auto const& [eff,supp] : campaign ){
-    os << "   SUPPORT #" << i++ << ": " << std::fixed << std::setprecision(0) << eff << " x [ "
+    os << "   SUPPORT #" << i++ << ": " << std::fixed << std::setprecision(2) << eff << " x [ "
        << std::scientific << std::setprecision(5);
       for( auto Ck : supp )
         os << Ck << " ";

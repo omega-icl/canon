@@ -54,7 +54,7 @@ int main()
   DOE.options.MINLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.NLPSLV.GRADCHECK = 1;
   DOE.options.MINLPSLV.NLPSLV.OPTIMTOL  = 1e-8;
-  DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 0;
+  DOE.options.MINLPSLV.NLPSLV.DISPLEVEL = 1;
   DOE.options.MINLPSLV.MIPSLV.DISPLEVEL = 0;
   DOE.options.NLPSLV.DISPLEVEL = 1;
   DOE.options.NLPSLV.GRADCHECK = 1;
@@ -73,9 +73,12 @@ int main()
 
 
   DOE.setup();
-  DOE.sample_supports( 50 );
+  //DOE.sample_supports( 50 );
+  //DOE.combined_solve( 5, false ); // continuous design
+  //auto CNTEFF = DOE.efforts();
+  //DOE.combined_solve( 5, true, CNTEFF ); // exact design
   DOE.combined_solve( 5 );
-  //DOE.effort_solve( 5 );
+  //DOE.effort_solve( 5, false );
   //DOE.gradient_solve( DOE.efforts(), true );
   //DOE.effort_solve( 5, DOE.efforts() );
   //DOE.file_export( "test0" );

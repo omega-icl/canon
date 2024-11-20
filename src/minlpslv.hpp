@@ -576,6 +576,18 @@ protected:
   void _set_options_sbbslv
     ();
 
+  //! Retrieve incumbent afte rMIP solve
+  void _incumbent_mip
+    ();
+
+  //! @brief Solve linear optimization model using MIP algorithm
+  int _optimize_mip
+    ( double const* Xini,  T const* Xbnd, std::ostream& os );
+
+  //! @brief Solve continuous optimization model using NLP algorithm
+  int _optimize_nlp
+    ( double const* Xini,  T const* Xbnd, std::ostream& os );
+
   //! @brief Solve optimization model using outer-approximation algorithm
   int _optimize_oa
     ( double const* Xini,  T const* Xbnd, std::ostream& os );
@@ -1439,11 +1451,20 @@ MINLPSLV<T,NLP,MIP>::_add_outerapproximation_cuts
   }
 
   // Populate linear cuts
-  if( _iter == 1 ){
+  if( _iter <= 1 ){
     for( size_t ie=0; ie<_nA; ie++ ){
       if( _Aval[ie] == 0. ) continue;
       _POLcuts[_iAfun[ie]]->append( _POLXvar[_jAvar[ie]], _Aval[ie] ).rhs();
     }
+  }
+  
+  if( _Fnlin.empty() ){
+#ifdef MC__MINLPSLV_DEBUG
+    for( size_t i=0; i<_nF; i++ )
+      if( _POLcuts[i] ) std::cout << " _POLcuts[" << i << "]: " << *_POLcuts[i] << std::endl;
+    int dum; std::cout << "PRESS 1 TO CONTINUE"; std::cin >> dum;
+#endif
+    return true;
   }
   
   // Evaluate nonlinear function derivatives
@@ -1810,11 +1831,19 @@ MINLPSLV<T,NLP,MIP>::optimize
     std::cout << "  Pval[" << i << "] = " << Pval[i] << std::endl;
 #endif
 
+  // Model is NLP
+  if( !_ismip && !_Fnlin.empty() )
+    return _optimize_nlp( !Xini && !_Xini.empty()? _Xini.data(): Xini, Xbnd, os ); 
+
   // Update linear constraint coefficients
   _Aval.resize( _nA );
   _Fval.assign( _nF, 0. );
   _dag->eval( _dwk, _nA,   _Avar.data(), _Aval.data(), _nP, _Pvar.data(), _Pval.data() );
   _dag->eval( _dwk, _Flin, _Foff.data(), _Fval.data(), _nP, _Pvar.data(), _Pval.data() );
+
+  // Model is MIP
+  if( _Fnlin.empty() )
+    return _optimize_mip( !Xini && !_Xini.empty()? _Xini.data(): Xini, Xbnd, os ); 
 
   // Search strategy
   int flag = 0;
@@ -1832,6 +1861,119 @@ MINLPSLV<T,NLP,MIP>::optimize
   }
 
   return flag;
+}
+
+template <typename T, typename NLP, typename MIP>
+inline void
+MINLPSLV<T,NLP,MIP>::_incumbent_mip
+()
+{
+  _Zinc = _objscal * _MIPSLV.get_variable( _POLSvar.front() );
+  _incumbent.f.assign( { _Zinc } );
+  _incumbent.x.resize( _nX );
+  for( size_t i=0; i<_nX; i++ ){
+    //std::cout << "Retrieve " << _POLXvar[i] << "(DAG: " << _POLXvar[i].var() << ")" << std::endl;
+    try{
+      _incumbent.x[i] = _MIPSLV.get_variable( _POLXvar[i] );
+    }
+    catch( const std::runtime_error& e){
+//#ifdef MC__MINLPSLV_DEBUG
+      std::cerr << "**MINLPSLV: Variable " << _POLXvar[i] << "(DAG: " << _POLXvar[i].var() << ") not in master MIP" << std::endl; 
+//#endif
+      _incumbent.x[i] = 0.;
+    }
+  }
+}
+
+template <typename T, typename NLP, typename MIP>
+inline int
+MINLPSLV<T,NLP,MIP>::_optimize_mip
+(  double const* Xini, T const* Xbnd, std::ostream& os )
+{
+  if( !_Fnlin.empty() ) return STATUS::FAILURE;
+
+  // Initialize and reduce variable bounds
+  _Xbnd.resize( _nX );
+  for( size_t i=0; i<_nX; i++ ){
+    _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
+    if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) )
+      return _finalize( _tstart, STATUS::INFEASIBLE );
+  }
+  if( options.CPMAX && _propagate_bounds( _Xbnd.data() ) < 0 )
+    return _finalize( _tstart, STATUS::INFEASIBLE );
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << std::scientific << std::setprecision(4);
+  std::cout << "Initial range:\n";
+  for( auto const& Xbndi : _Xbnd ) std::cout << " " << Xbndi << std::endl;
+  std::cout << std::endl;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
+  // Initialize and solve MIP problem
+  _init_master();
+  _iter = 0;
+  if( !_update_master( true, false, false, false ) )
+      return _finalize( _tstart, STATUS::ABORTED );
+
+  // Solve MIP problem
+  int flag =  _solve_master( _tstart ); 
+  stats.walltime_all += stats.walltime( _tstart );
+
+  switch( flag ){
+    case MIP::OPTIMAL:
+      _incumbent_mip();
+      return _finalize( _tstart, STATUS::SUCCESSFUL );
+    case MIP::TIMELIMIT:
+      _incumbent_mip();
+      return _finalize( _tstart, STATUS::INTERRUPTED );
+    case MIP::INFEASIBLE:
+      _Zinc = _Zrel = _objscal * BASE_OPT::INF;
+      return _finalize( _tstart, STATUS::INFEASIBLE );
+    case MIP::UNBOUNDED:
+      _Zinc = _Zrel = -_objscal * BASE_OPT::INF;
+      return _finalize( _tstart, STATUS::UNBOUNDED );
+    default:
+      return _finalize( _tstart, STATUS::FAILURE );
+  }
+}
+
+template <typename T, typename NLP, typename MIP>
+inline int
+MINLPSLV<T,NLP,MIP>::_optimize_nlp
+(  double const* Xini, T const* Xbnd, std::ostream& os )
+{
+  if( _ismip ) return STATUS::FAILURE;
+
+  // Initialize and reduce variable bounds
+  _Xbnd.resize( _nX );
+  for( size_t i=0; i<_nX; i++ ){
+    _Xbnd[i] = T( _Xlow[i], _Xupp[i] );
+    if( Xbnd && !Op<T>::inter( _Xbnd[i], Xbnd[i], _Xbnd[i] ) )
+      return _finalize( _tstart, STATUS::INFEASIBLE );
+  }
+  if( options.CPMAX && _propagate_bounds( _Xbnd.data() ) < 0 )
+    return _finalize( _tstart, STATUS::INFEASIBLE );
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << std::scientific << std::setprecision(4);
+  std::cout << "Initial range:\n";
+  for( auto const& Xbndi : _Xbnd ) std::cout << " " << Xbndi << std::endl;
+  std::cout << std::endl;
+  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
+#endif
+
+  // Solve NLP model
+  is_bounded( BASE_OPT::INF/10 ); // set _isbnd flag
+  bool locfeas = _solve_local( _tstart, Xini, _Xbnd.data(), false, false, os );
+  stats.walltime_all += stats.walltime( _tstart );
+
+  if( !locfeas ){
+    _Zinc = _objscal * BASE_OPT::INF;
+    return _finalize( _tstart, STATUS::INFEASIBLE );
+  }
+  
+  _incumbent = _solution;
+  _Zinc = _incumbent.f[0];
+  return _finalize( _tstart, STATUS::SUCCESSFUL );
 }
 
 template <typename T, typename NLP, typename MIP>
