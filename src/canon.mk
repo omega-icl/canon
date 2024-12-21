@@ -8,8 +8,7 @@ include $(srcpath)/makeoptions.mk
 incobjs = base_opt.hpp base_nlp.hpp \
           GamsNLinstr.h gamsio.hpp gamswriter.hpp \
           nlpslv_ipopt.hpp nlpslv_snopt.hpp mipslv_gurobi.hpp \
-          minlpslv.hpp minlpref.hpp minlpbnd.hpp sbbslv.hpp minlgo.hpp \
-          base_mbdoe.hpp mbdoeslv.hpp
+          minlpslv.hpp minlpref.hpp minlpbnd.hpp sbbslv.hpp minlgo.hpp
 
 binobjs = minlgo.o gmomcc.o gevmcc.o optcc.o palmcc.o
 
