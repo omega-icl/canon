@@ -87,8 +87,10 @@ public:
     Options():
       ALGO( -1 ), PRESOLVE( -1 ), LPWARMSTART( 1 ), 
       CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( -1 ), 
-      FEASTOL( 1e-6 ), OPTIMTOL( 1e-6 ), MIPRELGAP( 1e-4 ), MIPABSGAP( 1e-10 ),
-      OBBT( -1 ), NUMERICFOCUS( 0 ), SCALEFLAG( -1 ), MIPFOCUS( 0 ), HEURISTICS( 0.05 ),
+      FEASTOL( 1e-6 ), INTFEASTOL(1e-5), OPTIMTOL( 1e-6 ),
+      MIPRELGAP( 1e-4 ), MIPABSGAP( 1e-10 ),
+      OBBT( -1 ), INTEGRALITYFOCUS( 0 ), NUMERICFOCUS( 0 ),
+      SCALEFLAG( -1 ), MIPFOCUS( 0 ), HEURISTICS( 0.05 ),
       PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), QCPEQFACTOR( 1 ),
       FUNCNONLINEAR( 1 ), FUNCMAXVAL( 1e6 ), PWLRELGAP( 1e-5 ),
       TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
@@ -96,32 +98,34 @@ public:
       {}
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
-        ALGO          = options.ALGO;
-        PRESOLVE      = options.PRESOLVE;
-        LPWARMSTART   = options.LPWARMSTART;        
-        CONTRELAX     = options.CONTRELAX;
-        DUALRED       = options.DUALRED;
-        NONCONVEX     = options.NONCONVEX;
-        FEASTOL       = options.FEASTOL;
-        OPTIMTOL      = options.OPTIMTOL;
-        MIPRELGAP     = options.MIPRELGAP;
-        MIPABSGAP     = options.MIPABSGAP;
-        OBBT          = options.OBBT;
-        NUMERICFOCUS  = options.NUMERICFOCUS;
-        SCALEFLAG     = options.SCALEFLAG;
-        MIPFOCUS      = options.MIPFOCUS;
-        HEURISTICS    = options.HEURISTICS;
-        PRESOS1BIGM   = options.PRESOS1BIGM;
-        PRESOS2BIGM   = options.PRESOS2BIGM;
-        QCPEQFACTOR   = options.QCPEQFACTOR;
-        FUNCNONLINEAR = options.FUNCNONLINEAR;
-        FUNCMAXVAL    = options.FUNCMAXVAL;
-        PWLRELGAP     = options.PWLRELGAP;
-        TIMELIMIT     = options.TIMELIMIT;
-        THREADS       = options.THREADS;
-        DISPLEVEL     = options.DISPLEVEL;
-        LOGFILE       = options.LOGFILE;
-        OUTPUTFILE    = options.OUTPUTFILE;
+        ALGO             = options.ALGO;
+        PRESOLVE         = options.PRESOLVE;
+        LPWARMSTART      = options.LPWARMSTART;        
+        CONTRELAX        = options.CONTRELAX;
+        DUALRED          = options.DUALRED;
+        NONCONVEX        = options.NONCONVEX;
+        FEASTOL          = options.FEASTOL;
+        INTFEASTOL       = options.INTFEASTOL;
+        OPTIMTOL         = options.OPTIMTOL;
+        MIPRELGAP        = options.MIPRELGAP;
+        MIPABSGAP        = options.MIPABSGAP;
+        OBBT             = options.OBBT;
+        INTEGRALITYFOCUS = options.INTEGRALITYFOCUS;
+        NUMERICFOCUS     = options.NUMERICFOCUS;
+        SCALEFLAG        = options.SCALEFLAG;
+        MIPFOCUS         = options.MIPFOCUS;
+        HEURISTICS       = options.HEURISTICS;
+        PRESOS1BIGM      = options.PRESOS1BIGM;
+        PRESOS2BIGM      = options.PRESOS2BIGM;
+        QCPEQFACTOR      = options.QCPEQFACTOR;
+        FUNCNONLINEAR    = options.FUNCNONLINEAR;
+        FUNCMAXVAL       = options.FUNCMAXVAL;
+        PWLRELGAP        = options.PWLRELGAP;
+        TIMELIMIT        = options.TIMELIMIT;
+        THREADS          = options.THREADS;
+        DISPLEVEL        = options.DISPLEVEL;
+        LOGFILE          = options.LOGFILE;
+        OUTPUTFILE       = options.OUTPUTFILE;
         return *this ;
       }
     //! @brief Algorithm used to solve continuous models or the root node of a MIP model. The default options is: -1=automatic. Other options are: 0=primal simplex, 1=dual simplex, 2=barrier, 3=concurrent, 4=deterministic concurrent, 5=deterministic concurrent simplex. 
@@ -138,6 +142,8 @@ public:
     int NONCONVEX;
     //! @brief All constraints must be satisfied to this tolerance. Tightening this tolerance can produce smaller constraint violations, but for numerically challenging models it can sometimes lead to much larger iteration counts. 
     double FEASTOL;
+     //! @brief An integrality restriction on a variable is considered satisfied when the variable's value is less than this tolerance from the nearest integer value.
+    double INTFEASTOL;
      //! @brief Reduced costs must all be smaller than this tolerance in the improving direction in order for a model to be declared optimal.
     double OPTIMTOL;
     //! @brief The MIP solver will terminate (with an optimal result) when the gap between the lower and upper objective bound is less than this tolerance times the absolute value of the upper bound. 
@@ -146,6 +152,8 @@ public:
     double MIPABSGAP;
     //! @brief Controls aggressiveness of Optimality-Based Bound Tightening. The default setting (-1) is an automatic setting which chooses a rather moderate setting. Levels 1-3 describe the amount of work allowed for OBBT ranging from moderate to aggressive. Value 0 disables Optimality-Based Bound Tightening (OBBT).
     int OBBT;
+    //! @brief Setting this parameter to 1 requests that the solver work harder to try to avoid solutions that exploit integrality tolerances. More precisely, the solver tries to find solutions that are still (nearly) feasible if all integer variables are rounded to exact integral values. We should say that the solver won’t always succeed in finding such solutions, and that this setting introduces a modest performance penalty, but the setting will significantly reduce the frequency and magnitude of such violations.
+    int INTEGRALITYFOCUS;
     //! @brief Controls the degree to which the code attempts to detect and manage numerical issues. The default setting (0) makes an automatic choice, with a slight preference for speed. Settings 1-3 increasingly shift the focus towards being more careful in numerical computations. With higher values, the code will spend more time checking the numerical accuracy of intermediate results, and it will employ more expensive techniques in order to avoid potential numerical issues. 
     int NUMERICFOCUS;
     //! @brief Controls model scaling. By default, the rows and columns of the model are scaled in order to improve the numerical properties of the constraint matrix. The scaling is removed before the final solution is returned. Scaling typically reduces solution times, but it may lead to larger constraint violations in the original, unscaled model. Turning off scaling (ScaleFlag=0) can sometimes produce smaller constraint violations. Choosing a different scaling setting 1-3 can sometimes improve performance for particularly numerically difficult models.  
@@ -845,11 +853,13 @@ MIPSLV_GUROBI<T>::_set_options
   _GRBmodel->getEnv().set( GRB_IntParam_Method,            options.ALGO );
   _GRBmodel->getEnv().set( GRB_DoubleParam_OptimalityTol,  options.OPTIMTOL );
   _GRBmodel->getEnv().set( GRB_DoubleParam_FeasibilityTol, options.FEASTOL );
+  _GRBmodel->getEnv().set( GRB_DoubleParam_IntFeasTol,     options.INTFEASTOL );
   _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGap,         options.MIPRELGAP );
   _GRBmodel->getEnv().set( GRB_DoubleParam_MIPGapAbs,      options.MIPABSGAP );
   _GRBmodel->getEnv().set( GRB_DoubleParam_Heuristics,     options.HEURISTICS );
   _GRBmodel->getEnv().set( GRB_IntParam_OBBT,              options.OBBT );
   _GRBmodel->getEnv().set( GRB_IntParam_MIPFocus,          options.MIPFOCUS );
+  _GRBmodel->getEnv().set( GRB_IntParam_IntegralityFocus,  options.INTEGRALITYFOCUS );
   _GRBmodel->getEnv().set( GRB_IntParam_NumericFocus,      options.NUMERICFOCUS );
   _GRBmodel->getEnv().set( GRB_IntParam_ScaleFlag,         options.SCALEFLAG );
   _GRBmodel->getEnv().set( GRB_IntParam_Presolve,          options.PRESOLVE );
@@ -875,29 +885,31 @@ const
 {
   // Display MIP options
   out << std::left << std::scientific << std::setprecision(1)
-      << std::setw(15) << "  ALGO"          << ALGO                       << std::endl
-      << std::setw(15) << "  PRESOLVE"      << PRESOLVE                   << std::endl
-      << std::setw(15) << "  FEASTOL"       << FEASTOL                    << std::endl
-      << std::setw(15) << "  OPTIMTOL"      << OPTIMTOL                   << std::endl
-      << std::setw(15) << "  MIPRELGAP"     << MIPRELGAP                  << std::endl
-      << std::setw(15) << "  MIPABSGAP"     << MIPABSGAP                  << std::endl
-      << std::setw(15) << "  OBBT"          << OBBT                       << std::endl
-      << std::setw(15) << "  HEURISTICS"    << HEURISTICS                 << std::endl
-      << std::setw(15) << "  MIPFOCUS"      << MIPFOCUS                   << std::endl
-      << std::setw(15) << "  NUMERICFOCUS"  << NUMERICFOCUS               << std::endl
-      << std::setw(15) << "  SCALEFLAG"     << SCALEFLAG                  << std::endl
-      << std::setw(15) << "  LPWARMSTART"   << LPWARMSTART                << std::endl
-      << std::setw(15) << "  PRESOS1BIGM"   << PRESOS1BIGM                << std::endl
-      << std::setw(15) << "  PRESOS2BIGM"   << PRESOS2BIGM                << std::endl
-      << std::setw(15) << "  FUNCNONLINEAR" << FUNCNONLINEAR              << std::endl
-      << std::setw(15) << "  PWLRELGAP"     << PWLRELGAP                  << std::endl
-      << std::setw(15) << "  FUNCMAXVAL"    << FUNCMAXVAL                 << std::endl
-      << std::setw(15) << "  DUALRED"       << DUALRED                    << std::endl
-      << std::setw(15) << "  NONCONVEX"     << NONCONVEX                  << std::endl
-      << std::setw(15) << "  THREADS"       << THREADS                    << std::endl
-      << std::setw(15) << "  TIMELIMIT"     << (TIMELIMIT>0?TIMELIMIT:0.) << std::endl
-      << std::setw(15) << "  DISPLEVEL"     << (DISPLEVEL>0?1:0)          << std::endl
-      << std::setw(15) << "  OUTPUTFILE"    << OUTPUTFILE                 << std::endl;
+      << std::setw(15) << "  ALGO"             << ALGO                       << std::endl
+      << std::setw(15) << "  PRESOLVE"         << PRESOLVE                   << std::endl
+      << std::setw(15) << "  FEASTOL"          << FEASTOL                    << std::endl
+      << std::setw(15) << "  INTFEASTOL"       << INTFEASTOL                 << std::endl
+      << std::setw(15) << "  OPTIMTOL"         << OPTIMTOL                   << std::endl
+      << std::setw(15) << "  MIPRELGAP"        << MIPRELGAP                  << std::endl
+      << std::setw(15) << "  MIPABSGAP"        << MIPABSGAP                  << std::endl
+      << std::setw(15) << "  OBBT"             << OBBT                       << std::endl
+      << std::setw(15) << "  HEURISTICS"       << HEURISTICS                 << std::endl
+      << std::setw(15) << "  MIPFOCUS"         << MIPFOCUS                   << std::endl
+      << std::setw(15) << "  INTEGRALITYFOCUS" << INTEGRALITYFOCUS            << std::endl
+      << std::setw(15) << "  NUMERICFOCUS"     << NUMERICFOCUS               << std::endl
+      << std::setw(15) << "  SCALEFLAG"        << SCALEFLAG                  << std::endl
+      << std::setw(15) << "  LPWARMSTART"      << LPWARMSTART                << std::endl
+      << std::setw(15) << "  PRESOS1BIGM"      << PRESOS1BIGM                << std::endl
+      << std::setw(15) << "  PRESOS2BIGM"      << PRESOS2BIGM                << std::endl
+      << std::setw(15) << "  FUNCNONLINEAR"    << FUNCNONLINEAR              << std::endl
+      << std::setw(15) << "  PWLRELGAP"        << PWLRELGAP                  << std::endl
+      << std::setw(15) << "  FUNCMAXVAL"       << FUNCMAXVAL                 << std::endl
+      << std::setw(15) << "  DUALRED"          << DUALRED                    << std::endl
+      << std::setw(15) << "  NONCONVEX"        << NONCONVEX                  << std::endl
+      << std::setw(15) << "  THREADS"          << THREADS                    << std::endl
+      << std::setw(15) << "  TIMELIMIT"        << (TIMELIMIT>0?TIMELIMIT:0.) << std::endl
+      << std::setw(15) << "  DISPLEVEL"        << (DISPLEVEL>0?1:0)          << std::endl
+      << std::setw(15) << "  OUTPUTFILE"       << OUTPUTFILE                 << std::endl;
 }
 
 template <typename T>

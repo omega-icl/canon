@@ -131,62 +131,61 @@ namespace mc
 ////////////////////////////////////////////////////////////////////////
 template < typename T=Interval,
 #ifdef MC__USE_SNOPT
-          typename NLP=NLPSLV_SNOPT<>,
+          typename NLP=NLPSLV_SNOPT,
 #elif  MC__USE_IPOPT
-          typename NLP=NLPSLV_IPOPT<>,
+          typename NLP=NLPSLV_IPOPT,
 #endif
-           typename MIP=MIPSLV_GUROBI<T>,
-           typename... ExtOps >
+          typename MIP=MIPSLV_GUROBI<T> >
 class MINLGO
 #if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<ExtOps...>,
+: protected virtual GAMSIO,
   protected SBBSLV<T>,
-  public virtual BASE_NLP<ExtOps...>
+  public virtual BASE_NLP
 #else
 : protected SBBSLV<T>,
-  public virtual BASE_NLP<ExtOps...>
+  public virtual BASE_NLP
 #endif
 {
 protected:
 
-  using BASE_NLP<ExtOps...>::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
-  using BASE_NLP<ExtOps...>::_var;
-  using BASE_NLP<ExtOps...>::_vartyp;
-  using BASE_NLP<ExtOps...>::_varlb;
-  using BASE_NLP<ExtOps...>::_varlm;
-  using BASE_NLP<ExtOps...>::_varub;
-  using BASE_NLP<ExtOps...>::_varum;
-  using BASE_NLP<ExtOps...>::_par;
-  using BASE_NLP<ExtOps...>::_obj;
-  using BASE_NLP<ExtOps...>::_ctr;
-  using BASE_NLP<ExtOps...>::_nco;
+  using BASE_NLP::_dag; // Make sure _dag is from BASE_NLP, not GAMSIO
+  using BASE_NLP::_var;
+  using BASE_NLP::_vartyp;
+  using BASE_NLP::_varlb;
+  using BASE_NLP::_varlm;
+  using BASE_NLP::_varub;
+  using BASE_NLP::_varum;
+  using BASE_NLP::_par;
+  using BASE_NLP::_obj;
+  using BASE_NLP::_ctr;
+  using BASE_NLP::_nco;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<ExtOps...>::_varini;
+  using GAMSIO::_varini;
 #endif
 
 public:
 
-  using BASE_NLP<ExtOps...>::set;
-  using BASE_NLP<ExtOps...>::dag;
-  using BASE_NLP<ExtOps...>::set_dag;
+  using BASE_NLP::set;
+  using BASE_NLP::dag;
+  using BASE_NLP::set_dag;
   
-  using BASE_NLP<ExtOps...>::par;
-  using BASE_NLP<ExtOps...>::set_par;
-  using BASE_NLP<ExtOps...>::add_par;
-  using BASE_NLP<ExtOps...>::reset_par;
+  using BASE_NLP::par;
+  using BASE_NLP::set_par;
+  using BASE_NLP::add_par;
+  using BASE_NLP::reset_par;
   
-  using BASE_NLP<ExtOps...>::var;
-  using BASE_NLP<ExtOps...>::vartyp;
-  using BASE_NLP<ExtOps...>::varlb;
-  using BASE_NLP<ExtOps...>::varub;
-  using BASE_NLP<ExtOps...>::set_var;
-  using BASE_NLP<ExtOps...>::add_var;
-  using BASE_NLP<ExtOps...>::reset_var;
-  using BASE_NLP<ExtOps...>::update_vartyp;
+  using BASE_NLP::var;
+  using BASE_NLP::vartyp;
+  using BASE_NLP::varlb;
+  using BASE_NLP::varub;
+  using BASE_NLP::set_var;
+  using BASE_NLP::add_var;
+  using BASE_NLP::reset_var;
+  using BASE_NLP::update_vartyp;
 
-  using BASE_NLP<ExtOps...>::set_obj;
-  using BASE_NLP<ExtOps...>::add_ctr;
+  using BASE_NLP::set_obj;
+  using BASE_NLP::add_ctr;
 
   //! @brief NLP solution status
   enum STATUS{
@@ -252,11 +251,11 @@ public:
     double      PRETIMELIMIT;
 
     //! @brief MINLP local solver options
-    typename MINLPSLV<T,NLP,MIP,ExtOps...>::Options  MINLPSLV;
+    typename MINLPSLV<T,NLP,MIP>::Options  MINLPSLV;
     //! @brief MINLP global bounder options
-    typename MINLPBND<T,MIP,ExtOps...>::Options      MINLPBND;
+    typename MINLPBND<T,MIP>::Options      MINLPBND;
     //! @brief MINLP global bounder options for presolve
-    typename MINLPBND<T,MIP,ExtOps...>::Options      MINLPPRE;
+    typename MINLPBND<T,MIP>::Options      MINLPPRE;
 
     //! @brief Load option file
     bool read
@@ -292,6 +291,7 @@ public:
     //! @brief Enumeration type for MINLGO exception handling
     enum TYPE{
       SETUP,		//!< Incomplete setup before a solve
+      PARAM,	        //!< Undefined parameter values
       STRATEGY,		//!< Invalid global search strategy
       INTERN=-33	//!< Internal error
     };
@@ -304,6 +304,8 @@ public:
       switch( _ierr ){
       case SETUP:
         return "MINLGO::Exceptions  Incomplete setup before a solve";
+      case PARAM:
+        return "MINLGO::Exceptions  Undefined parameter values";
       case STRATEGY:
         return "MINLGO::Exceptions  Invalid global search strategy";
       case INTERN:
@@ -404,11 +406,20 @@ protected:
   //! @brief Decision variable bounds with integer fixing
   std::vector<T>                 _Xbndi;
 
+  //! @brief size of parameters in MINLP model
+  size_t                         _nP;
+  
+  //! @brief Parameters in MINLP model
+  std::vector<FFVar>             _Pvar;
+
+  //! @brief Parameter values
+  std::vector<double>            _Pval;
+
   //! @brief Local solver for factorable MINLP
-  MINLPSLV<T,NLP,MIP,ExtOps...>  _MINLPSLV;
+  MINLPSLV<T,NLP,MIP>            _MINLPSLV;
 
   //! @brief Global bounder for factorable NLP
-  MINLPBND<T,MIP,ExtOps...>      _MINLPBND;
+  MINLPBND<T,MIP>                _MINLPBND;
 
   //! @brief Structure holding NLP intermediate solution
   SOLUTION_OPT                   _solution;
@@ -514,7 +525,7 @@ public:
 
   //! @brief Constructor
   MINLGO()
-    : _issetup(false)
+    : _issetup(false), _nP(0)
     { stats.reset(); }
 
   //! @brief Destructor
@@ -539,7 +550,8 @@ public:
 
   //! @brief Preprocess optimization model - return value is false if model is provably infeasible
   int presolve
-    (  T* Xbnd=nullptr, double* Xini=nullptr, std::ostream& os=std::cout );
+    (  T* Xbnd=nullptr, double const* Xini=nullptr, double const* Pval=nullptr,
+       std::ostream& os=std::cout );
 
   //! @brief Export relaxed optimization model to GAMS after preprocessing
   bool GAMSexport
@@ -570,20 +582,20 @@ public:
 private:
   //! @brief Private methods to block default compiler methods
   MINLGO
-    ( MINLGO<T,NLP,MIP,ExtOps...> const& ) =delete;
-  MINLGO<T,NLP,MIP,ExtOps...>& operator=
-    ( MINLGO<T,NLP,MIP,ExtOps...> const& ) =delete;
+    ( MINLGO<T,NLP,MIP> const& ) =delete;
+  MINLGO<T,NLP,MIP>& operator=
+    ( MINLGO<T,NLP,MIP> const& ) =delete;
 };
 
 #if defined (MC__WITH_GAMS)
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::read
+MINLGO<T,NLP,MIP>::read
 ( std::string const& filename, bool const init, bool const disp )
 {
   _tstart = stats.start();
 
-  bool flag = this->GAMSIO<ExtOps...>::read( filename, init, disp );
+  bool flag = this->GAMSIO::read( filename, init, disp );
 
   stats.walltime_setup += stats.walltime( _tstart );
   stats.walltime_all   += stats.walltime( _tstart );
@@ -591,14 +603,19 @@ MINLGO<T,NLP,MIP,ExtOps...>::read
 }
 #endif
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::setup
+MINLGO<T,NLP,MIP>::setup
 ()
 {
   //stats.reset();
   _tstart = stats.start();
 
+  // full set of parameters
+  _Pvar = _par;
+  _nP = _Pvar.size();
+
+  // mixed-integer problem?
   _ismip = false;
   for( auto const& typ : _vartyp ){
     if( !typ ) continue;
@@ -635,9 +652,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::setup
   stats.walltime_all   += stats.walltime( _tstart );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::_is_integer_feasible
+MINLGO<T,NLP,MIP>::_is_integer_feasible
 ( double const* Xval, double const& feastol )
 const
 {
@@ -650,10 +667,10 @@ const
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLGO<T,NLP,MIP,ExtOps...>::presolve
-(  T* Xbnd, double* Xini, std::ostream& os )
+MINLGO<T,NLP,MIP>::presolve
+(  T* Xbnd, double const* Xini, double const* Pval, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
   _ispresolved = false;
@@ -666,6 +683,14 @@ MINLGO<T,NLP,MIP,ExtOps...>::presolve
   _Zinc =  _objscal * BASE_OPT::INF;
   _Zrel = -_objscal * BASE_OPT::INF;
   _Xrel.resize( _var.size() );
+ 
+  // Update parameter values
+  if( !_Pvar.empty() && !Pval ) throw Exceptions( Exceptions::PARAM );
+  if( Pval ) _Pval.assign( Pval, Pval+_nP );
+#ifdef MC__MINLPSLV_DEBUG
+  for( size_t i=0; !Pvar.empty() && P0 && i<_nP; i++ )
+    std::cout << "  Pval[" << i << "] = " << Pval[i] << std::endl;
+#endif
 
   // User-supplied initial point
   if( Xini )
@@ -759,7 +784,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::presolve
   _MINLPSLV.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
   if( options.DISPLEVEL )
     os << "# PERFORMING LOCAL SEARCH" << std::endl;
-  _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), _MINLPSLV.nearest, os );
+  _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), _Pval.data(), _MINLPSLV.nearest, os );
   if( _MINLPSLV.is_feasible( options.FEASTOL ) ){
     _Zcor = options.CORRINC? _MINLPSLV.cost_correction(): 0.;
     if( _objscal*(_MINLPSLV.get_incumbent().f[0]+_Zcor) < _objscal*_Zinc ){
@@ -856,7 +881,7 @@ MINLGO<T,NLP,MIP,ExtOps...>::presolve
     for( unsigned i=0; i<_var.size(); i++ )
       _varini[i] = _MINLPBND.relax_solver()->get_variable( _var[i] );
     _MINLPSLV.options.TIMELIMIT = options.PRETIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
-    _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), _MINLPSLV.nearest, os );
+    _MINLPSLV.optimize( _varini.data(), _Xbnd.data(), _Pval.data(), _MINLPSLV.nearest, os );
     if( _MINLPSLV.is_feasible( options.FEASTOL ) ){
       _Zcor = options.CORRINC? _MINLPSLV.cost_correction(): 0.;
       if( _objscal*(_MINLPSLV.get_incumbent().f[0]+_Zcor) < _objscal*_Zinc ){
@@ -888,9 +913,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::presolve
   return( _isbnd? STATUS::SUCCESSFUL: STATUS::UNBOUNDED );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::GAMSexport
+MINLGO<T,NLP,MIP>::GAMSexport
 ( bool const relax, std::ostream& os )
 {
   if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
@@ -914,9 +939,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::GAMSexport
   return _MINLPBND.export_model( options.GAMSEXPORT, options.INIINC? _incumbent.x.data(): nullptr, os );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLGO<T,NLP,MIP,ExtOps...>::optimize
+MINLGO<T,NLP,MIP>::optimize
 ( std::ostream& os )
 {
   if( !_issetup || !_ispresolved ) throw Exceptions( Exceptions::SETUP );
@@ -958,9 +983,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::optimize
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline typename SBBSLV<T>::STATUS
-MINLGO<T,NLP,MIP,ExtOps...>::subproblems
+MINLGO<T,NLP,MIP>::subproblems
 ( typename SBBSLV<T>::TASK const task, SBBNode<T>* node,
   std::vector<double>& p, double& f, double const& INC, std::ostream& os )
 {
@@ -1067,9 +1092,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::subproblems
   return status;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLGO<T,NLP,MIP,ExtOps...>::_optimize_pwr
+MINLGO<T,NLP,MIP>::_optimize_pwr
 ( std::ostream& os )
 {
   // Display presolve results
@@ -1169,9 +1194,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_optimize_pwr
   return _finalize( STATUS::SUCCESSFUL, os );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::_test_feasible
+MINLGO<T,NLP,MIP>::_test_feasible
 ( double const* Xini, std::ostream& os )
 {
   auto tNLP = stats.start();
@@ -1182,9 +1207,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_test_feasible
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::_solve_local
+MINLGO<T,NLP,MIP>::_solve_local
 ( double const* Xini, T const* Xbnd, bool const mstart, std::ostream& os )
 {
   auto tNLP = stats.start();
@@ -1223,9 +1248,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_solve_local
   return !_solution.x.empty();
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::_export_relax
+MINLGO<T,NLP,MIP>::_export_relax
 ( std::ostream& os )
 {
   // Check GAMS export filename
@@ -1240,9 +1265,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_export_relax
   return( flag==MIP::OTHER? true: false );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLGO<T,NLP,MIP,ExtOps...>::_solve_relax
+MINLGO<T,NLP,MIP>::_solve_relax
 ( T const* Xbnd, double const* Zinc, double const* pinc, bool const reinit, std::ostream& os )
 //( std::ostream& os )
 {
@@ -1274,9 +1299,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_solve_relax
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLGO<T,NLP,MIP,ExtOps...>::_reduce_bounds
+MINLGO<T,NLP,MIP>::_reduce_bounds
 ( T* Xbnd, double const* Zinc, bool const reset, bool const reinit, std::ostream& os )
 {
   // Update time limit
@@ -1292,9 +1317,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_reduce_bounds
   return flag;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::_converged
+MINLGO<T,NLP,MIP>::_converged
 ()
 const
 {
@@ -1307,9 +1332,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::_interrupted
+MINLGO<T,NLP,MIP>::_interrupted
 ()
 const
 {
@@ -1320,9 +1345,9 @@ const
   return false;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline int
-MINLGO<T,NLP,MIP,ExtOps...>::_finalize
+MINLGO<T,NLP,MIP>::_finalize
 ( STATUS const status, std::ostream& os )
 {
   _status = status;
@@ -1331,9 +1356,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_finalize
   return _status;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_init
+MINLGO<T,NLP,MIP>::_display_init
 ( std::ostream& os )
 {
   _odisp.str("");
@@ -1347,9 +1372,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_init
   _display_flush( os ); 
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_final
+MINLGO<T,NLP,MIP>::_display_final
 ( std::chrono::microseconds const& walltime,
   std::ostream& os )
 {
@@ -1388,9 +1413,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_final
   _display_flush( os );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_add
+MINLGO<T,NLP,MIP>::_display_add
 ( const double dval )
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1398,27 +1423,27 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_add
          << std::setw(_DPREC+8) << dval;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_add
+MINLGO<T,NLP,MIP>::_display_add
 ( const unsigned ival )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(_IPREC) << ival;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_add
+MINLGO<T,NLP,MIP>::_display_add
 ( const std::string &sval )
 {
   if( options.DISPLEVEL < 1 ) return;
   _odisp << std::right << std::setw(4) << sval;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_time
+MINLGO<T,NLP,MIP>::_display_time
 ()
 {
   if( options.DISPLEVEL < 1 ) return;
@@ -1426,9 +1451,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_time
          << stats.to_time( stats.walltime_all + stats.walltime( _tstart ) ) << "s";
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_display_flush
+MINLGO<T,NLP,MIP>::_display_flush
 ( std::ostream &os )
 {
   if( _odisp.str() == "" ) return;
@@ -1437,9 +1462,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_display_flush
   return;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::_set_options_sbbslv
+MINLGO<T,NLP,MIP>::_set_options_sbbslv
 ()
 {
   SBBSLV<T>::options.STOPPING_ABSTOL = options.CVATOL;
@@ -1449,9 +1474,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::_set_options_sbbslv
   SBBSLV<T>::options.MAX_WALLTIME    = options.TIMELIMIT - stats.to_time( stats.walltime_all + stats.walltime( _tstart ) );
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline
-MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
+MINLGO<T,NLP,MIP>::Options::Options()
 : STRATEGY( PWR ),
   GAMSEXPORT( "" ),
   PRESOLVE( 1 ),
@@ -1655,9 +1680,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::Options()
     ;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
-inline typename MINLGO<T,NLP,MIP,ExtOps...>::Options&
-MINLGO<T,NLP,MIP,ExtOps...>::Options::operator=
+template <typename T, typename NLP, typename MIP>
+inline typename MINLGO<T,NLP,MIP>::Options&
+MINLGO<T,NLP,MIP>::Options::operator=
 ( Options const& other )
 {
   GAMSEXPORT       = other.GAMSEXPORT;
@@ -1681,9 +1706,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::operator=
   return *this;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::Options::read
+MINLGO<T,NLP,MIP>::Options::read
 ( std::string const& optionfilename, std::ofstream&logfile, std::ostream&os )
 {
   if( !read( optionfilename, os ) ) return false;
@@ -1696,9 +1721,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::read
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline bool
-MINLGO<T,NLP,MIP,ExtOps...>::Options::read
+MINLGO<T,NLP,MIP>::Options::read
 ( std::string const& optionfilename, std::ostream&os )
 {
   std::ifstream optionfile( optionfilename.c_str() );
@@ -1762,9 +1787,9 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::read
   return true;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline void
-MINLGO<T,NLP,MIP,ExtOps...>::Options::display
+MINLGO<T,NLP,MIP>::Options::display
 ( std::ostream&os ) const
 {
   // Display MINLGO Options
@@ -1804,10 +1829,10 @@ MINLGO<T,NLP,MIP,ExtOps...>::Options::display
      << TIMELIMIT << std::endl;
 }
 
-template <typename T, typename NLP, typename MIP, typename... ExtOps>
+template <typename T, typename NLP, typename MIP>
 inline std::ostream&
 operator <<
-( std::ostream & os, MINLGO<T,NLP,MIP,ExtOps...> const& MINLP )
+( std::ostream & os, MINLGO<T,NLP,MIP> const& MINLP )
 {
   os << std::right << std::endl
      << std::setfill('_') << std::setw(72) << " " << std::endl << std::endl << std::setfill(' ')

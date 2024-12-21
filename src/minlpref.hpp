@@ -122,14 +122,13 @@ namespace mc
 //! mc::MINLPREF is a C++ class for reformulation of factorable MINLP
 //! using MC++
 ////////////////////////////////////////////////////////////////////////
-template < typename T,
-           typename... ExtOps >
+template < typename T >
 class MINLPREF
 #if defined (MC__WITH_GAMS)
-: protected virtual GAMSIO<ExtOps...>,
-  public virtual BASE_NLP<ExtOps...>
+: protected virtual GAMSIO,
+  public virtual BASE_NLP
 #else
-: public virtual BASE_NLP<ExtOps...>
+: public virtual BASE_NLP
 #endif
 {
 public:
@@ -148,54 +147,54 @@ public:
   typedef SPoly< mc::FFVar const*, mc::lt_FFVar > t_ffpoly;
   typedef SRed< mc::FFVar const*, mc::lt_FFVar > t_red;
 
-  typedef SLiftEnv<ExtOps...> t_lift;
-  typedef SElimEnv<ExtOps...> t_elim;
-  typedef AEBND<T,ExtOps...> t_aebnd;
+  typedef SLiftEnv t_lift;
+  typedef SElimEnv t_elim;
+  typedef AEBND<T> t_aebnd;
 
-  using BASE_NLP<ExtOps...>::dag;
-  using BASE_NLP<ExtOps...>::set_dag;
+  using BASE_NLP::dag;
+  using BASE_NLP::set_dag;
   
-  using BASE_NLP<ExtOps...>::par;
-  using BASE_NLP<ExtOps...>::set_par;
-  using BASE_NLP<ExtOps...>::add_par;
-  using BASE_NLP<ExtOps...>::reset_par;
+  using BASE_NLP::par;
+  using BASE_NLP::set_par;
+  using BASE_NLP::add_par;
+  using BASE_NLP::reset_par;
   
-  using BASE_NLP<ExtOps...>::var;
-  using BASE_NLP<ExtOps...>::set_var;
-  using BASE_NLP<ExtOps...>::add_var;
-  using BASE_NLP<ExtOps...>::reset_var;
-  using BASE_NLP<ExtOps...>::update_vartyp;
+  using BASE_NLP::var;
+  using BASE_NLP::set_var;
+  using BASE_NLP::add_var;
+  using BASE_NLP::reset_var;
+  using BASE_NLP::update_vartyp;
 
-  using BASE_NLP<ExtOps...>::set;
-  using BASE_NLP<ExtOps...>::set_obj;
-  using BASE_NLP<ExtOps...>::add_ctr;
+  using BASE_NLP::set;
+  using BASE_NLP::set_obj;
+  using BASE_NLP::add_ctr;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<ExtOps...>::read;
+  using GAMSIO::read;
 #endif
 
 protected:
 
-  // Do not use BASE_NLP<ExtOps...>::_dag since redefined locally
-  using BASE_NLP<ExtOps...>::_var;
-  using BASE_NLP<ExtOps...>::_vartyp;
-  using BASE_NLP<ExtOps...>::_varlb;
-  using BASE_NLP<ExtOps...>::_varlm;
-  using BASE_NLP<ExtOps...>::_varub;
-  using BASE_NLP<ExtOps...>::_varum;
-  using BASE_NLP<ExtOps...>::_par;
-  using BASE_NLP<ExtOps...>::_obj;
-  using BASE_NLP<ExtOps...>::_ctr;
-  using BASE_NLP<ExtOps...>::_nco;
+  // Do not use BASE_NLP::_dag since redefined locally
+  using BASE_NLP::_var;
+  using BASE_NLP::_vartyp;
+  using BASE_NLP::_varlb;
+  using BASE_NLP::_varlm;
+  using BASE_NLP::_varub;
+  using BASE_NLP::_varum;
+  using BASE_NLP::_par;
+  using BASE_NLP::_obj;
+  using BASE_NLP::_ctr;
+  using BASE_NLP::_nco;
 
 #if defined (MC__WITH_GAMS)
-  using GAMSIO<ExtOps...>::_varini;
+  using GAMSIO::_varini;
 #endif
 
 protected:
 
-  //! @brief local copy of DAG (overides BASE_AE<ExtOps...>::_dag)
-  FFGraph<ExtOps...>*       _dag;
+  //! @brief local copy of DAG (overides BASE_AE::_dag)
+  FFGraph*                  _dag;
 
   //! @brief environment for expression elimination
   t_elim                    _SEenv;
@@ -246,7 +245,7 @@ protected:
   //! @brief Map of lifted expressions in terms of original variables
   std::map< unsigned, FFVar > _Xlift;
   //! @brief Map of eliminated variables from original variables
-  std::set< unsigned > _Xelim;
+  std::set< unsigned >      _Xelim;
 
   //! @brief number of functions (objective and constraints) in model
   unsigned                  _nF;
@@ -459,7 +458,7 @@ public:
     { return _pbclass; }
 
   //! @brief Get pointer to DAG
-  FFGraph<ExtOps...>* dag
+  FFGraph* dag
     ()
     const
     { return _dag; }
@@ -649,14 +648,14 @@ private:
 
   //! @brief Private methods to block default compiler methods
   MINLPREF
-    ( MINLPREF<T,ExtOps...> const& );
-  MINLPREF<T,ExtOps...>& operator=
-    ( MINLPREF<T,ExtOps...> const& );
+    ( MINLPREF<T> const& );
+  MINLPREF<T>& operator=
+    ( MINLPREF<T> const& );
 };
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-MINLPREF<T,ExtOps...>::setup
+MINLPREF<T>::setup
 ( std::ostream& os )
 {
   _issetup = false;
@@ -671,11 +670,11 @@ MINLPREF<T,ExtOps...>::setup
   // full set of parameters
   std::vector<FFVar> Pvar = _par;
 
-  // full set of decision variables (independent & dependent)
+  // full set of decision variables
   std::vector<FFVar> Xvar = _var;
   _nX0 = Xvar.size();
 
-  // full set of variable bounds and types (independent & dependent)
+  // full set of variable bounds and types
 #if defined (MC__WITH_GAMS)
   _Xini = _varini;
 #else
@@ -712,13 +711,13 @@ MINLPREF<T,ExtOps...>::setup
 
   // local DAG copy
   if( _dag ) delete _dag;
-  _dag = new FFGraph<ExtOps...>;
+  _dag = new FFGraph;
   _nP = Pvar.size(); _Pvar.resize( _nP );
-  _dag->insert( BASE_NLP<ExtOps...>::_dag, _nP, Pvar.data(), _Pvar.data() );
+  _dag->insert( BASE_NLP::_dag, _nP, Pvar.data(), _Pvar.data() );
   _nX = _nX1 = Xvar.size(); _Xvar.resize( _nX );
-  _dag->insert( BASE_NLP<ExtOps...>::_dag, _nX, Xvar.data(), _Xvar.data() );
+  _dag->insert( BASE_NLP::_dag, _nX, Xvar.data(), _Xvar.data() );
   _nF = Fvar.size(); _Fvar.resize( _nF );
-  _dag->insert( BASE_NLP<ExtOps...>::_dag, _nF, Fvar.data(), _Fvar.data() );
+  _dag->insert( BASE_NLP::_dag, _nF, Fvar.data(), _Fvar.data() );
 #ifdef MC__MINLPREF_DEBUG  
   _dag->output( _dag->subgraph( 1, _Fvar.data() ), " objective" );
 #endif
@@ -743,16 +742,16 @@ MINLPREF<T,ExtOps...>::setup
   if( options.DISPLEVEL ) _display_model( os );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::_set_optimality_cuts
+MINLPREF<T>::_set_optimality_cuts
 ( std::vector<FFVar>& Xvar, std::vector<FFVar>& Fvar, std::ostream& os )
 {
   if( options.DISPLEVEL )
     os << "# APPENDING FIRST-ORDER OPTIMALITY CONDITIONS" << std::endl;
 
-  if( !BASE_NLP<ExtOps...>::set_nco( _Xtyp.data(), options.NCOADIFF==Options::ASA ) )
+  if( !BASE_NLP::set_nco( _Xtyp.data(), options.NCOADIFF==Options::ASA ) )
     return false;
 
   // cost multiplier
@@ -786,7 +785,7 @@ MINLPREF<T,ExtOps...>::_set_optimality_cuts
   for( unsigned i=0; i<std::get<0>(_nco).size(); ++i ){
     Fvar.push_back( std::get<1>(_nco)[i] );
 #ifdef MC__MINLPREF_DEBUG_NCOCUTS
-    BASE_NLP<ExtOps...>::_dag->output( BASE_NLP<ExtOps...>::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
+    BASE_NLP::_dag->output( BASE_NLP::_dag->subgraph( 1, &Fvar.back() ), " FOR NCO" );    
 #endif
     switch( std::get<0>(_nco)[i] ){
       case BASE_OPT::EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
@@ -797,10 +796,10 @@ MINLPREF<T,ExtOps...>::_set_optimality_cuts
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 void
-MINLPREF<T,ExtOps...>::_update_model
+MINLPREF<T>::_update_model
 ()
 {
   // update variable and function size and type
@@ -811,10 +810,10 @@ MINLPREF<T,ExtOps...>::_update_model
   _set_function_class();
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 void
-MINLPREF<T,ExtOps...>::_display_model
+MINLPREF<T>::_display_model
 ( std::ostream& os )
 {
   os << std::endl
@@ -827,9 +826,9 @@ MINLPREF<T,ExtOps...>::_display_model
      << std::endl;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-MINLPREF<T,ExtOps...>::_set_dependencies
+MINLPREF<T>::_set_dependencies
 ()
 {
   _Xdep.resize( _nX );
@@ -841,9 +840,9 @@ MINLPREF<T,ExtOps...>::_set_dependencies
     _dag->eval( 1, &_Fvar[i], &_Fdep[i], _nX, _Xvar.data(), _Xdep.data() );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-MINLPREF<T,ExtOps...>::_set_variable_class
+MINLPREF<T>::_set_variable_class
 ()
 {
   FFDep Fworst( 0. );
@@ -871,9 +870,9 @@ MINLPREF<T,ExtOps...>::_set_variable_class
   }
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-MINLPREF<T,ExtOps...>::_set_function_class
+MINLPREF<T>::_set_function_class
 ()
 {
   _Flin.clear();
@@ -899,9 +898,9 @@ MINLPREF<T,ExtOps...>::_set_function_class
 }
 
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline void
-MINLPREF<T,ExtOps...>::_set_subgraph
+MINLPREF<T>::_set_subgraph
 ( std::ostream& os )
 {
   if( !_sgupdt ) return;
@@ -920,10 +919,10 @@ MINLPREF<T,ExtOps...>::_set_subgraph
   _sgupdt = false;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
+MINLPREF<T>::lift_polynomial_subexpressions
 ( bool const add2dag, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1037,9 +1036,9 @@ MINLPREF<T,ExtOps...>::lift_polynomial_subexpressions
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::_flatten_functions
+MINLPREF<T>::_flatten_functions
 ( std::set<unsigned> const& Fndx, bool const add2dag )
 {
   if( Fndx.empty() ) return false;
@@ -1081,9 +1080,9 @@ MINLPREF<T,ExtOps...>::_flatten_functions
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::flatten_linear_functions
+MINLPREF<T>::flatten_linear_functions
 ( bool const add2dag )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1091,9 +1090,9 @@ MINLPREF<T,ExtOps...>::flatten_linear_functions
   return _flatten_functions( _Flin, add2dag );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::flatten_quadratic_functions
+MINLPREF<T>::flatten_quadratic_functions
 ( bool const add2dag )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1101,9 +1100,9 @@ MINLPREF<T,ExtOps...>::flatten_quadratic_functions
   return _flatten_functions( _Fquad, add2dag );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::flatten_polynomial_functions
+MINLPREF<T>::flatten_polynomial_functions
 ( bool const add2dag )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1111,9 +1110,9 @@ MINLPREF<T,ExtOps...>::flatten_polynomial_functions
   return _flatten_functions( _Fpol, add2dag );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::quadratize_polynomial_functions
+MINLPREF<T>::quadratize_polynomial_functions
 ( bool const add2dag, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1220,10 +1219,10 @@ MINLPREF<T,ExtOps...>::quadratize_polynomial_functions
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 FFVar
-MINLPREF<T,ExtOps...>::_insert_ffpol
+MINLPREF<T>::_insert_ffpol
 ( t_ffpoly const& pol )
 const
 {
@@ -1240,10 +1239,10 @@ const
   return varpol;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 std::pair< FFVar const*, FFVar const* >
-MINLPREF<T,ExtOps...>::_insert_ffmon
+MINLPREF<T>::_insert_ffmon
 ( t_ffmon const& mon, int const BASIS, bool const noaux )
 const
 {
@@ -1275,10 +1274,10 @@ const
   return std::make_pair( *itXlift, *itXmon );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 FFVar
-MINLPREF<T,ExtOps...>::_insert_quad
+MINLPREF<T>::_insert_quad
 ( t_quad::map_SQuad const& quad, std::map< t_mon, FFVar, lt_mon >& mapmon )
 const
 {
@@ -1308,10 +1307,10 @@ const
   return varpol;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 std::pair< FFVar const*, FFVar const* >
-MINLPREF<T,ExtOps...>::_insert_mon
+MINLPREF<T>::_insert_mon
 ( t_mon const& mon, int const BASIS )
 const
 {
@@ -1338,10 +1337,10 @@ const
   return std::make_pair( *itXlift, *itXmon );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 FFVar
-MINLPREF<T,ExtOps...>::_insert_cheb
+MINLPREF<T>::_insert_cheb
 ( FFVar const& x, const unsigned n )
 const
 {
@@ -1355,9 +1354,9 @@ const
   }
 }
 /*
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::update_initials
+MINLPREF<T>::update_initials
 ( double const* Xini, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1395,9 +1394,9 @@ MINLPREF<T,ExtOps...>::update_initials
   return noexcp;
 }
 */
-template <typename T, typename... ExtOps>
+template <typename T>
 inline bool
-MINLPREF<T,ExtOps...>::update_bounds
+MINLPREF<T>::update_bounds
 ( T const* X, double const* Finc, bool const resetbnd, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1453,10 +1452,10 @@ MINLPREF<T,ExtOps...>::update_bounds
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 int
-MINLPREF<T,ExtOps...>::_propagate_bounds
+MINLPREF<T>::_propagate_bounds
 ()
 {
 #ifdef MC__MINLPREF_DEBUG_CP
@@ -1483,10 +1482,10 @@ MINLPREF<T,ExtOps...>::_propagate_bounds
   return flag;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::propagate_bounds
+MINLPREF<T>::propagate_bounds
 ( T const* X, double const* Finc, const bool resetbnd, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1509,10 +1508,10 @@ MINLPREF<T,ExtOps...>::propagate_bounds
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 void
-MINLPREF<T,ExtOps...>::_search_invertible_constraints
+MINLPREF<T>::_search_invertible_constraints
 ( std::ostream& os )
 {
   if( _Fctreq.empty() ) return;
@@ -1586,10 +1585,10 @@ MINLPREF<T,ExtOps...>::_search_invertible_constraints
   _AEBND.setup( nDep, nullptr, nullptr, nullptr, os );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::_bound_invertible_constraints
+MINLPREF<T>::_bound_invertible_constraints
 ()
 {
   std::vector<T> _bndIndep, _bndDep;
@@ -1600,10 +1599,10 @@ MINLPREF<T,ExtOps...>::_bound_invertible_constraints
   return( _AEBND.solve( _bndIndep.data(), _bndDep.data(), _bndDep.data() ) == t_aebnd::NORMAL );
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
+MINLPREF<T>::eliminate_invertible_constraints
 ( bool const add2dag, std::ostream& os )
 {
   _update_options(); // virtual function
@@ -1736,10 +1735,10 @@ MINLPREF<T,ExtOps...>::eliminate_invertible_constraints
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 unsigned
-MINLPREF<T,ExtOps...>::_search_reduction_constraints
+MINLPREF<T>::_search_reduction_constraints
 ( std::set<unsigned> Ftpol, std::ostream& os )
 {
   if( _Fctreq.empty() ) return 0;
@@ -1766,10 +1765,10 @@ MINLPREF<T,ExtOps...>::_search_reduction_constraints
   return nred;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::append_reduction_constraints
+MINLPREF<T>::append_reduction_constraints
 ( bool const add2dag, std::ostream& os )
 {
   _update_options(); // virtual function
@@ -1885,10 +1884,10 @@ MINLPREF<T,ExtOps...>::append_reduction_constraints
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 bool
-MINLPREF<T,ExtOps...>::export_model
+MINLPREF<T>::export_model
 ( std::string const gmsfile, double const* Xstart, std::ostream& os )
 {
   if( !_issetup ) throw Exceptions( Exceptions::SETUP );
@@ -1902,11 +1901,11 @@ MINLPREF<T,ExtOps...>::export_model
   // Write relaxed model to GAMS file
   if( options.DISPLEVEL > 0 )
     os << std::endl << "# WRITING MODEL TO FILE: " << gmsfile << std::endl;
-  GAMSWRITER<T,ExtOps...> GMS;
-  typename GAMSWRITER<T,ExtOps...>::MODELTYPE type = (_Fgal.empty()&&_Fpol.empty()?
-                                                     (_Fquad.empty()? GAMSWRITER<T,ExtOps...>::MODELTYPE::LIN:
-                                                                      GAMSWRITER<T,ExtOps...>::MODELTYPE::QUAD):
-                                                                      GAMSWRITER<T,ExtOps...>::MODELTYPE::NLIN);
+  GAMSWRITER<T> GMS;
+  typename GAMSWRITER<T>::MODELTYPE type = (_Fgal.empty()&&_Fpol.empty()?
+                                                     (_Fquad.empty()? GAMSWRITER<T>::MODELTYPE::LIN:
+                                                                      GAMSWRITER<T>::MODELTYPE::QUAD):
+                                                                      GAMSWRITER<T>::MODELTYPE::NLIN);
 
   //for( unsigned i=0; i<_nX; i++ ){
   //  if( Xinc && i<_nX0 )
@@ -1957,10 +1956,10 @@ MINLPREF<T,ExtOps...>::export_model
   return true;
 }
 
-template <typename T, typename... ExtOps>
+template <typename T>
 inline
 void
-MINLPREF<T,ExtOps...>::Options::display
+MINLPREF<T>::Options::display
 ( std::ostream& out )
 const
 {

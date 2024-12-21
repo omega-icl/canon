@@ -90,7 +90,7 @@ protected:
   t_PolVar _GAMSpolvar;
 
   //! @brief Polyhedral image environment
-  PolBase<T>* _POLenv;
+  PolImg<T>* _POLenv;
 
 public:
 
@@ -114,7 +114,7 @@ public:
 
   //! @brief Set variables and cuts in GAMS model
   void set_cuts
-    ( PolBase<T>* env, bool const reset_=true );
+    ( PolImg<T>* env, bool const reset_=true );
 
   //! @brief Set objective variable and direction in GAMS model
   void set_objective
@@ -434,7 +434,7 @@ GAMSWRITER<T>::set_objective
 template <typename T>
 inline void
 GAMSWRITER<T>::set_cuts
-( PolBase<T>* env, bool const reset_ )
+( PolImg<T>* env, bool const reset_ )
 {
   if( reset_ ) reset();
 

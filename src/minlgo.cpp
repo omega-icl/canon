@@ -43,10 +43,10 @@
 
 #ifdef MC__USE_SNOPT
  #include "nlpslv_snopt.hpp"
- typedef mc::NLPSLV_SNOPT<> NLP;
+ typedef mc::NLPSLV_SNOPT NLP;
 #elif  MC__USE_IPOPT
  #include "nlpslv_ipopt.hpp"
- typedef mc::NLPSLV_IPOPT<> NLP;
+ typedef mc::NLPSLV_IPOPT NLP;
 #endif
 
 #include "minlgo.hpp"
@@ -170,7 +170,7 @@ int main
   MINLP.setup();
   std::ostream& os = logfile.is_open()? logfile: std::cout;
   std::cout << "# PRESOLVING MODEL IN CANON..." << std::endl;
-  int flag = MINLP.presolve( nullptr, nullptr, os ); 
+  int flag = MINLP.presolve( nullptr, nullptr, nullptr, os ); 
   switch( flag ){
 //    case mc::MINLGO<I,NLP,MIP>::STATUS::INFEASIBLE:
 //      if( logfile.is_open() ) logfile.close();

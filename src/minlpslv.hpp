@@ -447,7 +447,8 @@ protected:
   std::vector<T>            _Xbndi;
 
   //! @brief vector of zeros for constant term calculation in functions
-  std::vector<FFVar>        _X0;
+//  std::vector<FFVar>        _X0;
+  std::vector<double>        _X0;
 
   //! @brief vector of forward derivatives for linear function gradients
   std::vector<fadbad::F<double>> _FXval;
@@ -474,7 +475,7 @@ protected:
   std::vector<T>            _Fbnd;
 
   //! @brief vector of function offsets
-  std::vector<FFVar>        _Foff;
+//  std::vector<FFVar>        _Foff;
 
   //! @brief Functions in MINLP model
   std::vector<unsigned>     _Ftyp;
@@ -874,13 +875,6 @@ MINLPSLV<T,NLP,MIP>::setup
     case BASE_OPT::MAX: _objscal = -1e0; break;
   }
 
-#ifdef MC__MINLPSLV_DEBUG
-  std::cout << "Setup NLP subproblem" << std::endl;
-#endif
-  _NLPSLV.options = options.NLPSLV;
-  _NLPSLV.set( *this );
-  _NLPSLV.setup();
-
 #ifdef MC__NLGO_PREPROCESS_DEBUG
   std::cout << "Setup MIP subproblem" << std::endl;
 #endif
@@ -916,26 +910,26 @@ MINLPSLV<T,NLP,MIP>::setup
   _Pdep.assign( _nP, 0. );
   _Xdep.resize( _nX );
   for( size_t i=0; i<_nX; ++i )
-    _Xdep[i].indep( _Xvar[i].id().second );
+    //_Xdep[i].indep( _Xvar[i].id().second );
+    _Xdep[i].indep( i );
 
   // full set of functions
-  _Fvar.clear();
-  _Fdep.clear();
-  _Ftyp.clear();
-  _Fbnd.clear();
-  FFDep depF = 0.;
+  _Fvar.clear(); _Fvar.reserve( std::get<0>(_ctr).size()+1 );
+  _Ftyp.clear(); _Ftyp.reserve( std::get<0>(_ctr).size()+1 );
+  _Fbnd.clear(); _Fbnd.reserve( std::get<0>(_ctr).size()+1 );
+  //FFDep depF = 0.;
 
   // Cost
   if( std::get<0>(_obj).size() ){
     _Ftyp.push_back( std::get<0>(_obj)[0] );
     _Fvar.push_back( std::get<1>(_obj)[0] );
-    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
-    _Fdep.push_back( depF );
+    //_dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
+    //_Fdep.push_back( depF );
   }
   else{
     _Ftyp.push_back( BASE_OPT::MIN );
     _Fvar.push_back( 0 );
-    _Fdep.push_back( depF );
+    //_Fdep.push_back( depF );
   }
   _Fbnd.push_back( _IINF );
 
@@ -948,24 +942,30 @@ MINLPSLV<T,NLP,MIP>::setup
       case BASE_OPT::LE: _Fbnd.push_back( T(-BASE_OPT::INF,0) ); break;
       case BASE_OPT::GE: _Fbnd.push_back( T(0,BASE_OPT::INF) );  break;
     }
-    _dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
-    _Fdep.push_back( depF );
+    //_dag->eval( 1, &_Fvar.back(), &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
+    //_Fdep.push_back( depF );
   }
   _nF = _Fvar.size();
   assert( _Ftyp.size() == _nF );
 
+  _Fdep.resize( _nF );
+  _dag->eval( _nF, _Fvar.data(), _Fdep.data(), _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
+  
 #ifdef MC__MINLPSLV_DEBUG
-  std::cout << "_dag = " << _dag << std::endl;
+  //std::cout << "_dag = " << _dag << std::endl;
+  std::cout << "_nP = " << _nP << std::endl;
+  std::cout << "_nX = " << _nX << std::endl;
   std::cout << "_nF = " << _nF << std::endl;
-  _dag->output( _dag->subgraph( _nF, _Fvar.data() ) );
-  { int dum; std::cout << "ENTER <1> TO CONTINUE"; std::cin >> dum; }
+  //_dag->output( _dag->subgraph( _nF, _Fvar.data() ) );
+  //{ int dum; std::cout << "ENTER <1> TO CONTINUE"; std::cin >> dum; }
 #endif
 
   // linear and nonlinear functions
   _Flin.clear();
   _Fnlin.clear();
-  _Foff.clear();
-  _X0.resize( _nX, FFVar(_dag,0.) );
+//  _Foff.clear();
+//  _X0.resize( _nX, FFVar(_dag,0.) );
+  _X0.resize( _nX, 0. );
   for( size_t j=0; j<_nF; j++ ){
     if( _Fdep[j].worst() > FFDep::L )
       _Fnlin.insert( j );
@@ -1000,6 +1000,15 @@ MINLPSLV<T,NLP,MIP>::setup
     _Ffeas += sqr( _Xvar[i] - _Xref[i] );
   }
 
+  if( !_Fnlin.empty() ){
+#ifdef MC__MINLPSLV_DEBUG
+    std::cout << "Setup NLP subproblem" << std::endl;
+#endif
+    _NLPSLV.options = options.NLPSLV;
+    _NLPSLV.set( *this );
+    _NLPSLV.setup();
+  }
+  
   stats.walltime_setup += stats.walltime( _tstart );
   stats.walltime_all   += stats.walltime( _tstart );
   _status = STATUS::SUCCESSFUL;
@@ -1013,37 +1022,63 @@ MINLPSLV<T,NLP,MIP>::_set_gradient
 ()
 {
   // sparse linear function gradients
-  _iAfun.clear(); _jAvar.clear(); _Aval.clear(); 
+  _iAfun.clear(); _jAvar.clear(); _Aval.clear();
+  std::vector<FFVar> Xvarsel( _nX ); 
+  std::vector<size_t> Xndxsel( _nX ); 
   for( auto const& iF : _Flin ){
     _cleanup_gradient();
+
+    // Select subset of particpating variables
+    size_t nXsel = 0;
+    for( auto const& [iX,dum] : _Fdep[iF].dep() ){
+      Xndxsel[nXsel]   = iX;
+      Xvarsel[nXsel++] = _Xvar[iX];
+    }
+    
     switch( options.NLPSLV.GRADMETH ){
       default:
-      case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
-      case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      //case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      //case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], _nX, _Xvar.data() ); break;
+      case NLP::Options::FSYM: _Fgrad = _dag->SFAD( 1, &_Fvar[iF], nXsel, Xvarsel.data() ); break;
+      case NLP::Options::BSYM: _Fgrad = _dag->SBAD( 1, &_Fvar[iF], nXsel, Xvarsel.data() ); break;
     }
 
     // Gather derivative expressions
+    //_iAfun.reserve( _iAfun.capacity() + std::get<0>(_Fgrad) );
+    //_jAvar.reserve( _jAvar.capacity() + std::get<0>(_Fgrad) );
+    //_Avar.reserve( _Avar.capacity() + std::get<0>(_Fgrad) );
     for( size_t k=0; k<std::get<0>(_Fgrad); ++k ){
       _iAfun.push_back( iF );
-      _jAvar.push_back( std::get<2>(_Fgrad)[k] );
+      //_jAvar.push_back( std::get<2>(_Fgrad)[k] );
+      _jAvar.push_back( Xndxsel[std::get<2>(_Fgrad)[k]] );
       _Avar.push_back( std::get<3>(_Fgrad)[k] );
 #ifdef MC__MINLPSLV_DEBUG
       std::cout << "  _Avar[" << _iAfun.back() << "," << _jAvar.back() << "] = " << _Avar.back() << std::endl;
 #endif
     }
-  }
-  _nA = _Avar.size();
-
-  // Compute constant offset expressions
-  FFVar* Ftmp = _dag->compose( _Flin, _Fvar.data(), _nX, _Xvar.data(), _X0.data() );
-  _Foff.assign( _nF, 0. );
-  for( auto const& iF : _Flin ){
-    _Foff[iF] = Ftmp[iF];
 #ifdef MC__MINLPSLV_DEBUG
-     std::cout << "  _Foff[" << iF << "] = " << _Foff[iF] << std::endl;
+    std::cout << "Differentiating linear function #" << iF << std::endl;
+    //_dag->output( _dag->subgraph( std::get<0>(_Fgrad), std::get<3>(_Fgrad) ) );
+    std::cout << "DAG variables/operations: " << _dag->Vars().size() << "/" << _dag->Ops().size() << std::endl;
 #endif
   }
-  delete[] Ftmp;
+  _nA = _Avar.size();
+#ifdef MC__MINLPSLV_DEBUG
+  std::cout << "Size of linear coefficient matrix: " << _nA << std::endl;
+#endif
+
+//  // Compute constant offset expressions
+//  FFVar* Ftmp = _dag->compose( _Flin, _Fvar.data(), _nX, _Xvar.data(), _X0.data() );
+//  _Foff.assign( _nF, 0. );
+//  for( auto const& iF : _Flin ){
+//    _Foff[iF] = Ftmp[iF];
+//#ifdef MC__MINLPSLV_DEBUG
+//    std::cout << "  _Foff[" << iF << "] = " << _Foff[iF] << std::endl;
+//    _dag->output( _dag->subgraph( 1, &_Fvar[iF] ) );
+//    _dag->output( _dag->subgraph( 1, &_Foff[iF] ) );
+//#endif
+//  }
+//  delete[] Ftmp;
 
   // sparse nonlinear function gradients
   _iGfun.clear(); _jGvar.clear(); _Gvar.clear(); 
@@ -1069,7 +1104,8 @@ MINLPSLV<T,NLP,MIP>::_set_gradient
       case NLP::Options::FAD:
       case NLP::Options::BAD:
         for( size_t iX=0; iX<_nX; ++iX ){
-          if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
+          if( !_Fdep[iF].dep(iX).first ) continue;
+          //if( !_Fdep[iF].dep( _Xvar[iX].id().second ).first ) continue;
           _iGfun.push_back( iF );
           _jGvar.push_back( iX );
 #ifdef MC__MINLPSLV_DEBUG
@@ -1836,10 +1872,25 @@ MINLPSLV<T,NLP,MIP>::optimize
     return _optimize_nlp( !Xini && !_Xini.empty()? _Xini.data(): Xini, Xbnd, os ); 
 
   // Update linear constraint coefficients
-  _Aval.resize( _nA );
   _Fval.assign( _nF, 0. );
-  _dag->eval( _dwk, _nA,   _Avar.data(), _Aval.data(), _nP, _Pvar.data(), _Pval.data() );
-  _dag->eval( _dwk, _Flin, _Foff.data(), _Fval.data(), _nP, _Pvar.data(), _Pval.data() );
+  _dag->eval( _dwk, _Flin, _Fvar.data(), _Fval.data(), _nX, _Xvar.data(), _X0.data(), _nP, _Pvar.data(), _Pval.data() );
+  _Aval.resize( _nA );
+#ifdef MC__MINLPSLV_DEBUG
+  _dag->output( _dag->subgraph( _nA, _Avar.data() ) );
+#endif
+  _dag->eval( _dwk, _nA, _Avar.data(), _Aval.data(), _nP, _Pvar.data(), _Pval.data() );
+#ifdef MC__MINLPSLV_DEBUG
+  for( size_t i=0; i<_nA; ++i )
+    std::cout << "  A[" << _iAfun[i] << "," << _jAvar[i] << "] = " << std::setprecision(5) << std::scientific << _Aval[i] << std::endl;
+#endif
+//#ifdef MC__MINLPSLV_DEBUG
+//  _dag->output( _dag->subgraph( _Flin, _Foff.data() ) );
+//#endif
+//  _dag->eval( _dwk, _Flin, _Foff.data(), _Fval.data(), _nP, _Pvar.data(), _Pval.data() );
+#ifdef MC__MINLPSLV_DEBUG
+  for( auto const& i : _Flin  )
+    std::cout << "  Flinval[" << i << "] = " << _Fval[i] << std::endl;
+#endif
 
   // Model is MIP
   if( _Fnlin.empty() )

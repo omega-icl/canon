@@ -34,7 +34,7 @@ PATH_CONCERT = /opt/ibm/ILOG/CPLEX_Studio1210/concert
 #FLAG_MIP    = -DMC__USE_CPLEX -m64 -fPIC -fexceptions -DIL_STD -Wno-ignored-attributes
 
 PATH_GUROBI = $(GUROBI_HOME)
-LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_c++ -lgurobi110 -pthread
+LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_c++ -lgurobi120 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 

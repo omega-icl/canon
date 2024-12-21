@@ -1402,24 +1402,23 @@ NLPSLV_SNOPT::setup
   _Xupp = _varub;
 
   // full set of nonlinear functions (cost, constraints & equations)
-  _Fvar.clear();
-  _Flow.clear();
-  _Fupp.clear();
-  _Fdep.clear();
+  _Fvar.clear(); _Fvar.reserve( std::get<0>(_ctr).size()+1 );
+  _Flow.clear(); _Flow.reserve( std::get<0>(_ctr).size()+1 );
+  _Fupp.clear(); _Fupp.reserve( std::get<0>(_ctr).size()+1 );
   
   int ndxF = 0;
-  FFDep depF;
+  //FFDep depF;
   if( std::get<0>(_obj).size() ){   // First, cost function
     _Fvar.push_back( std::get<1>(_obj)[0] );
     _ObjDir = (std::get<0>(_obj)[0]==BASE_OPT::MIN? -1: 1 );
     _ObjRow = ndxF;
     _ObjMul = -1.;
-    _dag->eval( 1, &_Fvar[ndxF], &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
-    _Fdep.push_back( depF );
-    if( _Fdep[ndxF].worst() > FFDep::L )
-      _Gndx.insert( ndxF );
-    else
-      _Andx.insert( ndxF );
+    //_dag->eval( 1, &_Fvar[ndxF], &_Fdep[ndxF], _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
+    //_Fdep.push_back( depF );
+    //if( _Fdep[ndxF].worst() > FFDep::L )
+    //  _Gndx.insert( ndxF );
+    //else
+    //  _Andx.insert( ndxF );
     _Flow.push_back( -BASE_OPT::INF );
     _Fupp.push_back(  BASE_OPT::INF );
   }
@@ -1433,12 +1432,12 @@ NLPSLV_SNOPT::setup
     if( std::get<3>(_ctr)[i] ) continue; // ignore if redundant
     ++ndxF;
     _Fvar.push_back( std::get<1>(_ctr)[i] );
-    _dag->eval( 1, &_Fvar[ndxF], &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
-    _Fdep.push_back( depF );
-    if( _Fdep[ndxF].worst() > FFDep::L )
-      _Gndx.insert( ndxF );
-    else
-      _Andx.insert( ndxF );
+    //_dag->eval( 1, &_Fvar[ndxF], &depF, _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
+    //_Fdep.push_back( depF );
+    //if( _Fdep[ndxF].worst() > FFDep::L )
+    //  _Gndx.insert( ndxF );
+    //else
+    //  _Andx.insert( ndxF );
     switch( std::get<0>(_ctr)[i] ){
       case BASE_OPT::EQ: _Flow.push_back( 0. );             _Fupp.push_back( 0. );            break;
       case BASE_OPT::LE: _Flow.push_back( -BASE_OPT::INF ); _Fupp.push_back( 0. );            break;
@@ -1450,6 +1449,16 @@ NLPSLV_SNOPT::setup
 #ifdef MC__NLPSLV_SNOPT_DEBUG
   assert( (int)_nF == ndxF+1 && _nF == _Gndx.size()+_Andx.size() );
 #endif
+
+  // propagate dependencies
+  _Fdep.resize( std::get<0>(_ctr).size()+1 );
+  _dag->eval( _nF, _Fvar.data(), _Fdep.data(), _nX, _Xvar.data(), _Xdep.data(), _nP, _Pvar.data(), _Pdep.data() ); 
+  for( size_t i=0; i<_nF; ++i ){
+    if( _Fdep[i].worst() > FFDep::L )
+      _Gndx.insert( i );
+    else
+      _Andx.insert( i ); 
+  }
 
   _set_gradient();
   _recModel = false;
