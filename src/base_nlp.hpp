@@ -189,8 +189,7 @@ public:
 
   //! @brief Set decision variables
   void set_var
-    ( std::vector<FFVar> const& var,
-      std::vector<double> const& lb=std::vector<double>(),
+    ( std::vector<FFVar> const& var, std::vector<double> const& lb,
       std::vector<double> const& ub=std::vector<double>(),
       std::vector<unsigned> const& typ=std::vector<unsigned>() )
     { _var = var;
@@ -226,7 +225,7 @@ public:
   //! @brief Add decision variables
   void add_var
     ( std::vector<FFVar> const& var,
-      std::vector<double> const& lb=std::vector<double>(),
+      std::vector<double> const& lb,
       std::vector<double> const& ub=std::vector<double>(),
       std::vector<unsigned> const& typ=std::vector<unsigned>() )
     { _var.insert( _var.end(), var.begin(), var.end() );

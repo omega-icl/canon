@@ -1,6 +1,6 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-PATH_CANON = $(shell cd ../.. ; pwd)
+PATH_CANON = $(shell cd ../../.. ; pwd)
 include $(PATH_CANON)/src/makeoptions.mk
 
 #####
@@ -11,7 +11,7 @@ test% : test%.o
 	$(CPP) $< $(LIB_CANON) -o $@
 
 %.o : %.cpp
-	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
+	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) -I../ $< -o $@
 
 #####
 

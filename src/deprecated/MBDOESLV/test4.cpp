@@ -116,10 +116,10 @@ int main()
   /////////////////////////////////////////////////////////////////////////
   // Perform MBDOE
 
-  size_t const NEXP = 5;
+  size_t const NEXP = 8;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NPSAM = 512; // 512
+  size_t const NPSAM = 64; // 512
   std::vector<double> PLB( NP ), PUB( NP );
 //  PLB[0] =  PUB[0] = 0.31;
 //  PLB[1] =  PUB[1] = 0.18;
@@ -136,7 +136,7 @@ int main()
   PLB[3] = dP[3]*6e-1;  PUB[3] = dP[3]*14e-1;
 
   // Experimental control space
-  size_t const NCSAM = 256; // 512
+  size_t const NCSAM = 256;//1024; //256; // 512
   std::vector<double> CLB( NC, 5e-2 ), CUB( NC, 2e-1 );
   CLB[NS] = 5e0;      CUB[NS] = 35e0;
   CLB[NS+1] = 1e0;    CUB[NS+1] = 1e1;
@@ -145,8 +145,8 @@ int main()
   std::vector<double> YVAR( NY*NS, 4e-2 );
 
   mc::MBDOESLV DOE;
-  DOE.options.CRITERION = mc::MBDOESLV::BROPT;//BROPT;
-  DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
+  DOE.options.CRITERION = mc::MBDOESLV::DOPT;//BROPT;
+  DOE.options.RISK      = mc::MBDOESLV::Options::AVERSE;//NEUTRAL;//AVERSE;//
   DOE.options.CVARTHRES = 0.25;
   DOE.options.UNCREDUC  = 1e-3;
   DOE.options.DISPLEVEL = 1;

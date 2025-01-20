@@ -42,9 +42,9 @@ main
   MINLP.add_var( P[1], 1, 20, 1 );
   MINLP.add_par( C[0] );
   MINLP.set_obj( mc::BASE_OPT::MIN, -6*P[0]-P[1] );
-  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-C[0],2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
-//  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
-  MINLP.add_ctr( mc::BASE_OPT::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
+//  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-C[0],2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+////  MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
+//  MINLP.add_ctr( mc::BASE_OPT::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
   MINLP.add_ctr( mc::BASE_OPT::LE, 2*P[0]-5*P[1]+1 );
 
   MINLP.options.LINMETH                 = mc::MINLPSLV<>::Options::CVX;
@@ -57,17 +57,19 @@ main
   MINLP.options.NLPSLV.DISPLEVEL        = 0;
   MINLP.options.NLPSLV.GRADCHECK        = false;
   MINLP.options.NLPSLV.MAXTHREAD        = 0;
-  MINLP.options.MIPSLV.DISPLEVEL        = 0;
+  MINLP.options.MIPSLV.DISPLEVEL        = 1;
 
   std::cout << MINLP;
 
   MINLP.setup();
-  //MINLP.optimize();
+  double dC = 8.;
+  MINLP.optimize( nullptr, nullptr, &dC, nearest );
+/*
   for( double dC=6.; dC<10.; dC+=1. ){
     MINLP.optimize( nullptr, nullptr, &dC, nearest );
     std::cout << "MINLP LOCAL SOLUTION:\n" << MINLP.get_incumbent();
     //MINLP.stats.display();
   }
-  
+*/
   return 0;
 }

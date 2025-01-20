@@ -123,7 +123,7 @@ int main()
   size_t const NEXP = 5;
 
   // Sampled parameters - uniform Sobol' sampling
-  size_t const NPSAM = 128;//1024;//512;;
+  size_t NPSAM = 128;//512;//128;//1024;
   std::vector<double> PLB( NP ), PUB( NP );
 //  PLB[0] =  PUB[0] = 0.31;
 //  PLB[1] =  PUB[1] = 0.18;
@@ -152,7 +152,7 @@ int main()
   mc::MBDOESLV DOE;
   DOE.options.CRITERION = mc::MBDOESLV::DOPT;//BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;//AVERSE;//
-  DOE.options.CVARTHRES = 0.25;
+  DOE.options.CVARTHRES = 0.25;//1.;
   DOE.options.UNCREDUC  = 1e-3;
   DOE.options.DISPLEVEL = 1;
   DOE.options.MINLPSLV.DISPLEVEL = 1;
@@ -181,17 +181,17 @@ int main()
     //{ 1, { CUB[0], CUB[1], CLB[2] } },
     { 1, { (CLB[0]+CUB[0])/2., (CLB[1]+CUB[1])/2., (CLB[2]+CUB[2])/2. } }
   };
-  DOE.add_prior_campaign( prior_campaign );
+  //DOE.add_prior_campaign( prior_campaign );
 
   // Solve MBDOE
   DOE.setup();
   DOE.sample_supports( NCSAM );
-  DOE.options.MAXITER = 1;
-  DOE.combined_solve( NEXP, false ); // continuous design
-  auto CNTEFF = DOE.efforts();
+  //DOE.options.MAXITER = 1;
+  //DOE.combined_solve( NEXP, false ); // continuous design
+  //auto CNTEFF = DOE.efforts();
   DOE.options.MAXITER = 4;
-  DOE.combined_solve( NEXP, true, CNTEFF ); // exact design
-  //DOE.combined_solve( NEXP );
+  //DOE.combined_solve( NEXP, true, CNTEFF ); // exact design
+  DOE.combined_solve( NEXP );
   //DOE.effort_solve( NEXP );
   //DOE.gradient_solve( DOE.efforts(), true );
   //DOE.effort_solve( NEXP );//, DOE.efforts() );
@@ -266,7 +266,9 @@ int main()
   };
 */
 
+  NPSAM = 512;
   DOE.set_parameters( P, DOE.uniform_sample( NPSAM, PLB, PUB ) ); // dP );
+  DOE.sample_supports( NCSAM );
   DOE.options.CRITERION = mc::MBDOESLV::BROPT;
   DOE.options.RISK      = mc::MBDOESLV::Options::NEUTRAL;
   DOE.setup();
@@ -282,7 +284,7 @@ int main()
   DOE.setup();
   DOE.evaluate_design( campaign, "DOPT-AVERSE" );
 
-  //return 0;
+  return 0;
   
   /////////////////////////////////////////////////////////////////////////
   // Confidence analysis
