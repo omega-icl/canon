@@ -672,29 +672,36 @@ public:
     ()
     const
     {
-      if( _solution.stat == Ipopt::Solve_Succeeded
-       || _solution.stat == Ipopt::Solved_To_Acceptable_Level
-       || _solution.stat == Ipopt::Feasible_Point_Found )
+      return get_status( _solution.stat );
+    }
+
+  //! @brief Status
+  static STATUS get_status
+    ( int const stat )
+    {
+      if( stat == Ipopt::Solve_Succeeded
+       || stat == Ipopt::Solved_To_Acceptable_Level
+       || stat == Ipopt::Feasible_Point_Found )
         return SUCCESSFUL;
-      if( _solution.stat == Ipopt::Infeasible_Problem_Detected )
+      if( stat == Ipopt::Infeasible_Problem_Detected )
         return INFEASIBLE;
-      if( _solution.stat == Ipopt::Diverging_Iterates )
+      if( stat == Ipopt::Diverging_Iterates )
         return UNBOUNDED;
-      if( _solution.stat == Ipopt::Search_Direction_Becomes_Too_Small
-       || _solution.stat == Ipopt::Restoration_Failed
-       || _solution.stat == Ipopt::Error_In_Step_Computation )
+      if( stat == Ipopt::Search_Direction_Becomes_Too_Small
+       || stat == Ipopt::Restoration_Failed
+       || stat == Ipopt::Error_In_Step_Computation )
         return FAILURE;
-      if( _solution.stat == Ipopt::User_Requested_Stop
-       || _solution.stat == Ipopt::Maximum_Iterations_Exceeded
-       || _solution.stat == Ipopt::Maximum_CpuTime_Exceeded )
+      if( stat == Ipopt::User_Requested_Stop
+       || stat == Ipopt::Maximum_Iterations_Exceeded
+       || stat == Ipopt::Maximum_CpuTime_Exceeded )
         return INTERRUPTED;
-      if( _solution.stat == Ipopt::Invalid_Option
-       || _solution.stat == Ipopt::Not_Enough_Degrees_Of_Freedom
-       || _solution.stat == Ipopt::Invalid_Problem_Definition
-       || _solution.stat == Ipopt::Unrecoverable_Exception
-       || _solution.stat == Ipopt::NonIpopt_Exception_Thrown
-       || _solution.stat == Ipopt::Insufficient_Memory
-       || _solution.stat == Ipopt::Internal_Error )
+      if( stat == Ipopt::Invalid_Option
+       || stat == Ipopt::Not_Enough_Degrees_Of_Freedom
+       || stat == Ipopt::Invalid_Problem_Definition
+       || stat == Ipopt::Unrecoverable_Exception
+       || stat == Ipopt::NonIpopt_Exception_Thrown
+       || stat == Ipopt::Insufficient_Memory
+       || stat == Ipopt::Internal_Error )
         return ABORTED;
       return ABORTED;
     }
@@ -2014,7 +2021,7 @@ NLPSLV_IPOPT::solve
   std::vector<std::thread> vth( NOTHREADS-1 ); // Main threads also solves some NLPs
 
   // Initialize multistart
-  if( DISP ) std::cout << "\nMultistart: ";
+  if( DISP ) std::cout << "\nMULTISTART: ";
   std::vector<int> feasible( NOTHREADS, false );
   std::vector<SOLUTION_OPT> solution( NOTHREADS );
 

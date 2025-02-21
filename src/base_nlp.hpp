@@ -404,6 +404,7 @@ public:
       reset_var(); }
 
 protected:
+
   //! @brief constraints (types, constraint variables, constraint multipliers)
   std::tuple< std::vector<t_CTR>, std::vector<FFVar>, std::vector<FFVar>, std::vector<bool> > _ctr;
 

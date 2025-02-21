@@ -738,14 +738,21 @@ public:
     ()
     const
     {
-      if     ( _solution.stat < 10 ) return SUCCESSFUL;
-      else if( _solution.stat < 20 ) return INFEASIBLE;
-      else if( _solution.stat < 30 ) return UNBOUNDED;
-      else if( _solution.stat < 40 ) return INTERRUPTED;
-      else if( _solution.stat < 50 ) return FAILURE;
-      else if( _solution.stat < 70 ) return ABORTED;
-      else if( _solution.stat < 80 ) return INTERRUPTED;
-      else                           return ABORTED;
+      return get_status( _solution.stat );
+    }
+
+  //! @brief Status
+  static STATUS get_status
+    ( int const stat )
+    {
+      if     ( stat < 10 ) return SUCCESSFUL;
+      else if( stat < 20 ) return INFEASIBLE;
+      else if( stat < 30 ) return UNBOUNDED;
+      else if( stat < 40 ) return INTERRUPTED;
+      else if( stat < 50 ) return FAILURE;
+      else if( stat < 70 ) return ABORTED;
+      else if( stat < 80 ) return INTERRUPTED;
+      else                 return ABORTED;
     }
 
 protected:
@@ -924,7 +931,7 @@ WORKER_SNOPT::callback
   int *needG, int *neG, double *G, int *fdG )
 {
 #ifdef MC__NLPSLV_SNOPT_TRACE
-    std::cout << "  WORKER_SNOPT::callback\n";
+    std::cout << "  WORKER_SNOPT::callback, DAG:" << &dag << std::endl;
 #endif
   if( *Status > 1 ) return; // <- Could be set as on option?
 
@@ -1819,7 +1826,7 @@ NLPSLV_SNOPT::solve
   std::vector<std::thread> vth( NOTHREADS-1 ); // Main threads also solves some NLPs
 
   // Initialize multistart
-  if( DISP ) std::cout << "\nMultistart: ";
+  if( DISP ) std::cout << "\nMULTISTART: ";
   std::vector<int> feasible( NOTHREADS, false );
   std::vector<SOLUTION_OPT> solution( NOTHREADS );
   _iStart = COLD;

@@ -14,7 +14,7 @@ def nlp_test():
   NLP = canon.NLPSLV()
   NLP.set_dag( DAG )
   NLP.add_parameter( [C] )
-  NLP.add_variable( [X1,X2], [0.,0.], [6.,4.] )
+  NLP.add_decision( [X1,X2], [0.,0.], [6.,4.] )
   NLP.set_objective( NLP.MAX, X1+X2 )
   NLP.add_constraint( NLP.LE, X1*X2-C )
 
@@ -111,7 +111,7 @@ def do_test( NS ):
   # Define NLP
   NLP = canon.NLPSLV()
   NLP.set_dag( DAG )
-  NLP.add_variable( U, -1e1, 1e1 )
+  NLP.add_decision( U, -1e1, 1e1 )
   NLP.set_objective( NLP.MIN, OpODE( 0, U, ODE ) ) #F[0] )
   NLP.add_constraint( NLP.EQ, OpODE( 1, U, ODE ) ) #F[1] )
 

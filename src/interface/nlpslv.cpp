@@ -91,13 +91,13 @@ pyNLPSLV
    "reset decision variables"
  )
  .def_property_readonly(
-   "all_parameter",
+   "var_parameter",
    []( NLPSLV const& self ){ return self.par(); },
    py::return_value_policy::reference_internal,
-   "current parameters"
+   "parameters"
  )
  .def(
-   "set_variable",
+   "set_decision",
    []( NLPSLV& self, std::vector<mc::FFVar> const& var, std::vector<double> const& lb,
        std::vector<double> const& ub, std::vector<unsigned> const& typ ){ self.set_var( var, lb, ub, typ ); },
    py::arg("var"),
@@ -107,7 +107,7 @@ pyNLPSLV
    "set decision variables"
  )
  .def(
-   "set_variable",
+   "set_decision",
    []( NLPSLV& self, std::vector<mc::FFVar> const& var, double const& lb,
        double const& ub, unsigned const& typ ){ self.set_var( var, lb, ub, typ ); },
    py::arg("var"),
@@ -117,7 +117,7 @@ pyNLPSLV
    "set decision variables"
  )
  .def(
-   "add_variable",
+   "add_decision",
    []( NLPSLV& self, std::vector<mc::FFVar> const& var, std::vector<double> const& lb,
        std::vector<double> const& ub, std::vector<unsigned> const& typ ){ self.add_var( var, lb, ub, typ ); },
    py::arg("var"),
@@ -127,7 +127,7 @@ pyNLPSLV
    "add decision variables"
  )
  .def(
-   "add_variable",
+   "add_decision",
    []( NLPSLV& self, std::vector<mc::FFVar> const& var, double const& lb,
        double const& ub, unsigned const& typ ){ self.add_var( var, lb, ub, typ ); },
    py::arg("var"),
@@ -137,34 +137,34 @@ pyNLPSLV
    "add decision variables"
  )
  .def_property_readonly(
-   "all_variable",
+   "var_decision",
    []( NLPSLV const& self ){ return self.var(); },
    py::return_value_policy::reference_internal,
-   "current decision variables"
+   "decision variables"
  )
  .def_property_readonly(
-   "typ_variable",
+   "typ_decision",
    []( NLPSLV const& self ){ return self.vartyp(); },
    py::return_value_policy::reference_internal,
-   "current decision variable types"
+   "decision variable types"
  )
  .def_property_readonly(
-   "lo_variable",
+   "lb_decision",
    []( NLPSLV const& self ){ return self.vartyp(); },
    py::return_value_policy::reference_internal,
-   "current decision variable lower bounds"
+   "decision variable lower bounds"
  )
  .def_property_readonly(
-   "up_variable",
+   "ub_decision",
    []( NLPSLV const& self ){ return self.vartyp(); },
    py::return_value_policy::reference_internal,
-   "current decision variable upper bounds"
+   "decision variable upper bounds"
  )
  .def_property_readonly(
-   "all_constraint",
+   "var_constraint",
    []( NLPSLV const& self ){ return self.ctr(); },
    py::return_value_policy::reference_internal,
-   "current model constraints"
+   "model constraints"
  )
  .def(
    "reset_constraint",
@@ -182,10 +182,10 @@ pyNLPSLV
    "add constraints"
  )
  .def_property_readonly(
-   "all_objective",
+   "var_objective",
    []( NLPSLV const& self ){ return self.obj(); },
    py::return_value_policy::reference_internal,
-   "current model objectives"
+   "model objectives"
  )
  .def(
    "reset_objective",
@@ -244,7 +244,7 @@ pyNLPSLV
  )
 ;
 
-py::enum_<NLPSLV::STATUS>(pyNLPSLV, "NLPSLV.STATUS")
+py::enum_<NLPSLV::STATUS>(pyNLPSLV, "STATUS")
  .value("SUCCESSFUL", NLPSLV::STATUS::SUCCESSFUL, "optimal solution found (possibly not within required accuracy)" )
  .value("INFEASIBLE", NLPSLV::STATUS::INFEASIBLE, "model appears to be infeasible" )
  .value("UNBOUNDED", NLPSLV::STATUS::UNBOUNDED, "model appears to be unbounded" )
@@ -254,24 +254,25 @@ py::enum_<NLPSLV::STATUS>(pyNLPSLV, "NLPSLV.STATUS")
  .export_values()
 ;
 
-py::enum_<NLPSLV::t_OBJ>(pyNLPSLV, "NLPSLV.OBJ")
+py::enum_<NLPSLV::t_OBJ>(pyNLPSLV, "OBJ")
  .value("MIN", NLPSLV::t_OBJ::MIN, "minimization" )
  .value("MAX", NLPSLV::t_OBJ::MAX, "maximization" )
  .export_values()
 ;
 
-py::enum_<NLPSLV::t_CTR>(pyNLPSLV, "NLPSLV.CTR")
+py::enum_<NLPSLV::t_CTR>(pyNLPSLV, "CTR")
  .value("EQ", NLPSLV::t_CTR::EQ, "equal-to-zero constraint" )
  .value("LE", NLPSLV::t_CTR::LE, "less-than-or-equal-to-zero constraint" )
  .value("GE", NLPSLV::t_CTR::GE, "greater-than-or-equal-to-zero constraint" )
  .export_values()
 ;
 
-py::class_<mc::SOLUTION_OPT> pyNLPSLVSol( pyNLPSLV, "NLPSLV.Solution" );
+py::class_<mc::SOLUTION_OPT> pyNLPSLVSol( pyNLPSLV, "Solution" );
 pyNLPSLVSol
  .def_readonly( "status", &mc::SOLUTION_OPT::stat, "optimization solver status" )
- .def_readonly( "x",      &mc::SOLUTION_OPT::x,    "variable values" )
- .def_readonly( "ux",     &mc::SOLUTION_OPT::ux,   "variable bound multipliers" )
+ .def_readonly( "p",      &mc::SOLUTION_OPT::p,    "parameter values" )
+ .def_readonly( "x",      &mc::SOLUTION_OPT::x,    "decision values" )
+ .def_readonly( "ux",     &mc::SOLUTION_OPT::ux,   "decision bound multipliers" )
  .def_readonly( "f",      &mc::SOLUTION_OPT::f,    "function values" )
  .def_readonly( "uf",     &mc::SOLUTION_OPT::uf,   "function multipliers" )
  .def( "__str__",
@@ -290,28 +291,30 @@ pyNLPSLVSol
  )
 ;
 
-py::class_<NLPSLV::Options> pyNLPSLVOptions( pyNLPSLV, "NLPSLV.Options" );
+py::class_<NLPSLV::Options> pyNLPSLVOptions( pyNLPSLV, "Options" );
 
 #ifdef MC__USE_SNOPT
 pyNLPSLVOptions
  .def( py::init<>() )
  .def( py::init<NLPSLV::Options const&>() )
- .def_readwrite( "FEASTOL",   &NLPSLV::Options::FEASTOL,   "Corresponds to 'Major feasibility tolerance' in snOptA, which specifies how accurately the nonlinear constraints should be satisfied [Default: 1e-7]" )
- .def_readwrite( "OPTIMTOL",  &NLPSLV::Options::OPTIMTOL,  "Corresponds to 'Major optimality tolerance' in snOptA, which specifies the final accuracy of the dual variables [Default: 1e-5]" )
- .def_readwrite( "MAXITER",   &NLPSLV::Options::MAXITER,   "Corresponds to 'Major iterations limit' in snOptA, which is the maximum number of major iterations allowed. It is intended to guard against an excessive number of linearizations of the constraints. If non-positive value given, both feasibility and optimality are checked [Default: 200]" )
- .def_readwrite( "GRADMETH",  &NLPSLV::Options::GRADMETH,  "Specifies the method for computing derivatives, either analytically (FSYM, BSYM), computed using automatic differentiation (FAD, BAD), or estimated using finite differences (FD) [Default: FSYM]" )
- .def_readwrite( "GRADCHECK", &NLPSLV::Options::GRADCHECK, "Corresponds to 'Verify level' in snOptA, which enables finite-difference checks on the derivatives computed by the user-provided routines at the first point that satisfies all bounds and linear constraints [Default: 0]" )
- .def_readwrite( "QPFEASTOL", &NLPSLV::Options::QPFEASTOL, "Corresponds to 'Minor feasibility tolerance' in snOptA, which ensures that all linear constraints eventually satisfy their upper and lower bounds to within this tolerance [Default: 1e-7]" )
- .def_readwrite( "QPMAXITER", &NLPSLV::Options::QPMAXITER, "Corresponds to 'Minor iterations limit' in snOptA. If the number of minor iterations for the optimality phase of the QP subproblem exceeds this value, then all nonbasic QP variables that have not yet moved are frozen at their current values and the reduced QP is solved to optimality [Default: 500]" )
- .def_readwrite( "QPMETH",    &NLPSLV::Options::QPMETH,    "Corresponds to 'QPSolver' in snOptA, which specifies the method used to solve the QP subproblems: Cholesky QP solver (CHOL), conjugate-gradient QP solver (CG), quasi-Newton QP solver (QN) [Default: CHOL]" )
- .def_readwrite( "FEASPB",    &NLPSLV::Options::FEASPB,    "Corresponds to 'Feasible point' in snOptA, which specifies to “Ignore the objective function” while finding afeasible point for the linear and nonlinear constraints [Default: 0]" )
- .def_readwrite( "DISPLEVEL",  &NLPSLV::Options::DISPLEVEL,  "Corresponds to 'Print file' in snOptA, which specifies the file name for the 'Summary file'. Displays to screen if an empty string is passed [Default: -]" )
- .def_readwrite( "LOGFILE",  &NLPSLV::Options::LOGFILE,  "Corresponds to 'Summary file' in snOptA, which specifies whether (>0) or not (<=0) to generate the summary file [Default: 0]" )
- .def_readwrite( "TIMELIMIT", &NLPSLV::Options::TIMELIMIT, "Maximum run-time (in seconds) - this is checked externally to snOptA based on the wall clock [Default: 7200]" )
- .def_readwrite( "MAXTHREAD", &NLPSLV::Options::MAXTHREAD, "Maximum number of threads for multistart solve [Default: 0 (all threads)]" )
+ .def_readwrite( "FEASTOL",     &NLPSLV::Options::FEASTOL,     "Corresponds to 'Major feasibility tolerance' in snOptA, which specifies how accurately the nonlinear constraints should be satisfied [Default: 1e-7]" )
+ .def_readwrite( "OPTIMTOL",    &NLPSLV::Options::OPTIMTOL,    "Corresponds to 'Major optimality tolerance' in snOptA, which specifies the final accuracy of the dual variables [Default: 1e-5]" )
+ .def_readwrite( "FCTPREC",     &NLPSLV::Options::FCTPREC,     "Corresponds to 'Function precision' in snOptA, a measure of the relative accuracy with which the nonlinear functions can be computed [Default: 0e0]" )
+ .def_readwrite( "MAXITER",     &NLPSLV::Options::MAXITER,     "Corresponds to 'Major iterations limit' in snOptA, which is the maximum number of major iterations allowed. It is intended to guard against an excessive number of linearizations of the constraints. If non-positive value given, both feasibility and optimality are checked [Default: 200]" )
+ .def_readwrite( "GRADMETH",    &NLPSLV::Options::GRADMETH,    "Specifies the method for computing derivatives, either analytically (FSYM, BSYM), computed using automatic differentiation (FAD, BAD), or estimated using finite differences (FD) [Default: FSYM]" )
+ .def_readwrite( "GRADCHECK",   &NLPSLV::Options::GRADCHECK, "Corresponds to 'Verify level' in snOptA, which enables finite-difference checks on the derivatives computed by the user-provided routines at the first point that satisfies all bounds and linear constraints [Default: 0]" )
+ .def_readwrite( "GRADLSEARCH", &NLPSLV::Options::GRADLSEARCH, "Corresponds to 'derivative linesearch' vs. 'Nonderivative linesearch' in snOptA [Default: True]" )
+ .def_readwrite( "QPFEASTOL",   &NLPSLV::Options::QPFEASTOL,   "Corresponds to 'Minor feasibility tolerance' in snOptA, which ensures that all linear constraints eventually satisfy their upper and lower bounds to within this tolerance [Default: 1e-7]" )
+ .def_readwrite( "QPMAXITER",   &NLPSLV::Options::QPMAXITER,   "Corresponds to 'Minor iterations limit' in snOptA. If the number of minor iterations for the optimality phase of the QP subproblem exceeds this value, then all nonbasic QP variables that have not yet moved are frozen at their current values and the reduced QP is solved to optimality [Default: 500]" )
+ .def_readwrite( "QPMETH",      &NLPSLV::Options::QPMETH,      "Corresponds to 'QPSolver' in snOptA, which specifies the method used to solve the QP subproblems: Cholesky QP solver (CHOL), conjugate-gradient QP solver (CG), quasi-Newton QP solver (QN) [Default: CHOL]" )
+ .def_readwrite( "FEASPB",      &NLPSLV::Options::FEASPB,      "Corresponds to 'Feasible point' in snOptA, which specifies to “Ignore the objective function” while finding afeasible point for the linear and nonlinear constraints [Default: 0]" )
+ .def_readwrite( "DISPLEVEL",   &NLPSLV::Options::DISPLEVEL,   "Corresponds to 'Print file' in snOptA, which specifies the file name for the 'Summary file'. Displays to screen if an empty string is passed [Default: -]" )
+ .def_readwrite( "LOGFILE",     &NLPSLV::Options::LOGFILE,     "Corresponds to 'Summary file' in snOptA, which specifies whether (>0) or not (<=0) to generate the summary file [Default: 0]" )
+ .def_readwrite( "TIMELIMIT",   &NLPSLV::Options::TIMELIMIT,   "Maximum run-time (in seconds) - this is checked externally to snOptA based on the wall clock [Default: 7200]" )
+ .def_readwrite( "MAXTHREAD",   &NLPSLV::Options::MAXTHREAD,   "Maximum number of threads for multistart solve [Default: 0 (all threads)]" )
 ;
 
-py::enum_<NLPSLV::Options::QP_STRATEGY>(pyNLPSLVOptions, "NLPSLV.QP_STRATEGY")
+py::enum_<NLPSLV::Options::QP_STRATEGY>(pyNLPSLVOptions, "QP_STRATEGY")
  .value("CHOL", NLPSLV::Options::QP_STRATEGY::CHOL, "Cholesky QP solver")
  .value("CG",   NLPSLV::Options::QP_STRATEGY::CG,   "Conjugate-gradient QP solver")
  .value("QN",   NLPSLV::Options::QP_STRATEGY::QN,   "Quasi-Newton QP solver")
@@ -334,13 +337,13 @@ pyNLPSLVOptions
  .def_readwrite( "MAXTHREAD", &NLPSLV::Options::MAXTHREAD, "Maximum number of threads for multistart solve [Default: 0 (all threads)]" )
 ;
 
-py::enum_<NLPSLV::Options::HESSIAN_STRATEGY>(pyNLPSLVOptions, "NLPSLV.HESSIAN_STRATEGY")
+py::enum_<NLPSLV::Options::HESSIAN_STRATEGY>(pyNLPSLVOptions, "HESSIAN_STRATEGY")
  .value("EXACT", NLPSLV::Options::HESSIAN_STRATEGY::EXACT, "Exact second derivatives from AD")
  .value("LBFGS", NLPSLV::Options::HESSIAN_STRATEGY::LBFGS, "Limited-memory quasi-Newton approximation")
  .export_values()
 ;
 
-py::enum_<NLPSLV::Options::LINEAR_SOLVER>(pyNLPSLVOptions, "NLPSLV.LINEAR_SOLVER")
+py::enum_<NLPSLV::Options::LINEAR_SOLVER>(pyNLPSLVOptions, "LINEAR_SOLVER")
  .value("MA27",    NLPSLV::Options::LINEAR_SOLVER::MA27,    "Harwell routine MA27")
  .value("MA57",    NLPSLV::Options::LINEAR_SOLVER::MA57,    "Harwell routine MA57")
  .value("MA77",    NLPSLV::Options::LINEAR_SOLVER::MA77,    "Harwell routine HSL_MA77")
@@ -353,7 +356,7 @@ py::enum_<NLPSLV::Options::LINEAR_SOLVER>(pyNLPSLVOptions, "NLPSLV.LINEAR_SOLVER
 ;
 #endif
 
-py::enum_<NLPSLV::Options::GRADIENT_STRATEGY>(pyNLPSLVOptions, "NLPSLV.GRADIENT_STRATEGY")
+py::enum_<NLPSLV::Options::GRADIENT_STRATEGY>(pyNLPSLVOptions, "GRADIENT_STRATEGY")
  .value("FSYM", NLPSLV::Options::GRADIENT_STRATEGY::FSYM, "Forward symbolic AD")
  .value("BSYM", NLPSLV::Options::GRADIENT_STRATEGY::BSYM, "Backward symbolic AD")
  .value("FAD",  NLPSLV::Options::GRADIENT_STRATEGY::FAD,  "Forward numeric AD")
