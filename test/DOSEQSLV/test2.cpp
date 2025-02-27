@@ -54,10 +54,10 @@ int main()
     QUAD[k].assign( { U[k] } );
 
   const unsigned NF = 2;  // Number of state functions
-  std::vector<std::vector<mc::FFVar>> FCT(NS);  // State functions
-  for( unsigned k=0; k<NS-1; k++ )
-    FCT[k].assign( { Q[0], 0. } );
-  FCT[NS-1].assign( { Q[0], X[0] - X0 } );
+  std::vector<std::map<size_t,mc::FFVar>> FCT(NS+1);  // State functions
+  for( unsigned k=1; k<NS; k++ )
+    FCT[k] = { { 0, Q[0] } };
+  FCT[NS] = { { 0, Q[0] }, { 1, X[0] - X0 } };
 
   mc::ODESLVS_CVODES IVP;
 
@@ -93,13 +93,15 @@ int main()
   // Local optimization
 #ifdef MC__USE_SNOPT
   mc::NLPSLV_SNOPT NLP;
-  NLP.options.DISPLEVEL = 0;
-  NLP.options.MAXITER   = 200;
-  NLP.options.FEASTOL   = 1e-7;
-  NLP.options.OPTIMTOL  = 1e-7;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;//FAD;
-  NLP.options.GRADCHECK = false;
-  NLP.options.MAXTHREAD = 4;
+  NLP.options.DISPLEVEL   = 0;
+  NLP.options.MAXITER     = 200;
+  NLP.options.FEASTOL     = 1e-7;
+  NLP.options.OPTIMTOL    = 1e-7;
+  NLP.options.GRADMETH    = mc::NLPSLV_SNOPT::Options::FSYM;//FAD;
+  NLP.options.GRADCHECK   = false;
+  NLP.options.GRADLSEARCH = false;
+  NLP.options.FCTPREC     = 1e-7;
+  NLP.options.MAXTHREAD   = 0;
 #else
   mc::NLPSLV_IPOPT NLP;
   NLP.options.DISPLEVEL = 0;

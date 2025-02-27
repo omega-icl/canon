@@ -31,7 +31,7 @@ def nlp_test():
   print( "solution value:", NLP.solution.f[0] )
 #  print( NLP.solution )
 
-  NLP.options.DISPLEVEL = 1;
+  NLP.options.DISPLEVEL = 0;
   NLP.solve( 8, [3.] )
 
   print( "status:", NLP.status )
@@ -69,13 +69,13 @@ def do_test( NS ):
   U    = []
   RHS  = []
   QUAD = []
-  F    = []
+  F    = [ {} ]
   for i in range(NS):
     U.append( pymc.FFVar(DAG,"U"+str(i)) )
     RHS.append( [ U[i] - X[0] ] )
     QUAD.append( [ 0.5 * pymc.sqr( U[i] ) ] )
-    F.append( [ Q[0], pymc.FFVar(0.) ] )
-  F[NS-1][1] = X[0]
+    F.append( { 0: Q[0] } )
+  F[NS][1] = X[0]
 
   # Define IVP
   ODE = cronos.ODESLV()
@@ -137,7 +137,7 @@ def do_test( NS ):
 
 nlp_test()
 
-#gams_test()
+gams_test()
 
-#do_test( 20 )
+do_test( 20 )
 

@@ -51,8 +51,7 @@ int main()
                      KY * ( 1. - U[k] ) * X[0] - DY * X[1] } );
 
   const unsigned NF = 1;  // Number of state functions
-  std::vector<mc::FFVar> FCT(NF);  // State functions
-  FCT.assign( { X[1] } );
+  std::vector<mc::FFVar> FCT{ X[1] };
 
   mc::ODESLVS_CVODES IVP;
 
@@ -89,13 +88,15 @@ int main()
   // Local optimization
 #ifdef MC__USE_SNOPT
   mc::NLPSLV_SNOPT NLP;
-  NLP.options.DISPLEVEL = 0;
-  NLP.options.MAXITER   = 200;
-  NLP.options.FEASTOL   = 1e-7;
-  NLP.options.OPTIMTOL  = 1e-7;
-  NLP.options.GRADMETH  = mc::NLPSLV_SNOPT::Options::FSYM;//FAD;
-  NLP.options.GRADCHECK = false;
-  NLP.options.MAXTHREAD = 4;
+  NLP.options.DISPLEVEL   = 0;
+  NLP.options.MAXITER     = 200;
+  NLP.options.FEASTOL     = 1e-7;
+  NLP.options.OPTIMTOL    = 1e-7;
+  NLP.options.GRADMETH    = mc::NLPSLV_SNOPT::Options::FSYM;//FAD;
+  NLP.options.GRADCHECK   = false;
+  NLP.options.GRADLSEARCH = false;
+  NLP.options.FCTPREC     = 1e-7;
+  NLP.options.MAXTHREAD   = 0;
 #else
   mc::NLPSLV_IPOPT NLP;
   NLP.options.DISPLEVEL = 5;
