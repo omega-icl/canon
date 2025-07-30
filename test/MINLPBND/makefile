@@ -18,6 +18,9 @@ test_MINLPREF : test_MINLPREF.o gmomcc.o gevmcc.o optcc.o palmcc.o
 test_MINLPBND : test_MINLPBND.o gmomcc.o gevmcc.o optcc.o palmcc.o
 	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
 
+test_EXTERN : test_EXTERN.o gmomcc.o gevmcc.o optcc.o palmcc.o
+	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
+
 test_ANN : test_ANN.o
 	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
 

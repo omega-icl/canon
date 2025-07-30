@@ -54,6 +54,14 @@ protected:
 
 public:
 
+  using BASE_NLP::dag;
+  using BASE_NLP::var;
+  using BASE_NLP::vartyp;
+  using BASE_NLP::varlb;
+  using BASE_NLP::varub;
+  using BASE_NLP::obj;
+  using BASE_NLP::ctr;
+
   //! @brief Class constructor
   GAMSIO
     ()

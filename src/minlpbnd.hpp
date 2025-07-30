@@ -107,12 +107,10 @@ Other options can be modified to tailor the relaxations, tune the MIP solver, se
 
 #include "polimage.hpp"
 #include "scmodel.hpp"
-#include "ismodel.hpp"
 
 //#undef MC__MINLPBND_DEBUG
 //#define MC__MINLPBND_DEBUG_LIFT
 //#define MC__MINLPBND_SHOW_REDUC
-//#define MC__MINLPBND_DEBUG_ISM
 
 namespace mc
 {
@@ -260,15 +258,6 @@ protected:
   //! @brief Chebyshev basis map
   std::map< t_mon, FFVar, lt_mon > _SCMXmon;
 
-  //! @brief Interval superposition model environment
-  ISModel<T>*               _ISMenv;
-  //! @brief Interval superposition variables
-  std::vector<ISVar<T>>     _ISMXvar;
-  //! @brief Interval superposition constraint variables
-  std::vector<ISVar<T>>     _ISMFvar;
-  //! @brief Storage vector for function evaluation in Interval superposition arithmetic
-  std::vector< ISVar<T> >   _ISMwk;
-
   //! @brief MIP solver
   MIP*                      _MIPSLV;
 
@@ -277,8 +266,7 @@ public:
   //! @brief Constructor
   MINLPBND
     ()
-    : _SCMenv( nullptr ),
-      _ISMenv( nullptr )
+    : _SCMenv( nullptr )
     { _MIPSLV = new MIP; }
 
   //! @brief Destructor
@@ -286,7 +274,6 @@ public:
     ()
     {
       delete _MIPSLV;
-      delete _ISMenv;
       delete _SCMenv;
     }
 
@@ -302,9 +289,8 @@ public:
     //! @brief Constructor
     Options():
       MINLPREF<T>::Options(),
-      RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCM(0), SUBSETISM(0),
+      RELAXMETH({DRL}), SUBSETDRL(0), SUBSETSCM(0),
       OBBTMIG(1e-6), OBBTMAX(5), OBBTTHRES(5e-2), OBBTBKOFF(1e-7), OBBTLIN(2), OBBTCONT(true),
-      ISMODEL(), ISMDIV(10), ISMCONT(true),
       CMODEL(), CMODPROP(2), CMODCUTS(0), CMODDMAX(BASE_OPT::INF),
       MONSCALE(true), LINCTRSEP(false), BCHPRIM(0),
       POLIMG(), SCQUAD(), MIPSLV()
@@ -324,16 +310,12 @@ public:
         RELAXMETH     = options.RELAXMETH;
         SUBSETDRL     = options.SUBSETDRL;
         SUBSETSCM     = options.SUBSETSCM;
-        SUBSETISM     = options.SUBSETISM;
         OBBTMIG       = options.OBBTMIG;
         OBBTMAX       = options.OBBTMAX;
         OBBTTHRES     = options.OBBTTHRES;
         OBBTBKOFF     = options.OBBTBKOFF;
         OBBTLIN       = options.OBBTLIN;
         OBBTCONT      = options.OBBTCONT;
-	ISMODEL       = options.ISMODEL;
-        ISMDIV        = options.ISMDIV;
-        ISMCONT       = options.ISMCONT;
         CMODEL        = options.CMODEL;
         CMODPROP      = options.CMODPROP;
         CMODCUTS      = options.CMODCUTS;
@@ -351,8 +333,7 @@ public:
       DRL=0,  //!< McCormick-derived polyhedral cuts
       DRLQ,   //!< McCormick-derived polyhedral and quadratic cuts
       SCDRL,  //!< Chebyshev-derived polyhedral cuts (controlled by parameters CMODPROP and CMODCUT)
-      SCQ,    //!< Chebyshev-derived polyhedral and quadratic cuts (controlled by parameters CMODPROP and CMODCUT)
-      ISM     //!< Interval superposition model relaxations (controlled by parameters ISMDIV and ISMCONT)
+      SCQ    //!< Chebyshev-derived polyhedral and quadratic cuts (controlled by parameters CMODPROP and CMODCUT)
     };
     //! @brief Relaxation methods
     std::set<RELAX> RELAXMETH;
@@ -360,8 +341,6 @@ public:
     unsigned SUBSETDRL;
     //! @brief Exclusion from Chebyshev model: 0: none; 1: non-polynomial functions; 2: polynomial functions
     unsigned SUBSETSCM;
-    //! @brief Exclusion from interval superposition: 0: none; 1: non-polynomial functions; 2: polynomial functions
-    unsigned SUBSETISM;
     //! @brief Minimum variable range for application of bounds tighteneting
     double OBBTMIG;
     //! @brief Maximum rounds of optimization-based bounds tighteneting
@@ -374,12 +353,6 @@ public:
     unsigned OBBTLIN;
     //! @brief Whether to relax binary/integer variables as continuous during optimization-based bounds tighteneting
     bool OBBTCONT;
-    //! @brief ISModel options
-    typename ISModel<T>::Options ISMODEL;
-    //! @brief Number of partition subdivisions in interval superposition model
-    unsigned ISMDIV;
-    //! @brief Whether to generate a continuous relaxation of ISM (true) or MIP relaxation (false)
-    bool ISMCONT;
     //! @brief CModel options
     typename SCModel<T>::Options CMODEL;
     //! @brief Chebyhev model propagation order (0: no propag.)
@@ -523,14 +496,6 @@ private:
   //! @brief Set model Chebyshev-derived cuts
   void _set_cuts_SCM
     ( bool const SQuadCuts );
-
-  //! @brief Set model ISM-derived cuts
-  void _set_cuts_ISM
-    ();
-
-  //! @brief Append cuts for ISM in polynomial image
-  void _set_cuts_ISM
-    ( std::set<unsigned> const& ndxF );
 
   //! @brief Compute bound for given Chebyshev basis function 
   T _bnd_cheb
@@ -1052,20 +1017,6 @@ MINLPBND<T,MIP>::init_polrelax
          _SCMXvar.resize( _nX );
        }
        break;
-
-     // Add Interval superposition-derived polyhedral cuts
-     case Options::ISM:
-       if( _ISMenv && (_ISMenv->nvar() != _nX || _ISMenv->ndiv() != options.ISMDIV) ){
-         _ISMXvar.clear();
-         delete _ISMenv; _ISMenv = 0;   
-       }
-       if( !_ISMenv ){
-         // Set interval superposition model
-         _ISMenv = new ISModel<T>( _nX, options.ISMDIV );
-         _ISMenv->options = options.ISMODEL;
-         _ISMXvar.resize( _nX );
-       }
-       break;
     }
   }
   
@@ -1121,12 +1072,6 @@ MINLPBND<T,MIP>::update_polrelax
       case Options::SCQ:
         // Add quadratic cuts
         _set_cuts_SCM( true );
-        break;
-
-      // Add Interval superposition-derived polyhedral cuts
-      case Options::ISM:
-        // Add polyhedral cuts
-        _set_cuts_ISM();
         break;
     }
   }
@@ -1214,7 +1159,6 @@ MINLPBND<T,MIP>::_set_cuts_LIN
      // Update bounds of intermediate factors from constraint propagation results
      if( options.CPMAX ){
        _dag->wkextract( _Fops[j], _Iwk, _Fallops, _CPbnd );
-       //for( unsigned i=0; i<_Iwk.size(); i++ )
        for( unsigned i=0; i<_Fops[j].len_tap-_Fops[j].len_wrk; i++ )
           if( Op<T>::inter( _Iwk[i], _Iwk[i], _POLwk[i].range() ) ) // intersection needed for externals
            _POLwk[i].update( _Iwk[i] );
@@ -1231,116 +1175,6 @@ MINLPBND<T,MIP>::_set_cuts_LIN
  std::cout << _POLenv;
  { int dum; std::cout << "PAUSED --"; std::cin >> dum; } 
 #endif
-}
-
-template <typename T, typename MIP>
-inline void
-MINLPBND<T,MIP>::_set_cuts_ISM
-()
-{
-  // Subset of functions to be relaxed
-  std::set<unsigned> ndxF;
-  for( unsigned j=0; j<_nF; j++ ){
-    if( ( options.LINCTRSEP      && _Flin.find( j ) != _Flin.end() )   // exclude cut of linear function
-     || ( options.SUBSETISM == 1 && _Fgal.find( j ) != _Fgal.end() )   // exclude cut of non-polynomial function
-     || ( options.SUBSETISM == 2 && _Fgal.find( j ) == _Fgal.end() ) ) // exclude cut of polynomial function
-      continue;
-    ndxF.insert( j );
-  }
-  if( ndxF.empty() ) return;
-
-  // Update ISM variables
-  for( unsigned i=0; i<_nX; i++ )
-    _ISMXvar[i].set( _ISMenv, i, _Xbnd[i] );
-
-  // Compute ISM bounds for each nonlinear function
-  _ISMFvar.assign( _nF, 0. );
-  for( auto itF=ndxF.begin(); itF!=ndxF.end(); ){
-    unsigned const j = *itF;
-
-    try{
-      _dag->eval( _Fops[j], _ISMwk, 1, &_Fvar[j], &_ISMFvar[j], _nX, _Xvar.data(), _ISMXvar.data() );
-#ifdef MC__MINLPBND_DEBUG_ISM
-      std::cout << "Interval superposition model for function F[" << j << "]: " << _ISMFvar[j];
-#endif
-    }
-    
-    catch(...){
-#ifdef MC__MINLPBND_DEBUG_ISM
-      std::cout << "Superposition model for function F[" << j << "]: failed" << std::endl;
-#endif
-      // No cut added for constraint #j in case evaluation failed
-      //_ISMFvar[j] = _IINF;
-      itF = ndxF.erase( itF ); // Exclude polynomial from quadratization and cuts
-      continue;
-    }
-
-    ++itF; // Increment only if current index wasn't erased from ndxF already
-  }
-
-  // Add cuts for ISM into polynomial image
-  _set_cuts_ISM( ndxF );
-
-#ifdef MC__MINLPBND_DEBUG_ISM
-  std::cout << _POLenv;
-#endif
-}
-
-template <typename T, typename MIP>
-inline void
-MINLPBND<T,MIP>::_set_cuts_ISM
-( std::set<unsigned> const& ndxF )
-{
-  // Auxiliary variables in polyhedral image are defined locally 
-  std::vector<std::vector<PolVar<T>>> POL_ISMaux( _nX );
-  std::vector<double> DL_ISMaux( _ISMenv->ndiv() );
-  std::vector<double> DU_ISMaux( _ISMenv->ndiv() );
-
-  // Compute ISM bounds for each nonlinear function
-  for( unsigned j : ndxF ){
-    _POLFvar[j].set( &_POLenv, _Fvar[j], _ISMFvar[j].B(), true );
-
-    // Polyhedral cut generation
-    T rhs = ( !_ISMFvar[j].ndep()? _ISMFvar[j].cst(): 0. );
-    auto cutF1 = *_POLenv.add_cut( nullptr, PolCut<T>::LE, -Op<T>::l(rhs), _POLFvar[j], -1. );
-    auto cutF2 = *_POLenv.add_cut( nullptr, PolCut<T>::GE, -Op<T>::u(rhs), _POLFvar[j], -1. );
-    for( unsigned i=0; i<_nX; ++i ){
-      auto&& ISMFji = _ISMFvar[j].C()[i];
-      if( ISMFji.empty() ) continue;
-      if( POL_ISMaux[i].empty() ){
-        POL_ISMaux[i].resize( _ISMenv->ndiv() );
-        for( unsigned k=0; k<_ISMenv->ndiv(); ++k )
-          POL_ISMaux[i][k].set( &_POLenv, Op<T>::zeroone(), options.ISMCONT );
-      }
-      for( unsigned k=0; k<_ISMenv->ndiv(); ++k ){
-        DL_ISMaux[k] = Op<T>::l( ISMFji[k] );
-        DU_ISMaux[k] = Op<T>::u( ISMFji[k] );
-      }
-      cutF1->append( _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data() );
-      cutF2->append( _ISMenv->ndiv(), POL_ISMaux[i].data(), DU_ISMaux.data() );
-    }
-  }
- 
-  // Add polyhedral cuts for ISM-participating variables
-  for( unsigned i=0; i<_nX; i++ ){
-    if( POL_ISMaux[i].empty() ) continue;
-    // Auxiliaries add up to 1
-    for( unsigned jsub=0; jsub<_ISMenv->ndiv(); jsub++ )
-      DL_ISMaux[jsub] = 1.;
-    _POLenv.add_cut( nullptr, PolCut<T>::EQ, 1., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data() );
-    // Relationship between variables and auxiliaries
-    PolVar<T> POLvarL( 0. ), POLvarU( 0. );
-    auto&& ISMXi = _ISMXvar[i].C()[i];
-#ifdef MC__MINLPBND_DEBUG_ISM
-    assert( !ISMXi.empty() );
-#endif
-    for( unsigned k=0; k<_ISMenv->ndiv(); k++ ){
-      DL_ISMaux[k] = Op<T>::l(ISMXi[k]);
-      DU_ISMaux[k] = Op<T>::u(ISMXi[k]);
-    }
-    _POLenv.add_cut( nullptr, PolCut<T>::LE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DL_ISMaux.data(), _POLXvar[i], -1. );
-    _POLenv.add_cut( nullptr, PolCut<T>::GE, 0., _ISMenv->ndiv(), POL_ISMaux[i].data(), DU_ISMaux.data(), _POLXvar[i], -1. );
-  }
 }
 
 template <typename T, typename MIP>
@@ -2056,7 +1890,6 @@ const
     case DRL:    out << " DRL";    break;
     case SCDRL:  out << " SCDRL";  break;
     case SCQ:    out << " SCQ";    break;
-    case ISM:    out << " ISM";    break;
    }
   }
   out << " ]" << std::endl;

@@ -379,10 +379,15 @@ public:
   using BASE_NLP::add_var;
   using BASE_NLP::reset_var;
   using BASE_NLP::update_vartyp;
+  using BASE_NLP::vartyp;
+  using BASE_NLP::varlb;
+  using BASE_NLP::varub;
 
   using BASE_NLP::set;
   using BASE_NLP::set_obj;
+  using BASE_NLP::obj;
   using BASE_NLP::add_ctr;
+  using BASE_NLP::ctr;
   using BASE_NLP::reset_ctr;
 
 #if defined( MC__WITH_GAMS )
@@ -1378,6 +1383,13 @@ bool
 NLPSLV_SNOPT::setup
 ()
 {
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+  std::cout << "DAG: " << _dag << std::endl;
+  std::cout << "_Pvar:";
+  for( auto p : _par ) std::cout << " " << p; 
+  std::cout << std::endl;
+#endif
+
   // full set of parameters
   _Pvar = _par;
   _nP = _Pvar.size();
@@ -1454,7 +1466,7 @@ NLPSLV_SNOPT::setup
 
   _nF = _Fvar.size();
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-  assert( (int)_nF == ndxF+1 && _nF == _Gndx.size()+_Andx.size() );
+  assert( (int)_nF == ndxF+1 );// && _nF == _Gndx.size()+_Andx.size() );
 #endif
 
   // propagate dependencies
@@ -1763,8 +1775,14 @@ NLPSLV_SNOPT::solve
   _dag->eval( _nF, _Fvar.data(), Fval.data(), _nX, _Xvar.data(), Xini ); 
   std::cout << "DAG evaluation at Xini:" << std::endl;
   for( auto const& val : Fval ) std::cout << val << std::endl;
+
+  std::vector<double> Gval(_nG);
+  _dag->output( _dag->subgraph( _nG, _Gvar.data() ) );
+  _dag->eval( _nG, _Gvar.data(), Gval.data(), _nX, _Xvar.data(), Xini ); 
+  std::cout << "DAG gradient evaluation at Xini:" << std::endl;
+  for( auto const& val : Gval ) std::cout << val << std::endl;
   { int dum; std::cout << "Paused"; std::cin >> dum; }
-*/ 
+*/
   // Set worker
   const int th = 0, noth = 1;
   _resize_workers( noth );
@@ -1778,7 +1796,7 @@ NLPSLV_SNOPT::solve
   std::cout << "DAG evaluation at Xini:" << std::endl;
   for( auto const& val : Fval ) std::cout << val << std::endl;
   { int dum; std::cout << "Paused"; std::cin >> dum; }
-*/      
+*/    
   // Run NLP solver
   _iStart = ( warm? WARM: COLD );
   int stat;

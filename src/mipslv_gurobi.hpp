@@ -60,6 +60,7 @@ public:
     ()
     : _GRBenv( new GRBEnv( true ) ), _GRBmodel( nullptr ), _POLenv( nullptr )
     { _GRBenv->set( GRB_IntParam_LogToConsole, 1 );//0 );
+      _GRBenv->set( GRB_IntParam_OutputFlag, 0 );
       _GRBenv->start(); }
 
   //! @brief Destructor

@@ -37,7 +37,7 @@ int main()
   MINLP.add_ctr( mc::BASE_OPT::LE, 0.3*pow(P[0]-8,2)+0.04*pow(P[1]-6,4)+0.1*exp(2*P[0])/pow(P[1],4)-56 );
   MINLP.add_ctr( mc::BASE_OPT::LE, 1/P[0]+1/P[1]-sqrt(P[0])*sqrt(P[1])+4 );
   MINLP.add_ctr( mc::BASE_OPT::LE, 2*P[0]-5*P[1]+1 );
-
+*/
   mc::FFGraph DAG;
   const unsigned NP = 4; mc::FFVar P[NP];
   for( unsigned i=0; i<NP; i++ ) P[i].set( &DAG );
@@ -47,35 +47,14 @@ int main()
   MINLP.set_obj( mc::BASE_OPT::MIN, (P[0]*P[3])*(P[0]+P[1]+P[2])+P[2] ); // objective
   MINLP.add_ctr( mc::BASE_OPT::GE,  (P[0]*P[3])*P[1]*P[2]-25 );          // constraints
   MINLP.add_ctr( mc::BASE_OPT::EQ,  sqr(P[0])+sqr(P[1])+sqr(P[2])+sqr(P[3])-40 );
-*/
-
-  std::string gamsfile( "tuncphd_30.gms"); 
+/*
+  std::string gamsfile( "ex6_1_4.gms" );
+  //std::string gamsfile( "tuncphd_30.gms"); 
   if( !MINLP.read( gamsfile, true ) ){
     std::cerr << "# Exit: Error reading GAMS file " << gamsfile << std::endl;
     return -1;
   }
-/*
-  // Solving for a MIP relaxation using ISM arithmetic
-  MINLP.options.RELAXMETH           = { MINLP.options.ISM };
-  MINLP.options.ISMDIV              = 50;
-  MINLP.options.ISMCONT             = 0;
-  MINLP.options.MIPSLV.DISPLEVEL    = 1;
-  MINLP.options.MIPSLV.OUTPUTFILE   = "test_MINLPBND1.lp";
-
-  MINLP.setup();
-  switch( MINLP.relax_model() ){
-    case mc::MIPSLV_GUROBI<I>::OPTIMAL:
-      std::cout << std::endl
-                <<"MINLP relaxation bound: " << MINLP.relax_solver()->get_objective() << std::endl;
-      for( unsigned i=0; i<NP; i++ ) 
-        std::cout << "  " << P[i] << " = " << MINLP.relax_solver()->get_variable( P[i] ) << std::endl;
-      MINLP.stats.display();
-      break;
-    default:
-      std::cout << "MINLP relaxation was unsuccessful" << std::endl;
-      break;
-  }
-
+*/
   // Solving for a MIP relaxation using polyhedral relaxations
   MINLP.options.RELAXMETH           = { MINLP.options.DRL };
   MINLP.options.LINCTRSEP           = 1;
@@ -90,15 +69,15 @@ int main()
     case mc::MIPSLV_GUROBI<I>::OPTIMAL:
       std::cout << std::endl
                 <<"MINLP relaxation bound: " << MINLP.relax_solver()->get_objective() << std::endl;
-      for( unsigned i=0; i<NP; i++ ) 
-        std::cout << "  " << P[i] << " = " << MINLP.relax_solver()->get_variable( P[i] ) << std::endl;
+      //for( unsigned i=0; i<NP; i++ ) 
+      //  std::cout << "  " << P[i] << " = " << MINLP.relax_solver()->get_variable( P[i] ) << std::endl;
       MINLP.stats.display();
       break;
     default:
       std::cout << "MINLP relaxation was unsuccessful" << std::endl;
       break;
   }
-
+/*
   // Solving for a MIP relaxation using Chebyshev models and polyhedral relaxations
   MINLP.options.RELAXMETH           = { MINLP.options.SCDRL };
   MINLP.options.LINCTRSEP           = 1;
@@ -153,6 +132,6 @@ int main()
       std::cout << "MINLP relaxation was unsuccessful" << std::endl;
       break;
   }
- 
+
   return 0;
 }

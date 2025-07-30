@@ -5,7 +5,7 @@ include $(srcpath)/makeoptions.mk
 
 #####
 
-libobjs   = nlpslv.o main.o gmomcc.o gevmcc.o optcc.o palmcc.o
+libobjs   = base.o nlpslv.o canon.o gmomcc.o gevmcc.o optcc.o palmcc.o
 libname   = canon.so
 libdep    = pymc.so cronos.so
 
