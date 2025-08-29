@@ -178,7 +178,7 @@ protected:
 
 public:
 
-  //! @brief NLP solution status
+  //! @brief MINLP solution status
   enum STATUS{
      SUCCESSFUL=0,      //!< MINLP solution found (possibly suboptimal for nonconvex MINLP)
      INFEASIBLE,        //!< MINLP appears to be infeasible (nonconvex MINLP could still be feasible)
@@ -192,24 +192,45 @@ public:
   struct Options
   {
     //! @brief Constructor
-    Options():
-      SEARCHALG(OA),
-      LINMETH(PENAL), FEASPUMP(true), CORRINC(true), ROOTCUT(true),
-//      INCCUT(true),
-      FEASTOL(1e-5), CVATOL(1e-3), CVRTOL(1e-3), MAXITER(20),
-      CPMAX(10), CPTHRES(0.), 
-      PENSOFT(1e3), MSLOC(8), TIMELIMIT(6e2), DISPLEVEL(1),
-      NLPSLV(), POLIMG(), MIPSLV()
-      { NLPSLV.DISPLEVEL = MIPSLV.DISPLEVEL = 0;
+    Options
+      ()
+      {
+        reset();
+      }
+    //! @brief Reset to default options
+    void reset
+      ()
+      {
+        SEARCHALG        = OA;
+        LINMETH          = PENAL;
+        FEASPUMP         = true;
+        CORRINC          = true;
+        ROOTCUT          = true;
+        //INCCUT         = true;
+        FEASTOL          = 1e-5;
+        CVATOL           = 1e-3;
+        CVRTOL           = 1e-3;
+        MAXITER          = 20;
+        CPMAX            = 10;
+        CPTHRES          = 0.;
+        PENSOFT          = 1e3;
+        MSLOC            = 8;
+        TIMELIMIT        = 6e2;
+        DISPLEVEL        = 1;
+        NLPSLV.reset();
+        POLIMG.reset();
+        MIPSLV.reset();
+        NLPSLV.DISPLEVEL = MIPSLV.DISPLEVEL = 0;
         NLPSLV.TIMELIMIT = MIPSLV.TIMELIMIT = TIMELIMIT;
-        NLPSLV.GRADMETH  = NLP::Options::FSYM; }
+        NLPSLV.GRADMETH  = NLP::Options::FSYM;
+      }
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
         SEARCHALG     = options.SEARCHALG;
         LINMETH       = options.LINMETH;
         FEASPUMP      = options.FEASPUMP;
         CORRINC       = options.CORRINC;
-//        INCCUT        = options.INCCUT;
+        //INCCUT      = options.INCCUT;
         ROOTCUT       = options.ROOTCUT;
         FEASTOL       = options.FEASTOL;
         CVATOL        = options.CVATOL;
@@ -245,10 +266,10 @@ public:
     int LINMETH;
     //! @brief Whether or not to apply feasibility pump strategy in OA algorithm
     bool FEASPUMP;
-    //! @brief Correct the incumbent for feasibility using multipliers
+    //! @brief Correct the incumbent for feasibility using KKT multipliers
     bool CORRINC;
-//    //! @brief Whether or not to add incumbent cut in master and feasibility OA subproblems
-//    bool INCCUT;
+    //! @brief Whether or not to add incumbent cut in master and feasibility OA subproblems
+    //bool INCCUT;
     //! @brief Whether or not to add cut from root-node relaxation in master problem
     bool ROOTCUT;
     //! @brief Feasibility tolerance 
@@ -695,7 +716,7 @@ public:
   virtual ~MINLPSLV()
     { _cleanup_gradient(); }
 
-  //! @brief Status after last NLP call
+  //! @brief Status after last MINLP call
   STATUS get_status
     ()
     const
@@ -704,7 +725,7 @@ public:
   //! @brief Load optimization model from GAMS file
 #if defined (MC__WITH_GAMS)
   bool read
-    ( std::string const& filename, bool const init=false );
+    ( std::string const& filename, bool const init=true );
 #endif
 
   //! @brief Setup DAG for cost and constraint evaluation

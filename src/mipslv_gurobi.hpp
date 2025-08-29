@@ -85,18 +85,44 @@ public:
   struct Options
   {
     //! @brief Constructor
-    Options():
-      ALGO( -1 ), PRESOLVE( -1 ), LPWARMSTART( 1 ), 
-      CONTRELAX( false ), DUALRED( 1 ), NONCONVEX( -1 ), 
-      FEASTOL( 1e-6 ), INTFEASTOL(1e-5), OPTIMTOL( 1e-6 ),
-      MIPRELGAP( 1e-4 ), MIPABSGAP( 1e-10 ),
-      OBBT( -1 ), INTEGRALITYFOCUS( 0 ), NUMERICFOCUS( 0 ),
-      SCALEFLAG( -1 ), MIPFOCUS( 0 ), HEURISTICS( 0.05 ),
-      PRESOS1BIGM( -1. ), PRESOS2BIGM( -1. ), QCPEQFACTOR( 1 ),
-      FUNCNONLINEAR( 1 ), FUNCMAXVAL( 1e6 ), PWLRELGAP( 1e-5 ),
-      TIMELIMIT( 6e2 ), THREADS( 0 ), DISPLEVEL( 1 ),
-      LOGFILE(), OUTPUTFILE()
-      {}
+    Options
+      ()
+      {
+        reset();
+      }
+    //! @brief Reset to default options
+    void reset
+      ()
+      {
+        ALGO             = -1;
+        PRESOLVE         = -1;
+        LPWARMSTART      = 1;
+        CONTRELAX        = false;
+        DUALRED          = 1;
+        NONCONVEX        = -1;
+        FEASTOL          = 1e-6;
+        INTFEASTOL       = 1e-5;
+        OPTIMTOL         = 1e-6;
+        MIPRELGAP        = 1e-4;
+        MIPABSGAP        = 1e-10;
+        OBBT             = -1;
+        INTEGRALITYFOCUS = 0;
+        NUMERICFOCUS     = 0;
+        SCALEFLAG        = -1;
+        MIPFOCUS         = 0;
+        HEURISTICS       = 0.05;
+        PRESOS1BIGM      = -1.;
+        PRESOS2BIGM      = -1.;
+        QCPEQFACTOR      = 1;
+        FUNCNONLINEAR    = 1;
+        FUNCMAXVAL       = 1e6;
+        PWLRELGAP        = 1e-5;
+        TIMELIMIT        = 6e2;
+        THREADS          = 0;
+        DISPLEVEL        = 1;
+        LOGFILE.clear();
+        OUTPUTFILE.clear();
+      }
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
         ALGO             = options.ALGO;

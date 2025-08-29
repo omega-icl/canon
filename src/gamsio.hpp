@@ -475,6 +475,7 @@ GAMSIO::_populate
 
 
   // add constraints
+  reset_ctr();
   _nctr = gmoM( _gmo );
   for( int j = 0; j < _nctr; ++j )
   {

@@ -90,6 +90,7 @@ producing the following display:
 
 #include "mctime.hpp"
 #include "ffdep.hpp"
+#include "ffexpr.hpp"
 #include "base_nlp.hpp"
 #if defined( MC__WITH_GAMS )
   #include "gamsio.hpp"
@@ -571,11 +572,31 @@ public:
   struct Options
   {
     //! @brief Constructor
-    Options():
-      FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FSYM), GRADCHECK(false),
-      GRADLSEARCH(true), QPFEASTOL(1e-7), QPMAXITER(500), QPMETH(CHOL), FCTPREC(0.),
-      DISPLEVEL(0), LOGFILE(), FEASPB(false), TIMELIMIT(72e2), MAXTHREAD(0)
-      {}
+    Options
+      ()
+      {
+        reset();
+      }
+    //! @brief Reset to default options
+    void reset
+      ()
+      {
+        FEASTOL     = 1e-7;
+        OPTIMTOL    = 1e-5;
+        MAXITER     = 200;
+        GRADMETH    = FSYM;
+        GRADCHECK   = false;
+        GRADLSEARCH = true;
+        QPFEASTOL   = 1e-7;
+        QPMAXITER   = 500;
+        QPMETH      = CHOL;
+        FCTPREC     = 0.;
+        DISPLEVEL   = 1;
+        LOGFILE.clear();
+        FEASPB      = false;
+        TIMELIMIT   = 72e2;
+        MAXTHREAD   = 0;
+      }
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
         FEASTOL      = options.FEASTOL;
@@ -1251,7 +1272,9 @@ NLPSLV_SNOPT::_set_gradient
       _jAvar.push_back( std::get<2>(_Fgrad)[k] );
       _Avar.push_back( std::get<3>(_Fgrad)[k] );
 #ifdef MC__NLPSLV_SNOPT_DEBUG
-      std::cout << "  _Avar[" << _iAfun.back() << "," << _jAvar.back() << "] = " << _Avar.back() << std::endl;
+      auto sgA = _dag->subgraph( 1, &_Avar.back() );
+      std::vector<FFExpr> exA = FFExpr::subgraph( _dag, sgA ); 
+      std::cout << "  _Avar[" << _iAfun.back() << "," << _jAvar.back() << "] = " << _Avar.back() << " = " << exA[0] << std::endl;
 #endif
     }
   }
@@ -1468,6 +1491,14 @@ NLPSLV_SNOPT::setup
 #ifdef MC__NLPSLV_SNOPT_DEBUG
   assert( (int)_nF == ndxF+1 );// && _nF == _Gndx.size()+_Andx.size() );
 #endif
+
+#ifdef MC__NLPSLV_SNOPT_DEBUG
+  auto sgF = _dag->subgraph( _nF, _Fvar.data() );
+  std::vector<FFExpr> exF = FFExpr::subgraph( _dag, sgF ); 
+  for( size_t i=0; i<_nF; ++i )
+    std::cout << "F[" << i << "] = " << exF[i] << std::endl;
+#endif
+
 
   // propagate dependencies
   _Fdep.resize( std::get<0>(_ctr).size()+1 );

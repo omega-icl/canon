@@ -507,10 +507,26 @@ public:
   struct Options
   {
     //! @brief Constructor
-    Options():
-      FEASTOL(1e-7), OPTIMTOL(1e-5), MAXITER(200), GRADMETH(FSYM), HESSMETH(LBFGS),
-      LINMETH(MA57), GRADCHECK(false), DISPLEVEL(0), TIMELIMIT(72e2), MAXTHREAD(0)
-      {} 
+    Options
+      ()
+      {
+        reset();
+      }
+    //! @brief Reset to default options
+    void reset
+      ()
+      {
+        FEASTOL     = 1e-7;
+        OPTIMTOL    = 1e-5;
+        MAXITER     = 200;
+        GRADMETH    = FSYM;
+        HESSMETH    = LBFGS;
+        LINMETH     = MA57;
+        GRADCHECK   = false;
+        DISPLEVEL   = 1;
+        TIMELIMIT   = 72e2;
+        MAXTHREAD   = 0;
+      }
     //! @brief Assignment operator
     Options& operator= ( Options const& options ){
         FEASTOL     = options.FEASTOL;
@@ -523,7 +539,6 @@ public:
         DISPLEVEL   = options.DISPLEVEL;
         TIMELIMIT   = options.TIMELIMIT;
         MAXTHREAD   = options.MAXTHREAD;
-
         return *this;
       }
     //! @brief Enumeration type for Hessian strategy
