@@ -1,24 +1,19 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-//#define MC__NLPSLV_SNOPT_DEBUG
-
 #ifdef MC__USE_SNOPT
   #include "nlpslv_snopt.hpp"
+  typedef mc::NLPSLV_SNOPT NLPSLV;
 #elif  MC__USE_IPOPT
   #include "nlpslv_ipopt.hpp"
+  typedef mc::NLPSLV_IPOPT NLPSLV;
 #endif
+typedef mc::BASE_NLP  BASE;
 
 namespace py = pybind11;
 
 void mc_nlpslv( py::module_ &m )
 {
-typedef mc::BASE_NLP  BASE;
-#ifdef MC__USE_SNOPT
-  typedef mc::NLPSLV_SNOPT NLPSLV;
-#elif  MC__USE_IPOPT
-  typedef mc::NLPSLV_IPOPT NLPSLV;
-#endif
 
 py::class_<NLPSLV,BASE> pyNLPSLV( m, "NLPSLV", py::multiple_inheritance() );
 
@@ -104,6 +99,7 @@ py::class_<NLPSLV::Options> pyNLPSLVOptions( pyNLPSLV, "Options" );
 pyNLPSLVOptions
  .def( py::init<>() )
  .def( py::init<NLPSLV::Options const&>() )
+ .def( "reset", []( NLPSLV::Options& self ){ self.reset(); }, "Reset options to default" )
  .def_readwrite( "FEASTOL",     &NLPSLV::Options::FEASTOL,     "Corresponds to 'Major feasibility tolerance' in snOptA, which specifies how accurately the nonlinear constraints should be satisfied [Default: 1e-7]" )
  .def_readwrite( "OPTIMTOL",    &NLPSLV::Options::OPTIMTOL,    "Corresponds to 'Major optimality tolerance' in snOptA, which specifies the final accuracy of the dual variables [Default: 1e-5]" )
  .def_readwrite( "FCTPREC",     &NLPSLV::Options::FCTPREC,     "Corresponds to 'Function precision' in snOptA, a measure of the relative accuracy with which the nonlinear functions can be computed [Default: 0e0]" )
@@ -132,6 +128,7 @@ py::enum_<NLPSLV::Options::QP_STRATEGY>(pyNLPSLVOptions, "QP_STRATEGY")
 pyNLPSLVOptions
  .def( py::init<>() )
  .def( py::init<NLPSLV::Options const&>() )
+ .def( "reset", []( NLPSLV::Options& self ){ self.reset(); }, "Reset options to default" )
  .def_readwrite( "FEASTOL",   &NLPSLV::Options::FEASTOL,   "Corresponds to 'constr_viol_tol' in Ipopt, which specifies the final accuracy on the constraints [Default: 1e-7]" )
  .def_readwrite( "OPTIMTOL",  &NLPSLV::Options::OPTIMTOL,  "Corresponds to 'tol', 'dual_inf_tol' and 'compl_inf_tol' in Ipopt, which specific the final accuracy on the dual and complementarity slackness conditions [Default: 1e-5]" )
  .def_readwrite( "MAXITER",   &NLPSLV::Options::MAXITER,   "Corresponds to 'max_iter' in Ipopt, which is the maximum number of iterations [Default: 200]" )

@@ -1,5 +1,4 @@
 #include <pybind11/pybind11.h>
-//#include <pybind11/operators.h>
 #include <pybind11/stl.h>
 
 #include "base_nlp.hpp"
@@ -9,17 +8,65 @@ namespace py = pybind11;
 void mc_base( py::module_ &m )
 {
 
-typedef mc::BASE_NLP BASE;
+typedef mc::BASE_OPT BASEOPT;
 
-py::class_<BASE> pyBASE( m, "BASE" );
+py::class_<BASEOPT> pyBASEOPT( m, "BASEOPT" );
 
-pyBASE
+pyBASEOPT
  .def(
    py::init<>()
  )
  .def_readwrite_static(
    "INF",
-   &BASE::INF
+   &BASEOPT::INF
+ )
+;
+
+py::enum_<BASEOPT::t_OBJ>(pyBASEOPT, "OBJ")
+ .value("MIN", BASEOPT::t_OBJ::MIN, "minimization" )
+ .value("MAX", BASEOPT::t_OBJ::MAX, "maximization" )
+ .export_values()
+;
+
+py::enum_<BASEOPT::t_CTR>(pyBASEOPT, "CTR")
+ .value("EQ", BASEOPT::t_CTR::EQ, "equal-to-zero constraint" )
+ .value("LE", BASEOPT::t_CTR::LE, "less-than-or-equal-to-zero constraint" )
+ .value("GE", BASEOPT::t_CTR::GE, "greater-than-or-equal-to-zero constraint" )
+ .export_values()
+;
+
+py::class_<mc::SOLUTION_OPT> pyBASESOL( m, "Solution" );
+
+pyBASESOL
+ .def_readonly( "status", &mc::SOLUTION_OPT::stat, "optimization solver status" )
+ .def_readonly( "p",      &mc::SOLUTION_OPT::p,    "parameter values" )
+ .def_readonly( "x",      &mc::SOLUTION_OPT::x,    "decision values" )
+ .def_readonly( "ux",     &mc::SOLUTION_OPT::ux,   "decision bound multipliers" )
+ .def_readonly( "f",      &mc::SOLUTION_OPT::f,    "function values" )
+ .def_readonly( "uf",     &mc::SOLUTION_OPT::uf,   "function multipliers" )
+ .def( "__str__",
+       []( mc::SOLUTION_OPT& self ){
+         std::ostringstream ss;
+         ss << self;
+         return ss.str();
+       }
+ )
+ .def( "__repr__",
+       []( mc::SOLUTION_OPT& self ){
+         std::ostringstream ss;
+         ss << self;
+         return ss.str();
+       }
+ )
+;
+
+typedef mc::BASE_NLP BASE;
+
+py::class_<BASE,BASEOPT> pyBASE( m, "BASE" );
+
+pyBASE
+ .def(
+   py::init<>()
  )
  .def( 
    "set",
@@ -172,43 +219,6 @@ pyBASE
    "set_objective",
    []( BASE& self, BASE::t_OBJ const& type, mc::FFVar const& obj ){ self.set_obj( type, obj ); },
    "set objective"
- )
-;
-
-py::enum_<BASE::t_OBJ>(pyBASE, "OBJ")
- .value("MIN", BASE::t_OBJ::MIN, "minimization" )
- .value("MAX", BASE::t_OBJ::MAX, "maximization" )
- .export_values()
-;
-
-py::enum_<BASE::t_CTR>(pyBASE, "CTR")
- .value("EQ", BASE::t_CTR::EQ, "equal-to-zero constraint" )
- .value("LE", BASE::t_CTR::LE, "less-than-or-equal-to-zero constraint" )
- .value("GE", BASE::t_CTR::GE, "greater-than-or-equal-to-zero constraint" )
- .export_values()
-;
-
-py::class_<mc::SOLUTION_OPT> pyBASESol( pyBASE, "Solution" );
-pyBASESol
- .def_readonly( "status", &mc::SOLUTION_OPT::stat, "optimization solver status" )
- .def_readonly( "p",      &mc::SOLUTION_OPT::p,    "parameter values" )
- .def_readonly( "x",      &mc::SOLUTION_OPT::x,    "decision values" )
- .def_readonly( "ux",     &mc::SOLUTION_OPT::ux,   "decision bound multipliers" )
- .def_readonly( "f",      &mc::SOLUTION_OPT::f,    "function values" )
- .def_readonly( "uf",     &mc::SOLUTION_OPT::uf,   "function multipliers" )
- .def( "__str__",
-       []( mc::SOLUTION_OPT& self ){
-         std::ostringstream ss;
-         ss << self;
-         return ss.str();
-       }
- )
- .def( "__repr__",
-       []( mc::SOLUTION_OPT& self ){
-         std::ostringstream ss;
-         ss << self;
-         return ss.str();
-       }
  )
 ;
 
