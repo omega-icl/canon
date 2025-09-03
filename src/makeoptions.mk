@@ -1,9 +1,11 @@
 # THIRD-PARTY LIBRARIES <<-- CHANGE AS APPROPRIATE -->>
 
-PATH_CRONOS    = $(shell cd $(HOME)/Programs/bitbucket/cronos40; pwd)
-include $(PATH_CRONOS)/src/makeoptions.mk
+PATH_CANON_MK := $(dir $(lastword $(MAKEFILE_LIST)))
 
-PATH_CANON    = $(shell cd $(HOME)/Programs/bitbucket/canon40; pwd)
+include $(abspath $(PATH_CANON_MK)../../cronos/src/makeoptions.mk)
+PATH_CRONOS = $(abspath $(PATH_CANON_MK)../../cronos)
+
+PATH_CANON = $(abspath $(PATH_CANON_MK)../)
 
 PATH_CLI =
 LIB_CLI  = -lboost_program_options
@@ -38,7 +40,7 @@ LIB_MIP     = -L$(PATH_GUROBI)/lib -lgurobi_c++ -lgurobi120 -pthread
 INC_MIP     = -I$(PATH_GUROBI)/include
 FLAG_MIP    = -DMC__USE_GUROBI
 
-PATH_GAMS = /opt/gams/gams50.1_linux_x64_64_sfx
+PATH_GAMS = $(GAMS_HOME)
 LIB_GAMS  =
 INC_GAMS  = -I$(PATH_GAMS)/apifiles/C/api
 FLAG_GAMS = -DMC__WITH_GAMS=\"$(PATH_GAMS)\"
@@ -50,8 +52,8 @@ OPTIM = -O2
 DEBUG = #-g
 WARN  = -Wall -Wno-misleading-indentation -Wno-unknown-pragmas -Wno-parentheses -Wno-unused-result
 CPP17 = -std=c++17
-CC    = gcc-13
-CPP   = g++-13
+CC    = gcc
+CPP   = g++
 # CPP   = icpc
 
 # <<-- NO CHANGE BEYOND THIS POINT -->>
