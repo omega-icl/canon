@@ -1,5 +1,5 @@
 # This makefile compiles the python interface and creates a symbolic link
-# to the libray in $(libpath)
+# to the library in $(libpath)
 
 include $(srcpath)/makeoptions.mk
 
@@ -14,8 +14,8 @@ libdep    = pymc.so cronos.so
 
 install: dispBuild $(libname) dispInstall
 	@if test ! -e $(libpath)/$(libname); then \
-		echo creating symolic link to shared library $(libname); \
-		cd $(libpath) ; ln -s $(interfacepath)/$(libname) $(libname); \
+		echo creating symbolic link to shared library $(libname); \
+		cd $(libpath); ln -s $(interfacepath)/$(libname) $(libname); \
 	fi
 	@for DEP in $(libdep); do \
 		echo dependent library $$DEP; \
@@ -23,22 +23,22 @@ install: dispBuild $(libname) dispInstall
 			ln -s $(PATH_CRONOS)/lib/$$DEP; \
 		fi; \
 		if test ! -e $(libpath)/$$DEP; then \
-			echo creating symolic link to shared library $$DEP; \
-			cd $(libpath) ; ln -s $(PATH_CRONOS)/lib/$$DEP; \
+			echo creating symbolic link to shared library $$DEP; \
+			cd $(libpath); ln -s $(PATH_CRONOS)/lib/$$DEP; \
 		fi; \
 	done
 	@echo
 
 $(libname): $(libobjs)
-	$(CPP) -shared -Wl,--export-dynamic $(libobjs) $(LIB_CANON) -o $(libname) 
+	$(CPP) -shared -Wl,--export-dynamic $(libobjs) $(LIB_CANON) -o $(libname)
 
-%.o : %.cpp
+%.o: %.cpp
 	$(CPP) $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $(INC_PYBIND11) -c $< -o $@
 
-%.o : %.c
+%.o: %.c
 	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
 
-%.c : $(PATH_GAMS)/apifiles/C/api/%.c
+%.c: $(PATH_GAMS)/apifiles/C/api/%.c
 	cp $< $@
 
 dispBuild:
@@ -63,12 +63,11 @@ dispClean:
 
 #####
 
-cleandist: dispCleanInstall
+uninstall: dispUninstall
 	rm -f $(libobjs) $(libname) $(libdep)
-	-(cd $(libpath) ; rm -f $(libname) $(libdep))
+	-(cd $(libpath); rm -f $(libname) $(libdep))
 
-dispCleanInstall:
+dispUninstall:
 	@echo
 	@(echo '***Uninstalling CANON library (ver.' $(version)')***')
 	@echo
-

@@ -1,8 +1,5 @@
 # This is the main makefile for CANON
-# - 'make install' creates the directories 'include', 'lib' and 'bin' (if not already
-#   existing), compiles a shared library, and creates symbolic links to header files
-#   and the compiled binaries and libraries
-# - `make cleaninstall' removes the binaries, libraries, object files, and links
+# Run `make help' for a list of available targets
 
 export version = 4.0
 
@@ -49,11 +46,23 @@ interface_clean:
 
 #####
 
-cleaninstall: canon_cleandist interface_cleandist
+uninstall: canon_uninstall interface_uninstall
 
-canon_cleandist:
-	-(cd $(srcpath); make -f canon.mk cleandist)
+canon_uninstall:
+	-(cd $(srcpath); make -f canon.mk uninstall)
 
-interface_cleandist:
-	-(cd $(interfacepath); make -f canon.mk cleandist)
+interface_uninstall:
+	-(cd $(interfacepath); make -f canon.mk uninstall)
 
+#####
+
+help:
+	@echo
+	@echo "CANON Makefile (ver. $(version))"
+	@echo "Available targets:"
+	@echo "  install     -  Create 'include', 'lib' and 'bin' directories, compile a shared library,"
+	@echo "                 create symbolic links to header files and compiled binaries and libraries"
+	@echo "  clean       -  Remove object files"
+	@echo "  uninstall   -  Remove binaries, libraries, object files, and symbolic links"
+	@echo "  help        -  Show this help message"
+	@echo

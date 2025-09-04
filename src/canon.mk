@@ -1,4 +1,4 @@
-# This makefile compiles a chared library of CANON and it creates symbolic links
+# This makefile compiles a shared library of CANON and it creates symbolic links
 # to the header files in $(incpath), binaries in $(binpath), and libraries in $(libpath)
 
 include $(srcpath)/makeoptions.mk
@@ -12,7 +12,7 @@ incobjs = base_opt.hpp base_nlp.hpp \
 
 binobjs = minlgo.o gmomcc.o gevmcc.o optcc.o palmcc.o
 
-libobjs = 
+libobjs =
 
 binname = canon
 
@@ -22,12 +22,12 @@ binname = canon
 
 install: dispBuild canon_inc canon canon_lib dispInstall
 	@if test ! -e $(binpath)/$(binname); then \
-		echo creating symolic link to executable $(binname); \
-		cd $(binpath) ; ln -s $(srcpath)/$(binname) $(binname); \
+		echo creating symbolic link to executable $(binname); \
+		cd $(binpath); ln -s $(srcpath)/$(binname) $(binname); \
 	fi
 #	@if test ! -e $(libpath)/$(libname); then \
-#		echo creating symolic link to shared library $(libname); \
-#		cd $(libpath) ; ln -s $(srcpath)/$(libname) $(libname); \
+#		echo creating symbolic link to shared library $(libname); \
+#		cd $(libpath); ln -s $(srcpath)/$(libname) $(libname); \
 #	fi
 	@echo
 
@@ -45,13 +45,13 @@ canon_inc:
 		fi; \
 	done
 
-%.o : %.cpp
+%.o: %.cpp
 	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
 
-%.o : %.c
+%.o: %.c
 	$(CPP) -c $(FLAG_CPP) $(FLAG_CANON) $(INC_CANON) $< -o $@
 
-%.c : $(PATH_GAMS)/apifiles/C/api/%.c
+%.c: $(PATH_GAMS)/apifiles/C/api/%.c
 	cp $< $@
 
 dispBuild:
@@ -76,13 +76,13 @@ dispClean:
 
 #####
 
-cleandist: dispCleanInstall
+uninstall: dispUninstall
 	rm -f $(libobjs) $(binname) $(libname)
-	-(cd $(incpath) ; rm -f $(incobjs))
-	-(cd $(binpath) ; rm -f $(binname))
-#	-(cd $(libpath) ; rm -f $(libname))
-	
-dispCleanInstall:
+	-(cd $(incpath); rm -f $(incobjs))
+	-(cd $(binpath); rm -f $(binname))
+#	-(cd $(libpath); rm -f $(libname))
+
+dispUninstall:
 	@echo
 	@(echo '***Uninstalling CANON library (ver.' $(version)')***')
 	@echo
