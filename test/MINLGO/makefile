@@ -7,7 +7,7 @@ LDFLAGS = -ldl -Wl,-rpath,\$$ORIGIN -Wl,-rpath,$(PATH_GAMS)
 
 #####
 
-all : doxydoc main ReLUANN
+all : doxydoc main test_ANN
 
 doxydoc : doxydoc.o gmomcc.o gevmcc.o optcc.o palmcc.o
 	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
@@ -15,7 +15,7 @@ doxydoc : doxydoc.o gmomcc.o gevmcc.o optcc.o palmcc.o
 main : main.o gmomcc.o gevmcc.o optcc.o palmcc.o
 	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
 
-ReLUANN : ReLUANN.o
+test_ANN : test_ANN.o
 	$(CPP) $(PROF) $^ $(LIB_CANON) -o $@
 
 %.o : %.cpp
@@ -30,6 +30,6 @@ ReLUANN : ReLUANN.o
 #####
 
 clean:
-	rm -f doxydoc main ReLUANN
+	rm -f doxydoc main test_ANN
 	rm -f *.o *.lp *.lst *.out *.dat *.eps *.dot *.svg *.ilp *.log *~
 
