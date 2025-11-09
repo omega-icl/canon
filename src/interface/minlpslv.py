@@ -67,7 +67,7 @@ MINLP.options.SEARCHALG = MINLP.options.OA;
 MINLP.options.LINMETH   = MINLP.options.CVX;
 MINLP.options.DISPLEVEL = 1;
   
-help( MINLP.options )
+#help( MINLP.options )
 
 
 # After setup, the NLP model can be solved to local optimality by passing an initial guess for the decision variables and the parameters to the method `solve`:

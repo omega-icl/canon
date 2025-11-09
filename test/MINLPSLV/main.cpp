@@ -103,7 +103,8 @@ int main()
 //  MINLP.read( "ex1221.gms" );
 //  MINLP.read( "ex1222.gms" );
 //  MINLP.read( "ex1252a.gms" );
-  MINLP.read( "transswitch0009r.gms" );
+//  MINLP.read( "transswitch0009r.gms" );
+  MINLP.read( "st_e15.gms" );
 
 #else
   mc::FFGraph DAG;
